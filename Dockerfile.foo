@@ -1,0 +1,26 @@
+FROM --platform=${BUILDPLATFORM} golang:1.18.0-alpine3.15 as builder
+
+WORKDIR /workspace
+
+COPY go.mod go.sum /workspace/
+RUN go mod download
+
+COPY cmd /workspace/cmd
+COPY private /workspace/private
+
+ARG TARGETOS
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+  go build -ldflags "-s -w" -trimpath -o /go/bin/foo ./cmd/foo
+
+FROM --platform=${TARGETPLATFORM} alpine:3.15.1
+
+RUN apk add --update --no-cache \
+    ca-certificates \
+    git \
+    openssh-client && \
+  rm -rf /var/cache/apk/*
+
+COPY --from=builder /go/bin/foo /usr/local/bin/foo
+
+ENTRYPOINT ["/usr/local/bin/foo"]
