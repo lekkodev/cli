@@ -1,5 +1,5 @@
-GO_BINS := $(GO_BINS) cmd/foo
-DOCKER_BINS := $(DOCKER_BINS) foo
+GO_BINS := $(GO_BINS) cmd/lekko
+DOCKER_BINS := $(DOCKER_BINS) lekko
 
 LICENSE_HEADER_LICENSE_TYPE := apache
 LICENSE_HEADER_COPYRIGHT_HOLDER := Buf Technologies, Inc.

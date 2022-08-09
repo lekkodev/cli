@@ -15,11 +15,15 @@
 package main
 
 import (
+	"os"
+
+	"github.com/lekkodev/cli/pkg/verify"
+
 	"github.com/spf13/cobra"
 )
 
 func main() {
-	rootCmd.AddCommand(lintCmd)
+	rootCmd.AddCommand(verifyCmd)
 	_ = rootCmd.Execute()
 }
 
@@ -28,11 +32,15 @@ var rootCmd = &cobra.Command{
 	Short: "lekko - dynamic configuration helper",
 }
 
-var lintCmd = &cobra.Command{
-	Use:   "lint",
-	Short: "lint a config repository with a lekko.yaml",
+var verifyCmd = &cobra.Command{
+	Use:   "verify",
+	Short: "verify a config repository with a lekko.root.yaml",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO lint the repo with the right proto files.
-		return nil
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		return verify.Verify(wd)
 	},
 }
