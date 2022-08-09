@@ -12,35 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package encoding
 
 import (
-	"os"
+	"fmt"
 
-	"github.com/lekkodev/cli/pkg/verify"
+	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 
-	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
-func main() {
-	rootCmd.AddCommand(verifyCmd)
-	_ = rootCmd.Execute()
-}
-
-var rootCmd = &cobra.Command{
-	Use:   "lekko",
-	Short: "lekko - dynamic configuration helper",
-}
-
-var verifyCmd = &cobra.Command{
-	Use:   "verify",
-	Short: "verify a config repository with a lekko.root.yaml",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO lint the repo with the right proto files.
-		wd, err := os.Getwd()
+// Takes a version number and parses file contents into the corresponding
+// type.
+// TODO have this based on some sort of common internal representation.
+func ParseFeature(contents []byte, version string) (*rulesv1beta1.Feature, error) {
+	switch version {
+	case "v1beta1":
+		var feature rulesv1beta1.Feature
+		err := protojson.Unmarshal(contents, &feature)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return verify.Verify(wd)
-	},
+		return &feature, nil
+	default:
+		return nil, fmt.Errorf("unknown version when parsing feature: %s", version)
+	}
 }
