@@ -39,7 +39,7 @@ dockermakeworkspace: dockerbuildworkspace
 	docker run -v "$(CURDIR):$(DOCKER_WORKSPACE_DIR)" $(DOCKER_WORKSPACE_IMAGE) make -j 8 $(DOCKERMAKETARGET)
 
 .PHONY: dockerbuild
-dockerbuild::
+dockerbuild:: govendor
 
 define dockerbinfunc
 .PHONY: dockerbuilddeps$(1)
@@ -56,6 +56,8 @@ dockerbuild:: dockerbuild$(1)
 endef
 
 $(foreach dockerbin,$(sort $(DOCKER_BINS)),$(eval $(call dockerbinfunc,$(dockerbin))))
+
+dockerbuild:: removegovendor
 
 .PHONY: updatedockerignores
 updatedockerignores:

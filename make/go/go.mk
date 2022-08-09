@@ -77,6 +77,14 @@ initmakego:: upgradegodeps
 godeps: deps
 	go mod download
 
+.PHONY: govendor
+govendor:
+	go mod vendor
+
+.PHONY: removegovendor
+removegovendor:
+	@rm -rf vendor
+
 .PHONY: gofmtmodtidy
 gofmtmodtidy:
 	@echo gofmt -s -w ALL_GO_FILES

@@ -1,4 +1,4 @@
-// Copyright 2020-2022 Buf Technologies, Inc.
+// Copyright 2022 Lekko Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,23 +18,23 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lekkodev/cli/pkg/config"
 	"github.com/lekkodev/cli/pkg/encoding"
+	"github.com/lekkodev/cli/pkg/metadata"
 )
 
 // Verifies that a configuration from a root is properly formatted.
 func Verify(rootPath string) error {
-	_, nsNameToNsConfigs, err := config.ParseFullConfigStrict(rootPath)
+	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath)
 	if err != nil {
 		return err
 	}
-	for ns, nsConfig := range nsNameToNsConfigs {
+	for ns, nsMD := range nsNameToNsMDs {
 		files, err := os.ReadDir(filepath.Join(rootPath, ns))
 		if err != nil {
 			return err
 		}
 		for _, file := range files {
-			if file.Name() == config.DefaultNamespaceConfigFileName {
+			if file.Name() == metadata.DefaultNamespaceConfigRepoMetadataFileName {
 				// Do not parse the yaml config.
 				continue
 			}
@@ -43,7 +43,7 @@ func Verify(rootPath string) error {
 			if err != nil {
 				return err
 			}
-			if _, err := encoding.ParseFeature(contents, nsConfig.Version); err != nil {
+			if _, err := encoding.ParseFeature(contents, nsMD.Version); err != nil {
 				return err
 			}
 		}
