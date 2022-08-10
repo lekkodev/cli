@@ -51,14 +51,32 @@ type NamespaceConfigRepoMetadata struct {
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
 const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
 
+// Abstraction so we can use the same parsing code
+// for both local and remote configuration.
+type ConfigRepoProvider interface {
+	GetFileContents(path string) ([]byte, error)
+}
+
+type localProvider struct{}
+
+func (*localProvider) GetFileContents(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func LocalProvider() ConfigRepoProvider {
+	return &localProvider{}
+}
+
 // Parses the lekko metadata from a configuration repo in a strict way, returning a user error on failure.
 //
 // This looks in the default locations and names for now, and a custom extension
 // can be written later.
 //
 // This returns the root metadata of a repository and a map from namespace name to namespace metadata.
-func ParseFullConfigRepoMetadataStrict(path string) (*RootConfigRepoMetadata, map[string]*NamespaceConfigRepoMetadata, error) {
-	contents, err := os.ReadFile(filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
+//
+// This takes a provider so that we can use the same code on a local version on disk as well as in Github.
+func ParseFullConfigRepoMetadataStrict(path string, provider ConfigRepoProvider) (*RootConfigRepoMetadata, map[string]*NamespaceConfigRepoMetadata, error) {
+	contents, err := provider.GetFileContents(filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not open root metadata: %v", err)
 	}
