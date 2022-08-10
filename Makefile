@@ -4,5 +4,6 @@ PROJECT := cli
 GO_MODULE := github.com/lekkodev/cli
 DOCKER_ORG := lekko
 DOCKER_PROJECT := cli
+FILE_IGNORES := $(FILE_IGNORES) .vscode/
 
 include make/cli/all.mk
