@@ -15,7 +15,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/lekkodev/cli/pkg/verify"
@@ -26,7 +26,7 @@ import (
 func main() {
 	rootCmd.AddCommand(verifyCmd)
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		os.Exit(1)
 	}
 }

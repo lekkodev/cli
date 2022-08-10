@@ -26,6 +26,7 @@ package metadata
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -54,12 +55,12 @@ const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
 // Abstraction so we can use the same parsing code
 // for both local and remote configuration.
 type ConfigRepoProvider interface {
-	GetFileContents(path string) ([]byte, error)
+	GetFileContents(ctx context.Context, path string) ([]byte, error)
 }
 
 type localProvider struct{}
 
-func (*localProvider) GetFileContents(path string) ([]byte, error) {
+func (*localProvider) GetFileContents(_ context.Context, path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
@@ -76,7 +77,7 @@ func LocalProvider() ConfigRepoProvider {
 //
 // This takes a provider so that we can use the same code on a local version on disk as well as in Github.
 func ParseFullConfigRepoMetadataStrict(path string, provider ConfigRepoProvider) (*RootConfigRepoMetadata, map[string]*NamespaceConfigRepoMetadata, error) {
-	contents, err := provider.GetFileContents(filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
+	contents, err := provider.GetFileContents(context.TODO(), filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not open root metadata: %v", err)
 	}
