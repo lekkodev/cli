@@ -6,7 +6,7 @@ linters-settings:
   forbidigo:
     forbid:
       - '^fmt\.Print'
-      - '^log\.'
+#      - '^log\.'
       - '^print$'
       - '^println$'
 linters:
