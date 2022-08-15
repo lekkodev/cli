@@ -18,6 +18,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/lekkodev/cli/pkg/generate"
 	"github.com/lekkodev/cli/pkg/verify"
 
 	"github.com/spf13/cobra"
@@ -25,6 +26,7 @@ import (
 
 func main() {
 	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(compileCmd)
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -48,5 +50,18 @@ var verifyCmd = &cobra.Command{
 			return err
 		}
 		return verify.Verify(wd)
+	},
+}
+
+var compileCmd = &cobra.Command{
+	Use:   "compile",
+	Short: "compiles features based on individual definitions",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// TODO lint the repo with the right proto files.
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		return generate.Compile(wd)
 	},
 }
