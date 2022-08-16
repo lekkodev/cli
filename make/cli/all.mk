@@ -1,6 +1,6 @@
 GO_BINS := $(GO_BINS) cmd/lekko
 DOCKER_BINS := $(DOCKER_BINS) lekko
-GO_ALL_REPO_PKGS ?= ./cmd/... ./pkg/...
+GO_ALL_REPO_PKGS ?= ./cmd/... ./pkg/... ./internal/...
 
 
 LICENSE_HEADER_LICENSE_TYPE := apache
