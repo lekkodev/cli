@@ -17,6 +17,9 @@
 package feature
 
 import (
+	"io/ioutil"
+	"strings"
+
 	"github.com/lekkodev/cli/pkg/metadata"
 )
 
@@ -36,5 +39,24 @@ type FeatureFile struct {
 // This groups feature files in a way that is
 // governed by the namespace metadata.
 func GroupFeatureFiles(pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata) ([]FeatureFile, error) {
+	if nsMD.Version == "v1beta2" {
+		files, err := ioutil.ReadDir(pathToNamespace)
+		if err != nil {
+			return nil, err
+		}
+		var ret []FeatureFile
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			if strings.HasSuffix(file.Name(), ".star") {
+				ret = append(ret, FeatureFile{
+					Name:            strings.Split(file.Name(), ".")[0],
+					BuilderFileName: file.Name(),
+				})
+			}
+		}
+		return ret, nil
+	}
 	return nil, nil
 }

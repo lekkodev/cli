@@ -15,10 +15,12 @@
 package generate
 
 import (
+	"log"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/pkg/star"
 )
 
 // Compiles each namespace.
@@ -27,13 +29,19 @@ func Compile(rootPath string) error {
 	if err != nil {
 		return err
 	}
+	log.Printf("ns %v\n", nsNameToNsMDs)
 	for ns, nsMD := range nsNameToNsMDs {
 		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD)
 		if err != nil {
+			log.Printf("ffiles err %v\n", err)
 			return err
 		}
-		for range featureFiles {
-			// TODO.
+		for _, ff := range featureFiles {
+			result, err := star.Compile(ff.Name, filepath.Join(rootPath, ns, ff.BuilderFileName))
+			if err != nil {
+				return err
+			}
+			log.Printf("Got proto result: \n%s\n", result.String())
 		}
 	}
 	return nil
