@@ -15,6 +15,7 @@
 package verify
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -32,7 +33,7 @@ func Verify(rootPath string) error {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		groupedFeatures, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
+		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}

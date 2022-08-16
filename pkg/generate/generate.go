@@ -15,6 +15,7 @@
 package generate
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
@@ -29,7 +30,7 @@ func Compile(rootPath string) error {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
+		featureFiles, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}

@@ -109,9 +109,9 @@ type FeatureFile struct {
 // This groups feature files in a way that is
 // governed by the namespace metadata.
 // TODO naming conventions.
-func GroupFeatureFiles(pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata, fsProvider fs.Provider) ([]FeatureFile, error) {
+func GroupFeatureFiles(ctx context.Context, pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata, fsProvider fs.Provider) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
-	files, err := fsProvider.GetDirContents(context.TODO(), pathToNamespace)
+	files, err := fsProvider.GetDirContents(ctx, pathToNamespace)
 	if err != nil {
 		return nil, err
 	}
