@@ -17,14 +17,15 @@
 package feature
 
 import (
+	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
@@ -108,41 +109,41 @@ type FeatureFile struct {
 // This groups feature files in a way that is
 // governed by the namespace metadata.
 // TODO naming conventions.
-func GroupFeatureFiles(pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata) ([]FeatureFile, error) {
+func GroupFeatureFiles(pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata, fsProvider fs.Provider) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
-	files, err := os.ReadDir(pathToNamespace)
+	files, err := fsProvider.GetDirContents(context.TODO(), pathToNamespace)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".json") {
-			featureName := strings.TrimSuffix(file.Name(), ".json")
+		if strings.HasSuffix(file.Name, ".json") {
+			featureName := strings.TrimSuffix(file.Name, ".json")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: file.Name()}
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: file.Name}
 			} else {
-				f.CompiledJSONFileName = file.Name()
+				f.CompiledJSONFileName = file.Name
 				featureToFile[featureName] = f
 			}
 		}
-		if strings.HasSuffix(file.Name(), ".star") {
-			featureName := strings.TrimSuffix(file.Name(), ".star")
+		if strings.HasSuffix(file.Name, ".star") {
+			featureName := strings.TrimSuffix(file.Name, ".star")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: file.Name()}
+				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: file.Name}
 			} else {
-				f.StarlarkFileName = file.Name()
+				f.StarlarkFileName = file.Name
 				featureToFile[featureName] = f
 			}
 		}
-		if strings.HasSuffix(file.Name(), ".proto") {
-			featureName := strings.TrimSuffix(file.Name(), ".proto")
+		if strings.HasSuffix(file.Name, ".proto") {
+			featureName := strings.TrimSuffix(file.Name, ".proto")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: file.Name()}
+				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: file.Name}
 			} else {
-				f.ProtoFileName = file.Name()
+				f.ProtoFileName = file.Name
 				featureToFile[featureName] = f
 			}
 		}

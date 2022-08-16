@@ -32,7 +32,7 @@ func Verify(rootPath string) error {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		groupedFeatures, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD)
+		groupedFeatures, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}

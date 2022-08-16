@@ -29,7 +29,7 @@ func Compile(rootPath string) error {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD)
+		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}
