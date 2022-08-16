@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	"github.com/lekkodev/cli/internal/fixtures"
+	"github.com/lekkodev/cli/pkg/fixtures"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/rules"
 )
