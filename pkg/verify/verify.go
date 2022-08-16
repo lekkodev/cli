@@ -20,13 +20,14 @@ import (
 
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 )
 
 // Verifies that a configuration from a root is properly formatted.
 // TODO: do even more validation including compilation.
 func Verify(rootPath string) error {
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
+	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}
