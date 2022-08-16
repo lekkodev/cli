@@ -7,6 +7,7 @@ import (
 	"os"
 
 	protov1 "github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/jhump/protoreflect/desc/protoparse"
 	"github.com/jhump/protoreflect/dynamic"
 	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
@@ -16,10 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func Compile(name, starfile string) (*lekkov1beta1.Feature, error) {
+// Compile takes as input the name of a feature flag, as well as a .star filename
+// and returns a fully formed feature flag according to lekko's v1beta1 proto spec.
+func Compile(name, starfile string) (*dynamic.Message, error) {
 	thread := &starlark.Thread{
 		Name: "compile thread",
-		Load: load,
+		Load: load, // tell starlark interpreter how to load proto modules.
 	}
 	reader, err := os.Open(starfile)
 	if err != nil {
@@ -33,6 +36,11 @@ func Compile(name, starfile string) (*lekkov1beta1.Feature, error) {
 	sd, err := starlark.ExecFile(thread, starfile, moduleSource, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "get globals")
+	}
+
+	description, err := getDescription(sd)
+	if err != nil {
+		return nil, errors.Wrap(err, "get description")
 	}
 
 	defaultProto, err := getDefault(sd)
@@ -51,12 +59,16 @@ func Compile(name, starfile string) (*lekkov1beta1.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "construct tree")
 	}
-
-	return &lekkov1beta1.Feature{
+	feature, err := dynamic.AsDynamicMessage(&lekkov1beta1.Feature{
 		Key:         name,
-		Description: "",
-		Tree:        tree,
-	}, nil
+		Description: description,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "feature as dynamic message")
+	}
+	feature.SetFieldByName("tree", tree)
+
+	return feature, nil
 }
 
 func load(thread *starlark.Thread, moduleName string) (starlark.StringDict, error) {
@@ -66,6 +78,7 @@ func load(thread *starlark.Thread, moduleName string) (starlark.StringDict, erro
 	if err != nil {
 		return nil, errors.Wrap(err, "parse files")
 	}
+
 	globals := starlark.StringDict{}
 	for _, message := range results[0].GetMessageTypes() {
 		globals[message.GetName()] = starproto.NewMessageType(message)
@@ -74,6 +87,18 @@ func load(thread *starlark.Thread, moduleName string) (starlark.StringDict, erro
 		globals[enum.GetName()] = starproto.NewEnumType(enum)
 	}
 	return globals, nil
+}
+
+func getDescription(globals starlark.StringDict) (string, error) {
+	sd, ok := globals["description"]
+	if !ok {
+		return "", fmt.Errorf("no `description` global variable found")
+	}
+	dsc, ok := sd.(starlark.String)
+	if !ok {
+		return "", fmt.Errorf("`description` must be a string (got a %s)", sd.Type())
+	}
+	return dsc.GoString(), nil
 }
 
 func getDefault(globals starlark.StringDict) (*dynamic.Message, error) {
@@ -161,22 +186,23 @@ func getRules(globals starlark.StringDict) ([]Rule, error) {
 	return rulesArr, nil
 }
 
-func constructTree(defaultValue *dynamic.Message, rules []Rule) (*lekkov1beta1.Tree, error) {
+func constructTree(defaultValue *dynamic.Message, rules []Rule) (*dynamic.Message, error) {
 	// var defaultProto protoiface.MessageV1
 
 	// if err := defaultValue.ConvertTo(defaultProto); err != nil {
 	// 	return nil, errors.Wrap(err, "default value convert to proto")
 	// }
-	fqn := defaultValue.GetMessageDescriptor().GetFullyQualifiedName()
-	reflectMessage := protov1.MessageReflect(defaultValue)
+	a := any.Any{}
+	defaultValue.ConvertTo(&a)
+	log.Print(a.String())
+	reflectMessage := protov1.MessageV2(defaultValue)
 	// proto.Marshal(reflectMessage.Interface())
 
 	// defaultProtoV2 := protov1.MessageV2(defaultValue)
-	any, err := anypb.New(reflectMessage.Interface())
+	any, err := anypb.New(reflectMessage)
 	if err != nil {
 		return nil, errors.Wrap(err, "default to any")
 	}
-	any.TypeUrl = fmt.Sprintf("type.googleapis.com/%s", fqn)
 	tree := &lekkov1beta1.Tree{
 		Default: any,
 	}
@@ -185,17 +211,15 @@ func constructTree(defaultValue *dynamic.Message, rules []Rule) (*lekkov1beta1.T
 		// if err := rule.value.ConvertTo(valueProto); err != nil {
 		// 	return nil, errors.Wrap(err, "rule value convert to proto")
 		// }
-		fqn := defaultValue.GetMessageDescriptor().GetFullyQualifiedName()
-		valueProtoV2 := protov1.MessageReflect(rule.value)
-		any, err := anypb.New(valueProtoV2.Interface())
+		valueProtoV2 := protov1.MessageV2(rule.value)
+		any, err := anypb.New(valueProtoV2)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
-		any.TypeUrl = fmt.Sprintf("type.googleapis.com/%s", fqn)
 		tree.Constraints = append(tree.Constraints, &lekkov1beta1.Constraint{
 			Rule:  rule.rule,
 			Value: any,
 		})
 	}
-	return tree, nil
+	return dynamic.AsDynamicMessage(tree)
 }

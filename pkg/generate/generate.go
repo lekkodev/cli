@@ -15,12 +15,15 @@
 package generate
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/pkg/errors"
 )
 
 // Compiles each namespace.
@@ -31,7 +34,8 @@ func Compile(rootPath string) error {
 	}
 	log.Printf("ns %v\n", nsNameToNsMDs)
 	for ns, nsMD := range nsNameToNsMDs {
-		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD)
+		pathToNamespace := filepath.Join(rootPath, ns)
+		featureFiles, err := feature.GroupFeatureFiles(pathToNamespace, nsMD)
 		if err != nil {
 			log.Printf("ffiles err %v\n", err)
 			return err
@@ -42,6 +46,16 @@ func Compile(rootPath string) error {
 				return err
 			}
 			log.Printf("Got proto result: \n%s\n", result.String())
+
+			bytes, err := result.MarshalJSON()
+			if err != nil {
+				return errors.Wrap(err, "failed to marshal proto to json")
+			}
+			// Create the json file
+			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
+			if err := os.WriteFile(jsonFile, bytes, 0700); err != nil {
+				return errors.Wrap(err, "failed to write file")
+			}
 		}
 	}
 	return nil
