@@ -15,11 +15,13 @@
 package generate
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
@@ -33,20 +35,20 @@ import (
 // to make sure the update is backwards compatible and that existing feature flags are not
 // renamed, etc. Only then should we replace existing compiled output with new compiled output.
 func Compile(rootPath string) error {
-	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
 		pathToNamespace := filepath.Join(rootPath, ns)
-		featureFiles, err := feature.GroupFeatureFiles(pathToNamespace, nsMD)
+		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}
 		for _, ff := range featureFiles {
 			result, err := star.Compile(
 				rootMD.ProtoDirectory,
-				filepath.Join(rootPath, ns, ff.BuilderFileName),
+				filepath.Join(rootPath, ns, ff.StarlarkFileName),
 				ff.Name,
 			)
 			if err != nil {

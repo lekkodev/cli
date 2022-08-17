@@ -17,6 +17,8 @@ package encoding
 import (
 	"fmt"
 
+	"github.com/lekkodev/cli/pkg/feature"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -24,16 +26,22 @@ import (
 
 // Takes a version number and parses file contents into the corresponding
 // type.
-// TODO have this based on some sort of common internal representation.
-func ParseFeature(contents []byte, version string) (*rulesv1beta1.Feature, error) {
+func ParseFeature(contents []byte, version string) (feature.EvaluableFeature, error) {
 	switch version {
 	case "v1beta1":
-		var feature rulesv1beta1.Feature
-		err := protojson.Unmarshal(contents, &feature)
+		var f rulesv1beta1.Feature
+		err := protojson.Unmarshal(contents, &f)
 		if err != nil {
 			return nil, err
 		}
-		return &feature, nil
+		return feature.NewV1Beta1(&f), nil
+	case "v1beta2":
+		var f featurev1beta1.Feature
+		err := protojson.Unmarshal(contents, &f)
+		if err != nil {
+			return nil, err
+		}
+		return feature.NewV1Beta2(&f), nil
 	default:
 		return nil, fmt.Errorf("unknown version when parsing feature: %s", version)
 	}
