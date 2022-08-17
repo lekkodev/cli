@@ -43,7 +43,9 @@ func Compile(protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature,
 	defer func() {
 		// Note: we choose not to check in the buf image to the config repo and instead
 		// always generate on-the-fly. This decision can be reevaluated.
-		_ = image.cleanup()
+		if err := image.cleanup(); err != nil {
+			fmt.Printf("Error encountered when cleaning up buf image: %v", err)
+		}
 	}()
 
 	// Execute the starlark file to retrieve its contents (globals)
