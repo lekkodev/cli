@@ -26,12 +26,12 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
-const (
-	// The name of the top-level proto directory that lives in every config repo.
-	protoDirName = "proto"
-)
-
 // Compiles each namespace.
+// TODO: compilation should not happen destructively (right now compilation will overwrite
+// existing compiled output whether or not compilation was successful). Ideally, we write
+// compiled output to a tmp location, compare the tmp output and the existing compiled flag
+// to make sure the update is backwards compatible and that existing feature flags are not
+// renamed, etc. Only then should we replace existing compiled output with new compiled output.
 func Compile(rootPath string) error {
 	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
 	if err != nil {
@@ -59,7 +59,7 @@ func Compile(rootPath string) error {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
 			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
-			if err := os.WriteFile(jsonFile, bytes, 0700); err != nil {
+			if err := os.WriteFile(jsonFile, bytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
 		}

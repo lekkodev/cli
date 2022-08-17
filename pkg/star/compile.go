@@ -34,11 +34,17 @@ import (
 // It returns a fully formed v1beta2 lekko feature flag.
 func Compile(protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature, error) {
 	// Build the buf image
+	// NOTE: in the future, we will want to create the buf image once, and load it into
+	// compilation of all feature flags. For now we just have 1 feature flag so this works.
 	image, err := newBufImage(protoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
-	defer image.cleanup()
+	defer func() {
+		// Note: we choose not to check in the buf image to the config repo and instead
+		// always generate on-the-fly. This decision can be reevaluated.
+		_ = image.cleanup()
+	}()
 
 	// Execute the starlark file to retrieve its contents (globals)
 	globals, err := loadGlobals(image, starfilePath)
@@ -183,13 +189,13 @@ func constructTree(defaultValue protoreflect.ProtoMessage, rules []Rule) (*lekko
 	}
 	// for now, our tree only has 1 level, (its effectievly a list)
 	for _, rule := range rules {
-		any, err := anypb.New(rule.value)
+		ruleAny, err := anypb.New(rule.value)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
 		tree.Constraints = append(tree.Constraints, &lekkov1beta1.Constraint{
 			Rule:  rule.rule,
-			Value: any,
+			Value: ruleAny,
 		})
 	}
 	return tree, nil

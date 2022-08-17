@@ -46,25 +46,35 @@ func buildTypes(imageFileName string) (*protoregistry.Types, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "protodesc.NewFiles")
 	}
-	return filesToTypes(files), nil
+	return filesToTypes(files)
 }
 
-func filesToTypes(files *protoregistry.Files) *protoregistry.Types {
+func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	ret := protoregistry.GlobalTypes
+	var retErr error
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		for i := 0; i < fd.Enums().Len(); i++ {
 			ed := fd.Enums().Get(i)
-			ret.RegisterEnum(dynamicpb.NewEnumType(ed))
+			if err := ret.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
+				retErr = err
+				return false
+			}
 		}
 		for i := 0; i < fd.Messages().Len(); i++ {
 			md := fd.Messages().Get(i)
-			ret.RegisterMessage(dynamicpb.NewMessageType(md))
+			if err := ret.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
+				retErr = err
+				return false
+			}
 		}
 		for i := 0; i < fd.Extensions().Len(); i++ {
 			exd := fd.Extensions().Get(i)
-			ret.RegisterExtension(dynamicpb.NewExtensionType(exd))
+			if err := ret.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
+				retErr = err
+				return false
+			}
 		}
 		return true
 	})
-	return ret
+	return ret, retErr
 }
