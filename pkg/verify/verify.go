@@ -16,7 +16,6 @@ package verify
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/encoding"
@@ -38,11 +37,7 @@ func Verify(rootPath string) error {
 			return err
 		}
 		for _, feature := range groupedFeatures {
-			contents, err := os.ReadFile(filepath.Join(rootPath, ns, feature.CompiledJSONFileName))
-			if err != nil {
-				return err
-			}
-			if _, err := encoding.ParseFeature(contents, nsMD.Version); err != nil {
+			if _, err := encoding.ParseFeature(rootPath, feature, nsMD, fs.LocalProvider()); err != nil {
 				return err
 			}
 		}

@@ -26,6 +26,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 // Compiles each namespace.
@@ -40,6 +41,11 @@ func Compile(rootPath string) error {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
+		if nsMD.Version != "v1beta2" {
+			fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
+			continue
+		}
+
 		pathToNamespace := filepath.Join(rootPath, ns)
 		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
 		if err != nil {
@@ -56,12 +62,22 @@ func Compile(rootPath string) error {
 			}
 
 			// Create the json file
-			bytes, err := protojson.MarshalOptions{Multiline: true}.Marshal(result)
+			jBytes, err := protojson.MarshalOptions{Multiline: true}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
 			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
-			if err := os.WriteFile(jsonFile, bytes, 0600); err != nil {
+			if err := os.WriteFile(jsonFile, jBytes, 0600); err != nil {
+				return errors.Wrap(err, "failed to write file")
+			}
+
+			// Create the proto file
+			pBytes, err := proto.Marshal(result)
+			if err != nil {
+				return errors.Wrap(err, "failed to marshal to proto")
+			}
+			protoBinFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.proto.bin", ff.Name))
+			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
 		}

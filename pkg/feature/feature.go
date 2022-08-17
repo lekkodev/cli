@@ -104,6 +104,8 @@ type FeatureFile struct {
 	ProtoFileName string
 	// Filename of a compiled .json file.
 	CompiledJSONFileName string
+	// Filename of a compiled .proto.bin file.
+	CompiledProtoBinFileName string
 }
 
 // This groups feature files in a way that is
@@ -147,6 +149,16 @@ func GroupFeatureFiles(ctx context.Context, pathToNamespace string, nsMD *metada
 				featureToFile[featureName] = f
 			}
 		}
+		if strings.HasSuffix(file.Name, ".proto.bin") {
+			featureName := strings.TrimSuffix(file.Name, ".proto.bin")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: file.Name}
+			} else {
+				f.CompiledProtoBinFileName = file.Name
+				featureToFile[featureName] = f
+			}
+		}
 	}
 
 	featureFiles := make([]FeatureFile, len(featureToFile))
@@ -163,6 +175,9 @@ func GroupFeatureFiles(ctx context.Context, pathToNamespace string, nsMD *metada
 		case "v1beta2":
 			if len(feature.CompiledJSONFileName) == 0 {
 				return nil, fmt.Errorf("empty compiled JSON for feature: %s", feature.Name)
+			}
+			if len(feature.CompiledProtoBinFileName) == 0 {
+				return nil, fmt.Errorf("empty compiled proto for feature: %s", feature.Name)
 			}
 			if len(feature.StarlarkFileName) == 0 {
 				return nil, fmt.Errorf("empty starlark file for feature: %s", feature.Name)
