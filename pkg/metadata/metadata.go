@@ -40,8 +40,9 @@ import (
 // The type for
 type RootConfigRepoMetadata struct {
 	// This version refers to the version of the metadata.
-	Version    string   `json:"version,omitempty" yaml:"version,omitempty"`
-	Namespaces []string `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
+	Version        string   `json:"version,omitempty" yaml:"version,omitempty"`
+	Namespaces     []string `json:"namespaces,omitempty" yaml:"namespaces,omitempty"`
+	ProtoDirectory string   `json:"protoDir,omitempty" yaml:"protoDir,omitempty"`
 }
 
 type NamespaceConfigRepoMetadata struct {
