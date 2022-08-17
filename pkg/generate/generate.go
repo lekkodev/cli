@@ -16,7 +16,6 @@ package generate
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -24,34 +23,41 @@ import (
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
+)
+
+const (
+	// The name of the top-level proto directory that lives in every config repo.
+	protoDirName = "proto"
 )
 
 // Compiles each namespace.
 func Compile(rootPath string) error {
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
 	if err != nil {
 		return err
 	}
-	log.Printf("ns %v\n", nsNameToNsMDs)
 	for ns, nsMD := range nsNameToNsMDs {
 		pathToNamespace := filepath.Join(rootPath, ns)
 		featureFiles, err := feature.GroupFeatureFiles(pathToNamespace, nsMD)
 		if err != nil {
-			log.Printf("ffiles err %v\n", err)
 			return err
 		}
 		for _, ff := range featureFiles {
-			result, err := star.Compile(ff.Name, filepath.Join(rootPath, ns, ff.BuilderFileName))
+			result, err := star.Compile(
+				rootMD.ProtoDirectory,
+				filepath.Join(rootPath, ns, ff.BuilderFileName),
+				ff.Name,
+			)
 			if err != nil {
 				return err
 			}
-			log.Printf("Got proto result: \n%s\n", result.String())
 
-			bytes, err := result.MarshalJSON()
+			// Create the json file
+			bytes, err := protojson.MarshalOptions{Multiline: true}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
-			// Create the json file
 			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
 			if err := os.WriteFile(jsonFile, bytes, 0700); err != nil {
 				return errors.Wrap(err, "failed to write file")

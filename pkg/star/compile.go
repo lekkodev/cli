@@ -3,28 +3,65 @@ package star
 import (
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 
-	protov1 "github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/any"
-	"github.com/jhump/protoreflect/desc/protoparse"
-	"github.com/jhump/protoreflect/dynamic"
 	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	"github.com/lekkodev/cli/pkg/star/starproto"
 	"github.com/pkg/errors"
+	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// Compile takes as input the name of a feature flag, as well as a .star filename
-// and returns a fully formed feature flag according to lekko's v1beta1 proto spec.
-func Compile(name, starfile string) (*dynamic.Message, error) {
-	thread := &starlark.Thread{
-		Name: "compile thread",
-		Load: load, // tell starlark interpreter how to load proto modules.
+// Compile takes the following parameters:
+// 		protoDir: path to the proto directory that stores all user-defined proto files
+// 		starfilePath: path to the .star file that defines this feature flag
+// 		featureName: human-readable name of this feature flag. Also matches the starfile name.
+// It returns a fully formed v1beta2 lekko feature flag.
+func Compile(protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature, error) {
+	// Build the buf image
+	image, err := newBufImage(protoDir)
+	if err != nil {
+		return nil, errors.Wrap(err, "new buf image")
 	}
-	reader, err := os.Open(starfile)
+	defer image.cleanup()
+
+	// Execute the starlark file to retrieve its contents (globals)
+	globals, err := loadGlobals(image, starfilePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "load globals")
+	}
+
+	// Now, get the config values and turn them into proto.
+	description, err := getDescription(globals)
+	if err != nil {
+		return nil, errors.Wrap(err, "getDescription")
+	}
+	def, err := getDefault(globals)
+	if err != nil {
+		return nil, errors.Wrap(err, "getDefault")
+	}
+	rules, err := getRules(globals)
+	if err != nil {
+		return nil, errors.Wrap(err, "getRules")
+	}
+	tree, err := constructTree(def, rules)
+	if err != nil {
+		return nil, errors.Wrap(err, "constructTree")
+	}
+
+	return &lekkov1beta1.Feature{
+		Key:         featureName,
+		Description: description,
+		Tree:        tree,
+	}, nil
+}
+
+func loadGlobals(image *bufImage, starfilePath string) (starlark.StringDict, error) {
+	thread := &starlark.Thread{
+		Name: "load",
+	}
+	reader, err := os.Open(starfilePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "open starfile")
 	}
@@ -33,60 +70,30 @@ func Compile(name, starfile string) (*dynamic.Message, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "read starfile")
 	}
-	sd, err := starlark.ExecFile(thread, starfile, moduleSource, nil)
+	types, err := buildTypes(image.filename)
 	if err != nil {
-		return nil, errors.Wrap(err, "get globals")
+		return nil, errors.Wrap(err, "build types")
 	}
-
-	description, err := getDescription(sd)
-	if err != nil {
-		return nil, errors.Wrap(err, "get description")
-	}
-
-	defaultProto, err := getDefault(sd)
-	if err != nil {
-		return nil, errors.Wrap(err, "get default")
-	}
-
-	rules, err := getRules(sd)
-	if err != nil {
-		return nil, errors.Wrap(err, "get rules")
-	}
-
-	log.Printf("Got final values: \n\tdefault: %v\n\trules: %v\n", defaultProto, rules)
-
-	tree, err := constructTree(defaultProto, rules)
-	if err != nil {
-		return nil, errors.Wrap(err, "construct tree")
-	}
-	feature, err := dynamic.AsDynamicMessage(&lekkov1beta1.Feature{
-		Key:         name,
-		Description: description,
+	protoModule := protomodule.NewModule(types)
+	globals, err := starlark.ExecFile(thread, starfilePath, moduleSource, starlark.StringDict{
+		"proto": protoModule,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "feature as dynamic message")
-	}
-	feature.SetFieldByName("tree", tree)
-
-	return feature, nil
-}
-
-func load(thread *starlark.Thread, moduleName string) (starlark.StringDict, error) {
-	// parse the proto into descriptors
-	p := protoparse.Parser{}
-	results, err := p.ParseFiles(moduleName)
-	if err != nil {
-		return nil, errors.Wrap(err, "parse files")
-	}
-
-	globals := starlark.StringDict{}
-	for _, message := range results[0].GetMessageTypes() {
-		globals[message.GetName()] = starproto.NewMessageType(message)
-	}
-	for _, enum := range results[0].GetEnumTypes() {
-		globals[enum.GetName()] = starproto.NewEnumType(enum)
+		return nil, errors.Wrap(err, "starlark execfile")
 	}
 	return globals, nil
+}
+
+func getDefault(globals starlark.StringDict) (protoreflect.ProtoMessage, error) {
+	defaultVal, ok := globals["default"]
+	if !ok {
+		return nil, fmt.Errorf("no `default` function found")
+	}
+	message, ok := protomodule.AsProtoMessage(defaultVal)
+	if !ok {
+		return nil, fmt.Errorf("default returned something that is not proto, got %s", defaultVal.Type())
+	}
+	return message, nil
 }
 
 func getDescription(globals starlark.StringDict) (string, error) {
@@ -101,49 +108,15 @@ func getDescription(globals starlark.StringDict) (string, error) {
 	return dsc.GoString(), nil
 }
 
-func getDefault(globals starlark.StringDict) (*dynamic.Message, error) {
-	sd, ok := globals["default"]
-	if !ok {
-		return nil, fmt.Errorf("no `default` function found")
-	}
-	def, ok := sd.(starlark.Callable)
-	if !ok {
-		return nil, fmt.Errorf("`default` must be a function (got a %s)", sd.Type())
-	}
-
-	thread := &starlark.Thread{}
-
-	defaultVal, err := starlark.Call(thread, def, nil, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "call default func")
-	}
-	message, ok := starproto.ToProtoMessage(defaultVal)
-	if !ok {
-		return nil, fmt.Errorf("default returned something that is not proto, got %s", defaultVal.Type())
-	}
-	return message, nil
-}
-
 type Rule struct {
 	rule  string
-	value *dynamic.Message
+	value protoreflect.ProtoMessage
 }
 
 func getRules(globals starlark.StringDict) ([]Rule, error) {
-	sd, ok := globals["rules"]
+	rulesVal, ok := globals["rules"]
 	if !ok {
 		return nil, fmt.Errorf("no `rules` function found ")
-	}
-	rules, ok := sd.(starlark.Callable)
-	if !ok {
-		return nil, fmt.Errorf("`rules` must be a function (got a %s)", sd.Type())
-	}
-
-	thread := &starlark.Thread{}
-
-	rulesVal, err := starlark.Call(thread, rules, nil, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "call rules func")
 	}
 
 	seq, ok := rulesVal.(starlark.Sequence)
@@ -173,7 +146,7 @@ func getRules(globals starlark.StringDict) ([]Rule, error) {
 		if conditionStr.GoString() == "" {
 			return nil, fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
-		message, ok := starproto.ToProtoMessage(tuple.Index(1))
+		message, ok := protomodule.AsProtoMessage(tuple.Index(1))
 		if !ok {
 			return nil, fmt.Errorf("condition val returned something that is not proto, got %s", tuple.Index(1).Type())
 		}
@@ -186,33 +159,17 @@ func getRules(globals starlark.StringDict) ([]Rule, error) {
 	return rulesArr, nil
 }
 
-func constructTree(defaultValue *dynamic.Message, rules []Rule) (*dynamic.Message, error) {
-	// var defaultProto protoiface.MessageV1
-
-	// if err := defaultValue.ConvertTo(defaultProto); err != nil {
-	// 	return nil, errors.Wrap(err, "default value convert to proto")
-	// }
-	a := any.Any{}
-	defaultValue.ConvertTo(&a)
-	log.Print(a.String())
-	reflectMessage := protov1.MessageV2(defaultValue)
-	// proto.Marshal(reflectMessage.Interface())
-
-	// defaultProtoV2 := protov1.MessageV2(defaultValue)
-	any, err := anypb.New(reflectMessage)
+func constructTree(defaultValue protoreflect.ProtoMessage, rules []Rule) (*lekkov1beta1.Tree, error) {
+	defaultAny, err := anypb.New(defaultValue)
 	if err != nil {
-		return nil, errors.Wrap(err, "default to any")
+		return nil, errors.Wrap(err, "anypb.New")
 	}
 	tree := &lekkov1beta1.Tree{
-		Default: any,
+		Default: defaultAny,
 	}
+	// for now, our tree only has 1 level, (its effectievly a list)
 	for _, rule := range rules {
-		// var valueProto protoiface.MessageV1
-		// if err := rule.value.ConvertTo(valueProto); err != nil {
-		// 	return nil, errors.Wrap(err, "rule value convert to proto")
-		// }
-		valueProtoV2 := protov1.MessageV2(rule.value)
-		any, err := anypb.New(valueProtoV2)
+		any, err := anypb.New(rule.value)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
@@ -221,5 +178,5 @@ func constructTree(defaultValue *dynamic.Message, rules []Rule) (*dynamic.Messag
 			Value: any,
 		})
 	}
-	return dynamic.AsDynamicMessage(tree)
+	return tree, nil
 }
