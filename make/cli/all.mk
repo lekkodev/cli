@@ -17,8 +17,9 @@ include make/go/docker.mk
 include make/go/buf.mk
 include make/go/license_header.mk
 include make/go/dep_protoc_gen_go.mk
+include make/go/dep_protoc_gen_connect_go.mk
 
-bufgeneratedeps:: $(BUF) $(PROTOC_GEN_GO)
+bufgeneratedeps:: $(BUF) $(PROTOC_GEN_GO) $(PROTOC_GEN_CONNECT_GO)
 
 .PHONY: bufgeneratecleango
 bufgeneratecleango:

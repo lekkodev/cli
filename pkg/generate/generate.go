@@ -15,20 +15,22 @@
 package generate
 
 import (
+	"context"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 )
 
 // Compiles each namespace.
 func Compile(rootPath string) error {
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, metadata.LocalProvider())
+	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		featureFiles, err := feature.GroupFeatureFiles(filepath.Join(rootPath, ns), nsMD)
+		featureFiles, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
 		if err != nil {
 			return err
 		}
