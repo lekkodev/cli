@@ -33,6 +33,8 @@ func ContextHelper(genericMap map[string]interface{}) (map[string]*backendv1beta
 			backendVal = &backendv1beta1.Value{Kind: &backendv1beta1.Value_IntValue{IntValue: int64(v)}}
 		case int32:
 			backendVal = &backendv1beta1.Value{Kind: &backendv1beta1.Value_IntValue{IntValue: int64(v)}}
+		case int64:
+			backendVal = &backendv1beta1.Value{Kind: &backendv1beta1.Value_IntValue{IntValue: v}}
 		case float64:
 			backendVal = &backendv1beta1.Value{Kind: &backendv1beta1.Value_DoubleValue{DoubleValue: v}}
 		case string:
