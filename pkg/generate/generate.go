@@ -40,6 +40,10 @@ func Compile(rootPath string) error {
 	if err != nil {
 		return err
 	}
+	registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory)
+	if err != nil {
+		return errors.Wrap(err, "failed to build dynamic proto registry")
+	}
 	for ns, nsMD := range nsNameToNsMDs {
 		if nsMD.Version != "v1beta2" {
 			fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
@@ -53,6 +57,7 @@ func Compile(rootPath string) error {
 		}
 		for _, ff := range featureFiles {
 			result, err := star.Compile(
+				registry,
 				rootMD.ProtoDirectory,
 				filepath.Join(rootPath, ns, ff.StarlarkFileName),
 				ff.Name,
@@ -62,7 +67,10 @@ func Compile(rootPath string) error {
 			}
 
 			// Create the json file
-			jBytes, err := protojson.MarshalOptions{Multiline: true}.Marshal(result)
+			jBytes, err := protojson.MarshalOptions{
+				Multiline: true,
+				Resolver:  registry,
+			}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
