@@ -58,20 +58,26 @@ func Compile(rootPath string) error {
 			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range featureFiles {
-			result, err := star.Compile(
+			compiler := star.NewCompiler(
 				registry,
 				rootMD.ProtoDirectory,
 				filepath.Join(rootPath, ns, ff.StarlarkFileName),
 				ff.Name,
 			)
+			f, err := compiler.Compile()
 			if err != nil {
 				return err
+			}
+
+			fProto, err := f.ToProto()
+			if err != nil {
+				return errors.Wrap(err, "feature to proto")
 			}
 
 			// Create the json file
 			jBytes, err := protojson.MarshalOptions{
 				Resolver: registry,
-			}.Marshal(result)
+			}.Marshal(fProto)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
@@ -86,7 +92,7 @@ func Compile(rootPath string) error {
 				return errors.Wrap(err, "failed to write file")
 			}
 			// Create the proto file
-			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(result)
+			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(fProto)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}
