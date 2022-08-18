@@ -15,7 +15,9 @@
 package generate
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,7 +55,7 @@ func Compile(rootPath string) error {
 		pathToNamespace := filepath.Join(rootPath, ns)
 		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range featureFiles {
 			result, err := star.Compile(
@@ -68,17 +70,21 @@ func Compile(rootPath string) error {
 
 			// Create the json file
 			jBytes, err := protojson.MarshalOptions{
-				Multiline: true,
-				Resolver:  registry,
+				Resolver: registry,
 			}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
+			indentedJBytes := bytes.NewBuffer(nil)
+			// encoding/json provides a deterministic serialization output, ensuring
+			// that indentation always uses the same number of characters.
+			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
+				return errors.Wrap(err, "failed to indent json")
+			}
 			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
-			if err := os.WriteFile(jsonFile, jBytes, 0600); err != nil {
+			if err := os.WriteFile(jsonFile, indentedJBytes.Bytes(), 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
-
 			// Create the proto file
 			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(result)
 			if err != nil {

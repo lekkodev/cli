@@ -38,13 +38,6 @@ func BuildDynamicTypeRegistry(protoDir string) (*protoregistry.Types, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
-	defer func() {
-		// Note: we choose not to check in the buf image to the config repo and instead
-		// always regenerate on-the-fly. This decision can be reevaluated.
-		if err := image.cleanup(); err != nil {
-			fmt.Printf("Error encountered when cleaning up buf image: %v", err)
-		}
-	}()
 	bytes, err := os.ReadFile(image.filename)
 	if err != nil {
 		return nil, errors.Wrap(err, "os.readfile image bin")
@@ -117,15 +110,10 @@ func newBufImage(protoDir string) (*bufImage, error) {
 	cmd := exec.Command("buf", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return nil, errors.Wrap(err, "buf build")
 	}
 	return &bufImage{
 		filename: outputFile,
 	}, nil
-}
-
-func (bi *bufImage) cleanup() error {
-	return os.Remove(bi.filename)
 }
