@@ -29,7 +29,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/fs"
@@ -63,8 +62,8 @@ const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
 // This returns the root metadata of a repository and a map from namespace name to namespace metadata.
 //
 // This takes a provider so that we can use the same code on a local version on disk as well as in Github.
-func ParseFullConfigRepoMetadataStrict(path string, provider fs.Provider) (*RootConfigRepoMetadata, map[string]*NamespaceConfigRepoMetadata, error) {
-	contents, err := provider.GetFileContents(context.TODO(), filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
+func ParseFullConfigRepoMetadataStrict(ctx context.Context, path string, provider fs.Provider) (*RootConfigRepoMetadata, map[string]*NamespaceConfigRepoMetadata, error) {
+	contents, err := provider.GetFileContents(ctx, filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not open root metadata: %v", err)
 	}
@@ -75,9 +74,9 @@ func ParseFullConfigRepoMetadataStrict(path string, provider fs.Provider) (*Root
 	}
 	nsMDs := make(map[string]*NamespaceConfigRepoMetadata)
 	for _, namespace := range rootMetadata.Namespaces {
-		contents, err := os.ReadFile(filepath.Join(path, namespace, DefaultNamespaceConfigRepoMetadataFileName))
+		contents, err := provider.GetFileContents(ctx, filepath.Join(path, namespace, DefaultNamespaceConfigRepoMetadataFileName))
 		if err != nil {
-			return nil, nil, fmt.Errorf("could not open root metadata: %v", err)
+			return nil, nil, fmt.Errorf("could not open namespace metadata: %v", err)
 		}
 		var nsConfig NamespaceConfigRepoMetadata
 		if err := UnmarshalYAMLStrict(contents, &nsConfig); err != nil {
