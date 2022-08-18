@@ -24,6 +24,7 @@ import (
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -32,24 +33,9 @@ import (
 // 		starfilePath: path to the .star file that defines this feature flag
 // 		featureName: human-readable name of this feature flag. Also matches the starfile name.
 // It returns a fully formed v1beta2 lekko feature flag.
-func Compile(protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature, error) {
-	// Build the buf image
-	// NOTE: in the future, we will want to create the buf image once, and load it into
-	// compilation of all feature flags. For now we just have 1 feature flag so this works.
-	image, err := newBufImage(protoDir)
-	if err != nil {
-		return nil, errors.Wrap(err, "new buf image")
-	}
-	defer func() {
-		// Note: we choose not to check in the buf image to the config repo and instead
-		// always generate on-the-fly. This decision can be reevaluated.
-		if err := image.cleanup(); err != nil {
-			fmt.Printf("Error encountered when cleaning up buf image: %v", err)
-		}
-	}()
-
+func Compile(registry *protoregistry.Types, protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature, error) {
 	// Execute the starlark file to retrieve its contents (globals)
-	globals, err := loadGlobals(image, starfilePath)
+	globals, err := loadGlobals(registry, starfilePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "load globals")
 	}
@@ -79,7 +65,7 @@ func Compile(protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature,
 	}, nil
 }
 
-func loadGlobals(image *bufImage, starfilePath string) (starlark.StringDict, error) {
+func loadGlobals(registry *protoregistry.Types, starfilePath string) (starlark.StringDict, error) {
 	thread := &starlark.Thread{
 		Name: "load",
 	}
@@ -92,11 +78,7 @@ func loadGlobals(image *bufImage, starfilePath string) (starlark.StringDict, err
 	if err != nil {
 		return nil, errors.Wrap(err, "read starfile")
 	}
-	types, err := buildTypes(image.filename)
-	if err != nil {
-		return nil, errors.Wrap(err, "build types")
-	}
-	protoModule := protomodule.NewModule(types)
+	protoModule := protomodule.NewModule(registry)
 	globals, err := starlark.ExecFile(thread, starfilePath, moduleSource, starlark.StringDict{
 		"proto": protoModule,
 	})
