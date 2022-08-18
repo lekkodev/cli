@@ -27,7 +27,7 @@ import (
 // Verifies that a configuration from a root is properly formatted.
 // TODO: do even more validation including compilation.
 func Verify(rootPath string) error {
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, fs.LocalProvider())
+	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}

@@ -36,7 +36,7 @@ import (
 // to make sure the update is backwards compatible and that existing feature flags are not
 // renamed, etc. Only then should we replace existing compiled output with new compiled output.
 func Compile(rootPath string) error {
-	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(rootPath, fs.LocalProvider())
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func Compile(rootPath string) error {
 			}
 
 			// Create the proto file
-			pBytes, err := proto.Marshal(result)
+			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}

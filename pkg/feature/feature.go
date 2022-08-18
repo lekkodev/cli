@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"strings"
 
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -33,7 +33,11 @@ import (
 )
 
 type EvaluableFeature interface {
-	Evaluate(evalContext map[string]interface{}) (proto.Message, error)
+	// Evaluate Feature returns a protobuf.Any.
+	// For user defined protos, we shouldn't attempt to Unmarshal
+	// this unless we know the type. For primitive types, we can
+	// safely unmarshal into BoolValue, StringValue, etc.
+	Evaluate(evalContext map[string]interface{}) (*anypb.Any, error)
 }
 
 func NewV1Beta1(f *rulesv1beta1.Feature) EvaluableFeature {
@@ -44,7 +48,7 @@ type v1beta1 struct {
 	*rulesv1beta1.Feature
 }
 
-func (v1beta1 *v1beta1) Evaluate(evalContext map[string]interface{}) (proto.Message, error) {
+func (v1beta1 *v1beta1) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
 	ctxMap, err := rules.ContextHelper(evalContext)
 	if err != nil {
 		return nil, err
@@ -55,11 +59,11 @@ func (v1beta1 *v1beta1) Evaluate(evalContext map[string]interface{}) (proto.Mess
 	}
 	switch v := protobufVal.GetKind().(type) {
 	case *structpb.Value_NumberValue:
-		return &wrapperspb.DoubleValue{Value: v.NumberValue}, nil
+		return anypb.New(&wrapperspb.DoubleValue{Value: v.NumberValue})
 	case *structpb.Value_StringValue:
-		return &wrapperspb.StringValue{Value: v.StringValue}, nil
+		return anypb.New(&wrapperspb.StringValue{Value: v.StringValue})
 	case *structpb.Value_BoolValue:
-		return &wrapperspb.BoolValue{Value: v.BoolValue}, nil
+		return anypb.New(&wrapperspb.BoolValue{Value: v.BoolValue})
 	case *structpb.Value_ListValue:
 		return nil, fmt.Errorf("invalid list value: %v", v)
 	case *structpb.Value_StructValue:
@@ -81,14 +85,8 @@ func NewV1Beta2(f *featurev1beta1.Feature) EvaluableFeature {
 // TODO: pre-compute the ruleslang tree so that we:
 // 1) error on verify time if things aren't valid.
 // 2) pre-compute antlr trees.
-func (v1beta2 *v1beta2) Evaluate(evalContext map[string]interface{}) (proto.Message, error) {
-	a, err := rules.EvaluateFeatureV1Beta2(v1beta2.Tree, evalContext)
-	if err != nil {
-		return nil, err
-	}
-	// TODO: for custom types, we will need this Unmarshal Options to contain a resolver
-	// containing our custom types.
-	return a.UnmarshalNew()
+func (v1beta2 *v1beta2) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
+	return rules.EvaluateFeatureV1Beta2(v1beta2.Tree, evalContext)
 }
 
 // FeatureFile is a parsed feature from an on desk representation.
