@@ -80,7 +80,7 @@ func Compile(rootPath string) error {
 			}
 
 			// Create the proto file
-			pBytes, err := proto.Marshal(result)
+			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(result)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}
