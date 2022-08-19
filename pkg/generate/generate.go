@@ -106,6 +106,10 @@ func Compile(rootPath string) error {
 			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
+			// Finally, run a sanity compliance check
+			if err := feature.ComplianceCheck(ff, nsMD); err != nil {
+				return errors.Wrap(err, "internal compilation error")
+			}
 		}
 	}
 	return nil

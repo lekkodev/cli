@@ -28,7 +28,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
-	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // Takes a path to the protobuf directory in the config repo, and generates
@@ -76,12 +76,12 @@ func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	if rangeErr != nil {
 		return nil, rangeErr
 	}
-	// Since we're internally converting starlark primitive types to google.protobuf.Value,
-	// we need to ensure that the structpb types exist in the type registry in order for
-	// json marshaling to work. However, we also need to ensure that type registration panics
-	// because the user imported struct.proto
-	if err := registerTypes(ret, structpb.File_google_protobuf_struct_proto, true); err != nil {
-		return nil, errors.Wrap(err, "registering structpb")
+	// Since we're internally converting starlark primitive types to google.protobuf.*Value,
+	// we need to ensure that the wrapperspb types exist in the type registry in order for
+	// json marshaling to work. However, we also need to ensure that type registration does
+	// not panic in the event that the user also imported wrappers.proto
+	if err := registerTypes(ret, wrapperspb.File_google_protobuf_wrappers_proto, true); err != nil {
+		return nil, errors.Wrap(err, "registering wrapperspb")
 	}
 	return ret, nil
 }

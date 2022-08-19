@@ -21,7 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // Indicates the lekko-specific types that are allowed in feature flags.
@@ -63,9 +63,9 @@ func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
 func valToAny(value interface{}) (*anypb.Any, error) {
 	switch typedVal := value.(type) {
 	case bool:
-		return anypb.New(structpb.NewBoolValue(typedVal))
+		return anypb.New(wrapperspb.Bool(typedVal))
 	case string:
-		return anypb.New(structpb.NewStringValue(typedVal))
+		return anypb.New(wrapperspb.String(typedVal))
 	case protoreflect.ProtoMessage:
 		return anypb.New(typedVal)
 	default:

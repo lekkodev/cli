@@ -173,7 +173,7 @@ func GroupFeatureFiles(
 		featureFiles[i] = feature
 		i = i + 1
 		if validate {
-			if err := complianceCheck(feature, nsMD); err != nil {
+			if err := ComplianceCheck(feature, nsMD); err != nil {
 				return nil, errors.Wrap(err, "feature file compliance check")
 			}
 		}
@@ -181,7 +181,7 @@ func GroupFeatureFiles(
 	return featureFiles, nil
 }
 
-func complianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
+func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
 	case "v1beta1":
 		if len(f.CompiledJSONFileName) == 0 {
