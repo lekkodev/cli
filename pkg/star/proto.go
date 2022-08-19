@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Takes a path to the protobuf directory in the config repo, and generates
@@ -60,36 +61,78 @@ func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	// should be explicitly imported in their .proto files, which will end up
 	// getting included since we're including imports in our file descriptor set.
 	ret := &protoregistry.Types{}
-	var retErr error
 	ret.RangeMessages(func(mt protoreflect.MessageType) bool {
 		log.Printf("existing global message type: %v\n", mt.Descriptor().FullName())
 		return true
 	})
+	var rangeErr error
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		for i := 0; i < fd.Enums().Len(); i++ {
-			ed := fd.Enums().Get(i)
-			if err := ret.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
-				retErr = errors.Wrap(err, "register enum")
-				return false
-			}
-		}
-		for i := 0; i < fd.Messages().Len(); i++ {
-			md := fd.Messages().Get(i)
-			if err := ret.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
-				retErr = errors.Wrap(err, "register message")
-				return false
-			}
-		}
-		for i := 0; i < fd.Extensions().Len(); i++ {
-			exd := fd.Extensions().Get(i)
-			if err := ret.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
-				retErr = errors.Wrap(err, "register extension")
-				return false
-			}
+		if err := registerTypes(ret, fd, false); err != nil {
+			rangeErr = errors.Wrap(err, "registering user-defined types")
+			return false
 		}
 		return true
 	})
-	return ret, retErr
+	if rangeErr != nil {
+		return nil, rangeErr
+	}
+	// Since we're internally converting starlark primitive types to google.protobuf.Value,
+	// we need to ensure that the structpb types exist in the type registry in order for
+	// json marshaling to work. However, we also need to ensure that type registration panics
+	// because the user imported struct.proto
+	if err := registerTypes(ret, structpb.File_google_protobuf_struct_proto, true); err != nil {
+		return nil, errors.Wrap(err, "registering structpb")
+	}
+	return ret, nil
+}
+
+func registerTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, checkNotExists bool) error {
+	existingTypes := make(map[string]struct{})
+	if checkNotExists {
+		t.RangeEnums(func(et protoreflect.EnumType) bool {
+			existingTypes[string(et.Descriptor().FullName())] = struct{}{}
+			return true
+		})
+		t.RangeMessages(func(et protoreflect.MessageType) bool {
+			existingTypes[string(et.Descriptor().FullName())] = struct{}{}
+			return true
+		})
+		t.RangeExtensions(func(et protoreflect.ExtensionType) bool {
+			existingTypes[string(et.TypeDescriptor().FullName())] = struct{}{}
+			return true
+		})
+	}
+	for i := 0; i < fd.Enums().Len(); i++ {
+		ed := fd.Enums().Get(i)
+		if _, ok := existingTypes[string(ed.FullName())]; ok {
+			log.Printf("skipping registration of type %s, already exists", ed.FullName())
+			continue
+		}
+		if err := t.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
+			return errors.Wrap(err, "register enum")
+		}
+	}
+	for i := 0; i < fd.Messages().Len(); i++ {
+		md := fd.Messages().Get(i)
+		if _, ok := existingTypes[string(md.FullName())]; ok {
+			log.Printf("skipping registration of type %s, already exists", md.FullName())
+			continue
+		}
+		if err := t.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
+			return errors.Wrap(err, "register message")
+		}
+	}
+	for i := 0; i < fd.Extensions().Len(); i++ {
+		exd := fd.Extensions().Get(i)
+		if _, ok := existingTypes[string(exd.FullName())]; ok {
+			log.Printf("skipping registration of type %s, already exists", exd.FullName())
+			continue
+		}
+		if err := t.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
+			return errors.Wrap(err, "register extension")
+		}
+	}
+	return nil
 }
 
 type bufImage struct {

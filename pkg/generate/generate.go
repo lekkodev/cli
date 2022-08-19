@@ -53,7 +53,13 @@ func Compile(rootPath string) error {
 		}
 
 		pathToNamespace := filepath.Join(rootPath, ns)
-		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
+		featureFiles, err := feature.GroupFeatureFiles(
+			context.Background(),
+			pathToNamespace,
+			nsMD,
+			fs.LocalProvider(),
+			false,
+		)
 		if err != nil {
 			return errors.Wrap(err, "group feature files")
 		}
