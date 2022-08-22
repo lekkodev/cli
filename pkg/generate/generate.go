@@ -26,6 +26,7 @@ import (
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/verify"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -106,11 +107,11 @@ func Compile(rootPath string) error {
 			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
-			// Finally, run a sanity compliance check
-			if err := feature.ComplianceCheck(ff, nsMD); err != nil {
-				return errors.Wrap(err, "internal compilation error")
-			}
 		}
+	}
+	// Finally, run a sanity check to make sure we compiled everything correctly
+	if err := verify.Verify(rootPath); err != nil {
+		return errors.Wrap(err, "internal compilation error")
 	}
 	return nil
 }
