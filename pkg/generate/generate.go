@@ -139,5 +139,15 @@ func compareExistingProto(existingProtoFilePath string, newProto *featurev1beta1
 	if err := proto.Unmarshal(bytes, existingProto); err != nil {
 		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
 	}
+	if existingProto.GetKey() != newProto.GetKey() {
+		return false, fmt.Errorf("cannot change key of feature flag: old %s, new %s", existingProto.GetKey(), newProto.GetKey())
+	}
+	if existingProto.GetTree().GetDefault().GetTypeUrl() != newProto.GetTree().GetDefault().GetTypeUrl() {
+		return false, fmt.Errorf(
+			"cannot change feature flag type: old %s, new %s",
+			existingProto.GetTree().GetDefault().GetTypeUrl(),
+			newProto.GetTree().GetDefault().GetTypeUrl(),
+		)
+	}
 	return !proto.Equal(existingProto, newProto), nil
 }
