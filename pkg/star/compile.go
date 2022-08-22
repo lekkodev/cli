@@ -19,57 +19,43 @@ import (
 	"io/ioutil"
 	"os"
 
-	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
-	"google.golang.org/protobuf/reflect/protoreflect"
+	"go.starlark.net/starlarktest"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/known/anypb"
 )
+
+type Compiler interface {
+	Compile() (*feature.Feature, error)
+}
+
+type compiler struct {
+	registry                            *protoregistry.Types
+	protoDir, starfilePath, featureName string
+}
 
 // Compile takes the following parameters:
 // 		protoDir: path to the proto directory that stores all user-defined proto files
 // 		starfilePath: path to the .star file that defines this feature flag
 // 		featureName: human-readable name of this feature flag. Also matches the starfile name.
-// It returns a fully formed v1beta2 lekko feature flag.
-func Compile(registry *protoregistry.Types, protoDir, starfilePath, featureName string) (*lekkov1beta1.Feature, error) {
-	// Execute the starlark file to retrieve its contents (globals)
-	globals, err := loadGlobals(registry, starfilePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "load globals")
+func NewCompiler(registry *protoregistry.Types, protoDir, starfilePath, featureName string) Compiler {
+	return &compiler{
+		registry:     registry,
+		protoDir:     protoDir,
+		starfilePath: starfilePath,
+		featureName:  featureName,
 	}
-
-	// Now, get the config values and turn them into proto.
-	description, err := getDescription(globals)
-	if err != nil {
-		return nil, errors.Wrap(err, "getDescription")
-	}
-	def, err := getDefault(globals)
-	if err != nil {
-		return nil, errors.Wrap(err, "getDefault")
-	}
-	rules, err := getRules(globals)
-	if err != nil {
-		return nil, errors.Wrap(err, "getRules")
-	}
-	tree, err := constructTree(def, rules)
-	if err != nil {
-		return nil, errors.Wrap(err, "constructTree")
-	}
-
-	return &lekkov1beta1.Feature{
-		Key:         featureName,
-		Description: description,
-		Tree:        tree,
-	}, nil
 }
 
-func loadGlobals(registry *protoregistry.Types, starfilePath string) (starlark.StringDict, error) {
+func (c *compiler) Compile() (*feature.Feature, error) {
+	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "load",
+		Load: load,
 	}
-	reader, err := os.Open(starfilePath)
+	reader, err := os.Open(c.starfilePath)
 	if err != nil {
 		return nil, errors.Wrap(err, "open starfile")
 	}
@@ -78,109 +64,25 @@ func loadGlobals(registry *protoregistry.Types, starfilePath string) (starlark.S
 	if err != nil {
 		return nil, errors.Wrap(err, "read starfile")
 	}
-	protoModule := protomodule.NewModule(registry)
-	globals, err := starlark.ExecFile(thread, starfilePath, moduleSource, starlark.StringDict{
-		"proto": protoModule,
+	protoModule := protomodule.NewModule(c.registry)
+	globals, err := starlark.ExecFile(thread, c.starfilePath, moduleSource, starlark.StringDict{
+		"proto":   protoModule,
+		"feature": starlark.NewBuiltin("feature", makeFeature),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	return globals, nil
-}
-
-func getDefault(globals starlark.StringDict) (protoreflect.ProtoMessage, error) {
-	defaultVal, ok := globals["default"]
-	if !ok {
-		return nil, fmt.Errorf("no `default` function found")
-	}
-	message, ok := protomodule.AsProtoMessage(defaultVal)
-	if !ok {
-		return nil, fmt.Errorf("default returned something that is not proto, got %s", defaultVal.Type())
-	}
-	return message, nil
-}
-
-func getDescription(globals starlark.StringDict) (string, error) {
-	sd, ok := globals["description"]
-	if !ok {
-		return "", fmt.Errorf("no `description` global variable found")
-	}
-	dsc, ok := sd.(starlark.String)
-	if !ok {
-		return "", fmt.Errorf("`description` must be a string (got a %s)", sd.Type())
-	}
-	return dsc.GoString(), nil
-}
-
-type Rule struct {
-	rule  string
-	value protoreflect.ProtoMessage
-}
-
-func getRules(globals starlark.StringDict) ([]Rule, error) {
-	rulesVal, ok := globals["rules"]
-	if !ok {
-		return nil, fmt.Errorf("no `rules` function found ")
-	}
-
-	seq, ok := rulesVal.(starlark.Sequence)
-	if !ok {
-		return nil, fmt.Errorf("rules: did not get back a starlark sequence: %v", rulesVal)
-	}
-	var rulesArr []Rule
-	it := seq.Iterate()
-	defer it.Done()
-	var val starlark.Value
-	for it.Next(&val) {
-		if val == starlark.None {
-			return nil, fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
-		}
-		tuple, ok := val.(starlark.Tuple)
-		if !ok {
-			return nil, fmt.Errorf("type error: expecting tuple, got %v", val.Type())
-		}
-		if tuple.Len() != 2 {
-			return nil, fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
-		}
-		conditionStr, ok := tuple.Index(0).(starlark.String)
-		if !ok {
-			return nil, fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
-		}
-		// TODO: parse into ruleslang
-		if conditionStr.GoString() == "" {
-			return nil, fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
-		}
-		message, ok := protomodule.AsProtoMessage(tuple.Index(1))
-		if !ok {
-			return nil, fmt.Errorf("condition val returned something that is not proto, got %s", tuple.Index(1).Type())
-		}
-		rulesArr = append(rulesArr, Rule{
-			rule:  conditionStr.GoString(),
-			value: message,
-		})
-	}
-
-	return rulesArr, nil
-}
-
-func constructTree(defaultValue protoreflect.ProtoMessage, rules []Rule) (*lekkov1beta1.Tree, error) {
-	defaultAny, err := anypb.New(defaultValue)
+	f, err := newFeatureBuilder(globals).build()
 	if err != nil {
-		return nil, errors.Wrap(err, "anypb.New")
+		return nil, errors.Wrap(err, "build")
 	}
-	tree := &lekkov1beta1.Tree{
-		Default: defaultAny,
+	f.Key = c.featureName
+	return f, nil
+}
+
+func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	if module == "assert.star" {
+		return starlarktest.LoadAssertModule()
 	}
-	// for now, our tree only has 1 level, (its effectievly a list)
-	for _, rule := range rules {
-		ruleAny, err := anypb.New(rule.value)
-		if err != nil {
-			return nil, errors.Wrap(err, "rule value to any")
-		}
-		tree.Constraints = append(tree.Constraints, &lekkov1beta1.Constraint{
-			Rule:  rule.rule,
-			Value: ruleAny,
-		})
-	}
-	return tree, nil
+	return nil, fmt.Errorf("load not implemented for %s", module)
 }

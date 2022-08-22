@@ -15,7 +15,9 @@
 package generate
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +30,7 @@ import (
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/verify"
 )
 
 // Compiles each namespace.
@@ -52,36 +55,52 @@ func Compile(rootPath string) error {
 		}
 
 		pathToNamespace := filepath.Join(rootPath, ns)
-		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
+		featureFiles, err := feature.GroupFeatureFiles(
+			context.Background(),
+			pathToNamespace,
+			nsMD,
+			fs.LocalProvider(),
+			false,
+		)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range featureFiles {
-			result, err := star.Compile(
+			compiler := star.NewCompiler(
 				registry,
 				rootMD.ProtoDirectory,
 				filepath.Join(rootPath, ns, ff.StarlarkFileName),
 				ff.Name,
 			)
+			f, err := compiler.Compile()
 			if err != nil {
 				return err
 			}
 
+			fProto, err := f.ToProto()
+			if err != nil {
+				return errors.Wrap(err, "feature to proto")
+			}
+
 			// Create the json file
 			jBytes, err := protojson.MarshalOptions{
-				Multiline: true,
-				Resolver:  registry,
-			}.Marshal(result)
+				Resolver: registry,
+			}.Marshal(fProto)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal proto to json")
 			}
+			indentedJBytes := bytes.NewBuffer(nil)
+			// encoding/json provides a deterministic serialization output, ensuring
+			// that indentation always uses the same number of characters.
+			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
+				return errors.Wrap(err, "failed to indent json")
+			}
 			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
-			if err := os.WriteFile(jsonFile, jBytes, 0600); err != nil {
+			if err := os.WriteFile(jsonFile, indentedJBytes.Bytes(), 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
-
 			// Create the proto file
-			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(result)
+			pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(fProto)
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}
@@ -90,6 +109,10 @@ func Compile(rootPath string) error {
 				return errors.Wrap(err, "failed to write file")
 			}
 		}
+	}
+	// Finally, run a sanity check to make sure we compiled everything correctly
+	if err := verify.Verify(rootPath); err != nil {
+		return errors.Wrap(err, "internal compilation error")
 	}
 	return nil
 }
