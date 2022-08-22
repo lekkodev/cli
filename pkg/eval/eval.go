@@ -49,7 +49,7 @@ func Eval(rootPath string, featurePath string, iCtx map[string]interface{}) (*an
 		return nil, fmt.Errorf("invalid namespace: %s, should be of format namespace/feature", ns)
 	}
 
-	groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider())
+	groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider(), true)
 	if err != nil {
 		return nil, err
 	}
