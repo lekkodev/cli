@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/exp/slices"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -36,14 +36,10 @@ func Eval(rootPath string, featurePath string, iCtx map[string]interface{}) (*an
 		return nil, err
 	}
 
-	splits := strings.SplitN(featurePath, "/", 2)
-	if len(splits) != 2 {
-		return nil, fmt.Errorf("invalid featurepath: %s, should be of format namespace/feature", featurePath)
+	ns, featureName, err := feature.ParseFeaturePath(featurePath)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse feature path")
 	}
-
-	ns := splits[0]
-	featureName := splits[1]
-
 	nsMD, ok := nsNameToNsMDs[ns]
 	if !ok {
 		return nil, fmt.Errorf("invalid namespace: %s, should be of format namespace/feature", ns)

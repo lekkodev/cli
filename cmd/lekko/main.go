@@ -21,8 +21,10 @@ import (
 	"os"
 
 	"github.com/lekkodev/cli/pkg/eval"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/generate"
 	"github.com/lekkodev/cli/pkg/verify"
+	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -32,6 +34,7 @@ func main() {
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(evalCmd)
+	rootCmd.AddCommand(addCmd())
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -102,4 +105,29 @@ var evalCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func addCmd() *cobra.Command {
+	var complexFeature bool
+	ret := &cobra.Command{
+		Use:   "add namespace/feature",
+		Short: "Adds a new feature flag",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := cmd.ParseFlags(args); err != nil {
+				return errors.Wrap(err, "parse flags")
+			}
+			namespace, featureName, err := feature.ParseFeaturePath(args[0])
+			if err != nil {
+				return errors.Wrap(err, "parse feature path")
+			}
+			return generate.Add(wd, namespace, featureName, complexFeature)
+		},
+	}
+	ret.Flags().BoolVarP(&complexFeature, "complex", "c", false, "create a complex configuration with proto, rules and validation")
+	return ret
 }
