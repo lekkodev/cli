@@ -30,6 +30,7 @@ import (
 	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/rules"
+	"github.com/pkg/errors"
 )
 
 type EvaluableFeature interface {
@@ -109,7 +110,13 @@ type FeatureFile struct {
 // This groups feature files in a way that is
 // governed by the namespace metadata.
 // TODO naming conventions.
-func GroupFeatureFiles(ctx context.Context, pathToNamespace string, nsMD *metadata.NamespaceConfigRepoMetadata, fsProvider fs.Provider) ([]FeatureFile, error) {
+func GroupFeatureFiles(
+	ctx context.Context,
+	pathToNamespace string,
+	nsMD *metadata.NamespaceConfigRepoMetadata,
+	fsProvider fs.Provider,
+	validate bool,
+) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
 	files, err := fsProvider.GetDirContents(ctx, pathToNamespace)
 	if err != nil {
@@ -165,22 +172,31 @@ func GroupFeatureFiles(ctx context.Context, pathToNamespace string, nsMD *metada
 	for _, feature := range featureToFile {
 		featureFiles[i] = feature
 		i = i + 1
-		switch nsMD.Version {
-		case "v1beta1":
-			if len(feature.CompiledJSONFileName) == 0 {
-				return nil, fmt.Errorf("empty compiled JSON for feature: %s", feature.Name)
-			}
-		case "v1beta2":
-			if len(feature.CompiledJSONFileName) == 0 {
-				return nil, fmt.Errorf("empty compiled JSON for feature: %s", feature.Name)
-			}
-			if len(feature.CompiledProtoBinFileName) == 0 {
-				return nil, fmt.Errorf("empty compiled proto for feature: %s", feature.Name)
-			}
-			if len(feature.StarlarkFileName) == 0 {
-				return nil, fmt.Errorf("empty starlark file for feature: %s", feature.Name)
+		if validate {
+			if err := ComplianceCheck(feature, nsMD); err != nil {
+				return nil, errors.Wrap(err, "feature file compliance check")
 			}
 		}
 	}
 	return featureFiles, nil
+}
+
+func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
+	switch nsMD.Version {
+	case "v1beta1":
+		if len(f.CompiledJSONFileName) == 0 {
+			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
+		}
+	case "v1beta2":
+		if len(f.CompiledJSONFileName) == 0 {
+			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
+		}
+		if len(f.CompiledProtoBinFileName) == 0 {
+			return fmt.Errorf("empty compiled proto for feature: %s", f.Name)
+		}
+		if len(f.StarlarkFileName) == 0 {
+			return fmt.Errorf("empty starlark file for feature: %s", f.Name)
+		}
+	}
+	return nil
 }

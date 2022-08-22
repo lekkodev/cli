@@ -173,29 +173,45 @@ func addRules(f *feature.Feature, rulesVal starlark.Value) error {
 			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
 		ruleVal := tuple.Index(1)
-		// check if it is a complex type
-		message, ok := protomodule.AsProtoMessage(ruleVal)
-		if ok {
-			if f.FeatureType != feature.FeatureTypeComplex {
-				return fmt.Errorf("expecting type %s for rule #%d, instead got type %T", f.FeatureType, i, ruleVal)
+		switch f.FeatureType {
+		case feature.FeatureTypeComplex:
+			message, ok := protomodule.AsProtoMessage(ruleVal)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
 			}
 			f.Rules = append(f.Rules, &feature.Rule{
 				Condition: conditionStr.GoString(),
 				Value:     message,
 			})
-			continue
-		}
-		switch typedRuleVal := ruleVal.(type) {
-		case starlark.Bool:
+		case feature.FeatureTypeBool:
+			typedRuleVal, ok := ruleVal.(starlark.Bool)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
 			f.Rules = append(f.Rules, &feature.Rule{
 				Condition: conditionStr.GoString(),
 				Value:     bool(typedRuleVal),
 			})
 		default:
-			return fmt.Errorf("received rule #%d value with unsupported type %T", i, typedRuleVal)
+			return fmt.Errorf("unsupported type %s for rule #%d", f.FeatureType, i)
 		}
 		i++
 	}
 
 	return nil
+}
+
+func typeError(expectedType feature.FeatureType, ruleIdx int, value starlark.Value) error {
+	return fmt.Errorf("expecting %s for rule idx #%d, instead got %T", starType(expectedType), ruleIdx, value)
+}
+
+func starType(ft feature.FeatureType) string {
+	switch ft {
+	case feature.FeatureTypeComplex:
+		return "protoMessage"
+	case feature.FeatureTypeBool:
+		return fmt.Sprintf("%T", starlark.False)
+	default:
+		return "unknown"
+	}
 }

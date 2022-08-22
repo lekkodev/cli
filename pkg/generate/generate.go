@@ -53,7 +53,13 @@ func Compile(rootPath string) error {
 		}
 
 		pathToNamespace := filepath.Join(rootPath, ns)
-		featureFiles, err := feature.GroupFeatureFiles(context.Background(), pathToNamespace, nsMD, fs.LocalProvider())
+		featureFiles, err := feature.GroupFeatureFiles(
+			context.Background(),
+			pathToNamespace,
+			nsMD,
+			fs.LocalProvider(),
+			false,
+		)
 		if err != nil {
 			return errors.Wrap(err, "group feature files")
 		}
@@ -99,6 +105,10 @@ func Compile(rootPath string) error {
 			protoBinFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.proto.bin", ff.Name))
 			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
+			}
+			// Finally, run a sanity compliance check
+			if err := feature.ComplianceCheck(ff, nsMD); err != nil {
+				return errors.Wrap(err, "internal compilation error")
 			}
 		}
 	}
