@@ -2,7 +2,7 @@ module github.com/lekkodev/cli
 
 go 1.18
 
-replace github.com/nikunjy/rules => github.com/lekkodev/rules v1.1.2-0.20220822202423-f8db4746caab
+replace github.com/nikunjy/rules => github.com/lekkodev/rules v1.2.0
 
 require (
 	github.com/bufbuild/connect-go v0.3.0
