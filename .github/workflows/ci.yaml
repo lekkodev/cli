@@ -14,7 +14,7 @@ jobs:
         run: git config --global --add url."https://lekkoci:${TOKEN}@github.com".insteadOf "https://github.com"
       - name: setup-go
         if: success()
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           go-version: 1.18.0
       - name: ci
