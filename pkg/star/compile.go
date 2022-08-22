@@ -15,6 +15,7 @@
 package star
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarktest"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
@@ -51,6 +53,7 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "load",
+		Load: load,
 	}
 	reader, err := os.Open(c.starfilePath)
 	if err != nil {
@@ -75,4 +78,11 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	}
 	f.Key = c.featureName
 	return f, nil
+}
+
+func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
+	if module == "assert.star" {
+		return starlarktest.LoadAssertModule()
+	}
+	return nil, fmt.Errorf("load not implemented for %s", module)
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
+	"go.starlark.net/starlarktest"
 )
 
 const (
@@ -30,6 +31,7 @@ const (
 	defaultValueAttrName string          = "default"
 	descriptionAttrName  string          = "description"
 	rulesAttrName        string          = "rules"
+	validatorAttrName    string          = "validator"
 )
 
 func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -40,7 +42,8 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 }
 
 type featureBuilder struct {
-	globals starlark.StringDict
+	globals   starlark.StringDict
+	validator starlark.Callable
 }
 
 func newFeatureBuilder(globals starlark.StringDict) *featureBuilder {
@@ -58,6 +61,11 @@ func (fb *featureBuilder) build() (*feature.Feature, error) {
 	if !ok {
 		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", featureConstructor.GoString(), featureVal)
 	}
+	var err error
+	fb.validator, err = fb.getValidator(featureVal)
+	if err != nil {
+		return nil, errors.Wrap(err, "get validator")
+	}
 	f, err := fb.init(featureVal)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize feature")
@@ -66,16 +74,50 @@ func (fb *featureBuilder) build() (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "description")
 	}
+
 	if err = fb.addRules(f, featureVal); err != nil {
 		return nil, errors.Wrap(err, "add rules")
 	}
 	return f, nil
 }
 
+func (fb *featureBuilder) getValidator(featureVal *starlarkstruct.Struct) (starlark.Callable, error) {
+	validator, err := featureVal.Attr(validatorAttrName)
+	if err != nil {
+		// no validator provided
+		return nil, nil
+	}
+	validatorCallable, ok := validator.(starlark.Callable)
+	if !ok {
+		return nil, fmt.Errorf("type error: received %s of type %T, expected %T", validatorAttrName, validatorCallable, starlark.Function{})
+	}
+	return validatorCallable, nil
+}
+
+func (fb *featureBuilder) validate(value starlark.Value) error {
+	if fb.validator == nil {
+		return nil
+	}
+	var err error
+	thread := &starlark.Thread{Name: "validate", Load: load}
+	vr := &validatorReporter{}
+	starlarktest.SetReporter(thread, vr)
+	args := starlark.Tuple([]starlark.Value{value})
+	_, err = starlark.Call(thread, fb.validator, args, nil)
+	if err != nil {
+		return errors.Wrap(err, "validator")
+	}
+	// log.Printf("validation result: %v, reporter: %v\n", result, vr)
+	return vr.toErr()
+}
+
 func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feature, error) {
 	defaultVal, err := featureVal.Attr(defaultValueAttrName)
 	if err != nil {
 		return nil, errors.Wrap(err, "default attribute")
+	}
+	if err := fb.validate(defaultVal); err != nil {
+		return nil, errors.Wrap(err, "default value validate")
 	}
 	// check if this is a complex type
 	message, ok := protomodule.AsProtoMessage(defaultVal)
@@ -137,6 +179,9 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
 		ruleVal := tuple.Index(1)
+		if err := fb.validate(ruleVal); err != nil {
+			return errors.Wrap(err, "rule value validate")
+		}
 		switch f.FeatureType {
 		case feature.FeatureTypeComplex:
 			message, ok := protomodule.AsProtoMessage(ruleVal)
@@ -178,4 +223,25 @@ func starType(ft feature.FeatureType) string {
 	default:
 		return "unknown"
 	}
+}
+
+type validatorReporter struct {
+	args   []interface{}
+	failed bool
+}
+
+func (vr *validatorReporter) Error(args ...interface{}) {
+	vr.args = append(vr.args, args...)
+	vr.failed = true
+}
+
+func (vr *validatorReporter) hasError() bool {
+	return vr.failed
+}
+
+func (vr *validatorReporter) toErr() error {
+	if !vr.hasError() {
+		return nil
+	}
+	return fmt.Errorf("%v", vr.args...)
 }
