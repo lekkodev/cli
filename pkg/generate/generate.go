@@ -24,6 +24,7 @@ import (
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/verify"
@@ -80,6 +81,15 @@ func Compile(rootPath string) error {
 			if err != nil {
 				return errors.Wrap(err, "feature to proto")
 			}
+			protoBinFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.proto.bin", ff.Name))
+			diffExists, err := compareExistingProto(protoBinFile, fProto)
+			if err != nil {
+				return errors.Wrap(err, "comparing with existing proto")
+			}
+			if !diffExists {
+				// skipping i/o as no diff exists
+				continue
+			}
 
 			// Create the json file
 			jBytes, err := protojson.MarshalOptions{
@@ -103,7 +113,6 @@ func Compile(rootPath string) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}
-			protoBinFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.proto.bin", ff.Name))
 			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
@@ -114,4 +123,21 @@ func Compile(rootPath string) error {
 		return errors.Wrap(err, "internal compilation error")
 	}
 	return nil
+}
+
+// returns true if there is an actual semantic difference between the existing compiled proto,
+// and the new proto we have on hand.
+func compareExistingProto(existingProtoFilePath string, newProto *featurev1beta1.Feature) (bool, error) {
+	bytes, err := os.ReadFile(existingProtoFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, errors.Wrap(err, "read existing proto file")
+	}
+	existingProto := &featurev1beta1.Feature{}
+	if err := proto.Unmarshal(bytes, existingProto); err != nil {
+		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
+	}
+	return !proto.Equal(existingProto, newProto), nil
 }

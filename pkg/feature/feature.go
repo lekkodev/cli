@@ -19,6 +19,7 @@ import (
 
 	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -63,14 +64,22 @@ func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
 func valToAny(value interface{}) (*anypb.Any, error) {
 	switch typedVal := value.(type) {
 	case bool:
-		return anypb.New(wrapperspb.Bool(typedVal))
+		return newAny(wrapperspb.Bool(typedVal))
 	case string:
-		return anypb.New(wrapperspb.String(typedVal))
+		return newAny(wrapperspb.String(typedVal))
 	case protoreflect.ProtoMessage:
-		return anypb.New(typedVal)
+		return newAny(typedVal)
 	default:
 		return nil, fmt.Errorf("unsupported feature type %T", typedVal)
 	}
+}
+
+func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
+	ret := new(anypb.Any)
+	if err := anypb.MarshalFrom(ret, pm, proto.MarshalOptions{Deterministic: true}); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
