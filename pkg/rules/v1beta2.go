@@ -15,8 +15,6 @@
 package rules
 
 import (
-	"fmt"
-
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 
 	"github.com/nikunjy/rules/parser"
@@ -46,12 +44,10 @@ func traverseConstraint(constraint *featurev1beta1.Constraint, context map[strin
 	if err != nil {
 		return nil, errors.Wrap(err, "creating evaluator")
 	}
+
 	passes, err := evaluator.Process(context)
 	if err != nil {
 		return nil, errors.Wrap(err, "processing")
-	}
-	if err := evaluator.LastDebugErr(); err != nil {
-		return nil, fmt.Errorf("debug error set: %v", err)
 	}
 	if passes {
 		if constraint.Value != nil {
