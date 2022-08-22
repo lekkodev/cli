@@ -105,7 +105,6 @@ func registerTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, check
 	for i := 0; i < fd.Enums().Len(); i++ {
 		ed := fd.Enums().Get(i)
 		if _, ok := existingTypes[string(ed.FullName())]; ok {
-			log.Printf("skipping registration of type %s, already exists", ed.FullName())
 			continue
 		}
 		if err := t.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
@@ -115,7 +114,6 @@ func registerTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, check
 	for i := 0; i < fd.Messages().Len(); i++ {
 		md := fd.Messages().Get(i)
 		if _, ok := existingTypes[string(md.FullName())]; ok {
-			log.Printf("skipping registration of type %s, already exists", md.FullName())
 			continue
 		}
 		if err := t.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
@@ -125,7 +123,6 @@ func registerTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, check
 	for i := 0; i < fd.Extensions().Len(); i++ {
 		exd := fd.Extensions().Get(i)
 		if _, ok := existingTypes[string(exd.FullName())]; ok {
-			log.Printf("skipping registration of type %s, already exists", exd.FullName())
 			continue
 		}
 		if err := t.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
