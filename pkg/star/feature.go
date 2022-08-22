@@ -34,6 +34,15 @@ const (
 	validatorAttrName    string          = "validator"
 )
 
+var (
+	allowedAttrNames map[string]struct{} = map[string]struct{}{
+		defaultValueAttrName: {},
+		descriptionAttrName:  {},
+		rulesAttrName:        {},
+		validatorAttrName:    {},
+	}
+)
+
 func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
 		return nil, fmt.Errorf("feature: unexpected positional arguments")
@@ -60,6 +69,9 @@ func (fb *featureBuilder) build() (*feature.Feature, error) {
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
 		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", featureConstructor.GoString(), featureVal)
+	}
+	if err := fb.validateFeature(featureVal); err != nil {
+		return nil, errors.Wrap(err, "validate feature")
 	}
 	var err error
 	fb.validator, err = fb.getValidator(featureVal)
@@ -92,6 +104,15 @@ func (fb *featureBuilder) getValidator(featureVal *starlarkstruct.Struct) (starl
 		return nil, fmt.Errorf("type error: received %s of type %T, expected %T", validatorAttrName, validatorCallable, starlark.Function{})
 	}
 	return validatorCallable, nil
+}
+
+func (fb *featureBuilder) validateFeature(featureVal *starlarkstruct.Struct) error {
+	for _, attr := range featureVal.AttrNames() {
+		if _, ok := allowedAttrNames[attr]; !ok {
+			return fmt.Errorf("result attribute name %s not supported. use one of: %v", attr, featureVal.AttrNames())
+		}
+	}
+	return nil
 }
 
 func (fb *featureBuilder) validate(value starlark.Value) error {
