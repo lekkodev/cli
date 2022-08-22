@@ -195,9 +195,8 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		if !ok {
 			return fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
 		}
-		// TODO: parse into ruleslang
-		if conditionStr.GoString() == "" {
-			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
+		if err := validateRulesLang(conditionStr.GoString()); err != nil {
+			return fmt.Errorf("error expecting rules language string: %s, error: %v", conditionStr.GoString(), err)
 		}
 		ruleVal := tuple.Index(1)
 		if err := fb.validate(ruleVal); err != nil {
