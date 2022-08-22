@@ -11,6 +11,8 @@ LICENSE_HEADER_IGNORES := \/testdata
 BUF_LINT_INPUT := .
 BUF_FORMAT_INPUT := .
 
+GO_PRIVATE := $(GOPRIVATE),github.com/lekkodev/*
+
 include make/go/bootstrap.mk
 include make/go/go.mk
 include make/go/docker.mk
