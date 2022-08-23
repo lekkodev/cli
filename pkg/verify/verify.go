@@ -22,12 +22,14 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/pkg/star"
+	"github.com/pkg/errors"
 )
 
 // Verifies that a configuration from a root is properly formatted.
 // TODO: do even more validation including compilation.
 func Verify(rootPath string) error {
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
 	if err != nil {
 		return err
 	}
@@ -41,6 +43,10 @@ func Verify(rootPath string) error {
 				return err
 			}
 		}
+	}
+	// lint protos
+	if err := star.Lint(filepath.Join(rootPath, rootMD.ProtoDirectory)); err != nil {
+		return errors.Wrap(err, "lint protos")
 	}
 	return nil
 }

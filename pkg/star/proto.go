@@ -157,3 +157,13 @@ func newBufImage(protoDir string) (*bufImage, error) {
 		filename: outputFile,
 	}, nil
 }
+
+func Lint(protoDir string) error {
+	cmd := exec.Command("buf", "lint", protoDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, "buf lint")
+	}
+	return nil
+}
