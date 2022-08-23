@@ -45,7 +45,7 @@ func Compile(rootPath string) error {
 	if err != nil {
 		return err
 	}
-	registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory)
+	registry, err := star.BuildDynamicTypeRegistry(filepath.Join(rootPath, rootMD.ProtoDirectory))
 	if err != nil {
 		return errors.Wrap(err, "failed to build dynamic proto registry")
 	}

@@ -31,6 +31,11 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+const installBuf = `
+Please install buf in order to use lekko cli.
+Using homebrew, run 'brew install brew install bufbuild/buf/buf'. 
+For other options, see the installation page here: https://docs.buf.build/installation`
+
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
@@ -140,6 +145,9 @@ type bufImage struct {
 // protobuf's native FileDescriptorSet type. This allows us to build a
 // registry of protobuf types, adding any user-defined types.
 func newBufImage(protoDir string) (*bufImage, error) {
+	if err := checkBufExists(); err != nil {
+		return nil, err
+	}
 	outputFile := filepath.Join(protoDir, "image.bin")
 	args := []string{
 		"build",
@@ -156,4 +164,26 @@ func newBufImage(protoDir string) (*bufImage, error) {
 	return &bufImage{
 		filename: outputFile,
 	}, nil
+}
+
+func Lint(protoDir string) error {
+	if err := checkBufExists(); err != nil {
+		return err
+	}
+	cmd := exec.Command("buf", "lint", protoDir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, "buf lint")
+	}
+	return nil
+}
+
+func checkBufExists() error {
+	cmd := exec.Command("command", "-v", "buf")
+	if err := cmd.Run(); err != nil {
+		fmt.Println(installBuf)
+		return errors.New("buf not found on the cmd line")
+	}
+	return nil
 }
