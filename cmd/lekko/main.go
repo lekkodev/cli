@@ -35,6 +35,7 @@ func main() {
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
+	rootCmd.AddCommand(removeCmd())
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -129,5 +130,25 @@ func addCmd() *cobra.Command {
 		},
 	}
 	ret.Flags().BoolVarP(&complexFeature, "complex", "c", false, "create a complex configuration with proto, rules and validation")
+	return ret
+}
+
+func removeCmd() *cobra.Command {
+	ret := &cobra.Command{
+		Use:   "remove namespace/feature",
+		Short: "Removes an existing feature flag",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			namespace, featureName, err := feature.ParseFeaturePath(args[0])
+			if err != nil {
+				return errors.Wrap(err, "parse feature path")
+			}
+			return generate.Remove(wd, namespace, featureName)
+		},
+	}
 	return ret
 }

@@ -56,3 +56,23 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 	fmt.Printf("Make your changes, and run 'lekko compile'.\n")
 	return nil
 }
+
+func Remove(rootPath, namespaceName, featureName string) error {
+	ctx := context.TODO()
+	provider := fs.LocalProvider()
+	_, err := metadata.ParseNamespaceMetadataStrict(ctx, rootPath, namespaceName, provider)
+	if err != nil {
+		return fmt.Errorf("error parsing namespace metadata: %v", err)
+	}
+	for _, filename := range []string{
+		fmt.Sprintf("%s.star", featureName),
+		fmt.Sprintf("%s.json", featureName),
+		fmt.Sprintf("%s.proto.bin", featureName),
+	} {
+		if err := provider.RemoveIfExists(filepath.Join(rootPath, namespaceName, filename)); err != nil {
+			return fmt.Errorf("remove if exists failed to remove %s: %v", filename, err)
+		}
+	}
+	fmt.Printf("Feature %s has been removed\n", featureName)
+	return nil
+}
