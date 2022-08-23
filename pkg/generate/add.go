@@ -30,9 +30,10 @@ import (
 func Add(rootPath, namespaceName, featureName string, complexFeature bool) error {
 	ctx := context.TODO()
 	provider := fs.LocalProvider()
+	cw := fs.LocalConfigWriter()
 	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, rootPath, namespaceName, provider)
 	if err != nil && errors.Is(err, os.ErrNotExist) {
-		if err := metadata.CreateNamespaceMetadata(ctx, rootPath, namespaceName, provider); err != nil {
+		if err := metadata.CreateNamespaceMetadata(ctx, rootPath, namespaceName, provider, cw); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -49,7 +50,7 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 	}
 
 	featurePath := filepath.Join(rootPath, namespaceName, fmt.Sprintf("%s.star", featureName))
-	if err := provider.WriteFile(featurePath, star.GetTemplate(complexFeature), 0600); err != nil {
+	if err := cw.WriteFile(featurePath, star.GetTemplate(complexFeature), 0600); err != nil {
 		return fmt.Errorf("failed to add feature: %v", err)
 	}
 	fmt.Printf("Your new feature has been written to %s\n", featurePath)
@@ -60,19 +61,29 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 func Remove(rootPath, namespaceName, featureName string) error {
 	ctx := context.TODO()
 	provider := fs.LocalProvider()
+	cw := fs.LocalConfigWriter()
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, rootPath, namespaceName, provider)
 	if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
 	}
+	var removed bool
 	for _, filename := range []string{
 		fmt.Sprintf("%s.star", featureName),
 		fmt.Sprintf("%s.json", featureName),
 		fmt.Sprintf("%s.proto.bin", featureName),
 	} {
-		if err := provider.RemoveIfExists(filepath.Join(rootPath, namespaceName, filename)); err != nil {
+		ok, err := cw.RemoveIfExists(filepath.Join(rootPath, namespaceName, filename))
+		if err != nil {
 			return fmt.Errorf("remove if exists failed to remove %s: %v", filename, err)
 		}
+		if ok {
+			removed = true
+		}
 	}
-	fmt.Printf("Feature %s has been removed\n", featureName)
+	if removed {
+		fmt.Printf("Feature %s has been removed\n", featureName)
+	} else {
+		fmt.Printf("Feature %s does not exist\n", featureName)
+	}
 	return nil
 }

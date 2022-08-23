@@ -100,8 +100,8 @@ func ParseNamespaceMetadataStrict(ctx context.Context, rootPath, namespaceName s
 	return &nsConfig, nil
 }
 
-func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, provider fs.Provider) error {
-	if err := provider.MkdirAll(filepath.Join(rootPath, namespaceName), 0755); err != nil {
+func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, provider fs.Provider, cw fs.ConfigWriter) error {
+	if err := cw.MkdirAll(filepath.Join(rootPath, namespaceName), 0755); err != nil {
 		return errors.Wrap(err, "failed to mkdir")
 	}
 	nsConfig := NamespaceConfigRepoMetadata{
@@ -112,7 +112,7 @@ func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal yaml")
 	}
-	if err := provider.WriteFile(filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), bytes, 0600); err != nil {
+	if err := cw.WriteFile(filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), bytes, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 	// now, add the new namespace to the root repo metadata
@@ -125,7 +125,7 @@ func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal root config repo metadata into yaml")
 	}
-	if err = provider.WriteFile(filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
+	if err = cw.WriteFile(filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
 		return errors.Wrap(err, "failed to write root config repo metadata")
 	}
 	return nil

@@ -18,8 +18,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-
-	"github.com/pkg/errors"
 )
 
 // This file will contain both a filename and a filepath. The
@@ -36,9 +34,6 @@ type ProviderFile struct {
 type Provider interface {
 	GetFileContents(ctx context.Context, path string) ([]byte, error)
 	GetDirContents(ctx context.Context, path string) ([]ProviderFile, error)
-	WriteFile(name string, data []byte, perm os.FileMode) error
-	MkdirAll(path string, perm os.FileMode) error
-	RemoveIfExists(path string) error
 }
 
 type localProvider struct{}
@@ -57,24 +52,6 @@ func (*localProvider) GetDirContents(_ context.Context, path string) ([]Provider
 		files[i] = ProviderFile{Name: f.Name(), Path: filepath.Join(path, f.Name()), IsDir: f.IsDir()}
 	}
 	return files, nil
-}
-
-func (*localProvider) WriteFile(name string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(name, data, perm)
-}
-
-func (*localProvider) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
-}
-
-func (*localProvider) RemoveIfExists(path string) error {
-	if err := os.Remove(path); err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return errors.Wrap(err, "os.Remove")
-	}
-	return nil
 }
 
 func LocalProvider() Provider {
