@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/pkg/errors"
 
 	"gopkg.in/yaml.v3"
 )
@@ -53,6 +54,7 @@ type NamespaceConfigRepoMetadata struct {
 
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
 const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
+const LatestNamespaceVersion = "v1beta2"
 
 // Parses the lekko metadata from a configuration repo in a strict way, returning a user error on failure.
 //
@@ -74,20 +76,59 @@ func ParseFullConfigRepoMetadataStrict(ctx context.Context, path string, provide
 	}
 	nsMDs := make(map[string]*NamespaceConfigRepoMetadata)
 	for _, namespace := range rootMetadata.Namespaces {
-		contents, err := provider.GetFileContents(ctx, filepath.Join(path, namespace, DefaultNamespaceConfigRepoMetadataFileName))
+		nsMD, err := ParseNamespaceMetadataStrict(ctx, path, namespace, provider)
 		if err != nil {
-			return nil, nil, fmt.Errorf("could not open namespace metadata: %v", err)
+			return nil, nil, errors.Wrap(err, "failed to parse namespace metadata")
 		}
-		var nsConfig NamespaceConfigRepoMetadata
-		if err := UnmarshalYAMLStrict(contents, &nsConfig); err != nil {
-			return nil, nil, fmt.Errorf("could not parse namespace metadata: %v", err)
-		}
-		if nsConfig.Name != namespace {
-			return nil, nil, fmt.Errorf("invalid configuration, namespace in root metadata: %s does not match in-namespace metadata: %s", namespace, nsConfig.Name)
-		}
-		nsMDs[namespace] = &nsConfig
+		nsMDs[namespace] = nsMD
 	}
 	return &rootMetadata, nsMDs, nil
+}
+
+func ParseNamespaceMetadataStrict(ctx context.Context, rootPath, namespaceName string, provider fs.Provider) (*NamespaceConfigRepoMetadata, error) {
+	contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not open namespace metadata")
+	}
+	var nsConfig NamespaceConfigRepoMetadata
+	if err := UnmarshalYAMLStrict(contents, &nsConfig); err != nil {
+		return nil, errors.Wrap(err, "could not parse namespace metadata")
+	}
+	if nsConfig.Name != namespaceName {
+		return nil, fmt.Errorf("invalid configuration, namespace in root metadata: %s does not match in-namespace metadata: %s", namespaceName, nsConfig.Name)
+	}
+	return &nsConfig, nil
+}
+
+func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, provider fs.Provider, cw fs.ConfigWriter) error {
+	if err := cw.MkdirAll(filepath.Join(rootPath, namespaceName), 0755); err != nil {
+		return errors.Wrap(err, "failed to mkdir")
+	}
+	nsConfig := NamespaceConfigRepoMetadata{
+		Version: LatestNamespaceVersion,
+		Name:    namespaceName,
+	}
+	bytes, err := MarshalYAML(&nsConfig)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal yaml")
+	}
+	if err := cw.WriteFile(filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), bytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write file")
+	}
+	// now, add the new namespace to the root repo metadata
+	rootMD, _, err := ParseFullConfigRepoMetadataStrict(ctx, rootPath, provider)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse root config repo metadata")
+	}
+	rootMD.Namespaces = append(rootMD.Namespaces, namespaceName)
+	bytes, err = MarshalYAML(rootMD)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal root config repo metadata into yaml")
+	}
+	if err = cw.WriteFile(filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
+		return errors.Wrap(err, "failed to write root config repo metadata")
+	}
+	return nil
 }
 
 // This is taken from github.com/bufbuild/buf/private/pkg/encoding/encoding.go
@@ -106,9 +147,23 @@ func UnmarshalYAMLStrict(data []byte, v interface{}) error {
 	return nil
 }
 
+func MarshalYAML(v interface{}) ([]byte, error) {
+	var b bytes.Buffer
+	encoder := yaml.NewEncoder(&b)
+	if err := encoder.Encode(v); err != nil {
+		return nil, fmt.Errorf("failed to encode yaml: %v", err)
+	}
+	return b.Bytes(), nil
+}
+
 // NewYAMLDecoderStrict creates a new YAML decoder from the reader.
 func NewYAMLDecoderStrict(reader io.Reader) *yaml.Decoder {
 	yamlDecoder := yaml.NewDecoder(reader)
 	yamlDecoder.KnownFields(true)
 	return yamlDecoder
+}
+
+// NewYAMLDecoderStrict creates a new YAML decoder from the reader.
+func NewYAMLEncoderStrict(writer io.Writer) *yaml.Encoder {
+	return yaml.NewEncoder(writer)
 }

@@ -50,7 +50,7 @@ func Compile(rootPath string) error {
 		return errors.Wrap(err, "failed to build dynamic proto registry")
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		if nsMD.Version != "v1beta2" {
+		if nsMD.Version != metadata.LatestNamespaceVersion {
 			fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
 			continue
 		}
