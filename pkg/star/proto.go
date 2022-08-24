@@ -33,7 +33,7 @@ import (
 
 const installBuf = `
 Please install buf in order to use lekko cli.
-Using homebrew, run 'brew install brew install bufbuild/buf/buf'. 
+Using homebrew, run 'brew install bufbuild/buf/buf'. 
 For other options, see the installation page here: https://docs.buf.build/installation`
 
 // Takes a path to the protobuf directory in the config repo, and generates
@@ -183,7 +183,7 @@ func checkBufExists() error {
 	cmd := exec.Command("command", "-v", "buf")
 	if err := cmd.Run(); err != nil {
 		fmt.Println(installBuf)
-		return errors.New("buf not found on the cmd line")
+		return errors.Wrap(err, "buf not found on the cmd line")
 	}
 	return nil
 }
