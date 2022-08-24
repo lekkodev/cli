@@ -180,7 +180,7 @@ func Lint(protoDir string) error {
 }
 
 func checkBufExists() error {
-	cmd := exec.Command("command", "-v", "buf")
+	cmd := exec.Command("buf", "--version")
 	if err := cmd.Run(); err != nil {
 		fmt.Println(installBuf)
 		return errors.Wrap(err, "buf not found on the cmd line")
