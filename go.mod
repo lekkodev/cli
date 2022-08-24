@@ -2,11 +2,9 @@ module github.com/lekkodev/cli
 
 go 1.18
 
-replace github.com/nikunjy/rules => github.com/lekkodev/rules v1.2.0
-
 require (
 	github.com/bufbuild/connect-go v0.3.0
-	github.com/nikunjy/rules v1.1.0
+	github.com/lekkodev/rules v1.3.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.3.0
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e

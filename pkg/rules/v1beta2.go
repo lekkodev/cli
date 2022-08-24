@@ -17,7 +17,7 @@ package rules
 import (
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 
-	"github.com/nikunjy/rules/parser"
+	"github.com/lekkodev/rules/parser"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/anypb"
 )
