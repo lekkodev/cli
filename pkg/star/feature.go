@@ -27,11 +27,12 @@ import (
 
 const (
 	featureConstructor   starlark.String = "feature"
-	featureVariablename  string          = "result"
+	featureVariableName  string          = "result"
 	defaultValueAttrName string          = "default"
 	descriptionAttrName  string          = "description"
 	rulesAttrName        string          = "rules"
 	validatorAttrName    string          = "validator"
+	unitTestsAttrName    string          = "tests"
 )
 
 var (
@@ -40,6 +41,7 @@ var (
 		descriptionAttrName:  {},
 		rulesAttrName:        {},
 		validatorAttrName:    {},
+		unitTestsAttrName:    {},
 	}
 )
 
@@ -62,9 +64,9 @@ func newFeatureBuilder(globals starlark.StringDict) *featureBuilder {
 }
 
 func (fb *featureBuilder) build() (*feature.Feature, error) {
-	resultVal, ok := fb.globals[featureVariablename]
+	resultVal, ok := fb.globals[featureVariableName]
 	if !ok {
-		return nil, fmt.Errorf("required variable %s is not found", featureVariablename)
+		return nil, fmt.Errorf("required variable %s is not found", featureVariableName)
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
@@ -87,7 +89,7 @@ func (fb *featureBuilder) build() (*feature.Feature, error) {
 		return nil, errors.Wrap(err, "description")
 	}
 
-	if err = fb.addRules(f, featureVal); err != nil {
+	if err := fb.addRules(f, featureVal); err != nil {
 		return nil, errors.Wrap(err, "add rules")
 	}
 	return f, nil
@@ -191,7 +193,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		if tuple.Len() != 2 {
 			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
 		}
-		conditionStr, ok := tuple.Index(0).(starlark.String)
+		conditionStr, ok := tuple.Index(0).(starlark.HasAttr)
 		if !ok {
 			return fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
 		}
@@ -229,6 +231,75 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 	}
 
 	return nil
+}
+
+func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
+	testsVal, err := featureVal.Attr(unitTestsAttrName)
+	if err != nil {
+		// no tests provided
+		return nil
+	}
+	seq, ok := testsVal.(starlark.Sequence)
+	if !ok {
+		return fmt.Errorf("tests: did not get back a starlark sequence: %v", testsVal)
+	}
+	it := seq.Iterate()
+	defer it.Done()
+	var val starlark.Value
+	var i int
+	for it.Next(&val) {
+		if val == starlark.None {
+			return fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
+		}
+		tuple, ok := val.(starlark.Tuple)
+		if !ok {
+			return fmt.Errorf("type error: expecting tuple, got %v", val.Type())
+		}
+		if tuple.Len() != 2 {
+			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
+		}
+		conditionStr, ok := tuple.Index(0).(starlark.String)
+		if !ok {
+			return fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
+		}
+		ruleVal := tuple.Index(1)
+		if err := fb.validate(ruleVal); err != nil {
+			return errors.Wrap(err, "rule value validate")
+		}
+		switch f.FeatureType {
+		case feature.FeatureTypeComplex:
+			message, ok := protomodule.AsProtoMessage(ruleVal)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
+			f.Rules = append(f.Rules, &feature.Rule{
+				Condition: conditionStr.GoString(),
+				Value:     message,
+			})
+		case feature.FeatureTypeBool:
+			typedRuleVal, ok := ruleVal.(starlark.Bool)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
+			f.Rules = append(f.Rules, &feature.Rule{
+				Condition: conditionStr.GoString(),
+				Value:     bool(typedRuleVal),
+			})
+		default:
+			return fmt.Errorf("unsupported type %s for rule #%d", f.FeatureType, i)
+		}
+		i++
+	}
+
+	return nil
+}
+
+func buildContext(starlark.Value) (map[string]interface{}, error) {
+	hasAttr, ok := starlark.Value.(starlark.HasAttrs)
+	if !ok {
+		return fmt.Errorf()
+	}
+	switch starlark.Value
 }
 
 func typeError(expectedType feature.FeatureType, ruleIdx int, value starlark.Value) error {
