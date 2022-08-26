@@ -29,6 +29,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/fs"
@@ -69,11 +70,13 @@ func ParseFullConfigRepoMetadataStrict(ctx context.Context, path string, provide
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not open root metadata: %v", err)
 	}
+	log.Printf("cli: got file contents for file with path %s: (len %d) %v\n", path, len(contents), contents)
 
 	var rootMetadata RootConfigRepoMetadata
 	if err := UnmarshalYAMLStrict(contents, &rootMetadata); err != nil {
 		return nil, nil, fmt.Errorf("could not parse root metadata: %v", err)
 	}
+	log.Printf("got the following root metadata out of yaml unmarshalling: %v, %d namespaces\n", rootMetadata, len(rootMetadata.Namespaces))
 	nsMDs := make(map[string]*NamespaceConfigRepoMetadata)
 	for _, namespace := range rootMetadata.Namespaces {
 		nsMD, err := ParseNamespaceMetadataStrict(ctx, path, namespace, provider)
