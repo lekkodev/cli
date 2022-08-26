@@ -39,12 +39,19 @@ type Rule struct {
 	Condition string
 	Value     interface{}
 }
+
+type UnitTest struct {
+	Context       map[string]interface{}
+	ExpectedValue interface{}
+}
+
 type Feature struct {
 	Key, Description string
 	Value            interface{}
 	FeatureType      FeatureType
 
-	Rules []*Rule
+	Rules     []*Rule
+	UnitTests []*UnitTest
 }
 
 func NewBoolFeature(value bool) *Feature {
