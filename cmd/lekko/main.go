@@ -15,6 +15,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -23,10 +24,12 @@ import (
 	"github.com/lekkodev/cli/pkg/eval"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/generate"
+	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/verify"
 	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -88,6 +91,7 @@ var evalCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
 			return err
 		}
+		registry, err := star.BuildDynamicTypeRegistry("proto")
 		// TODO do protojson encoding by building the type registry.
 		res, err := eval.Eval(wd, args[0], ctxMap)
 		if err != nil {
@@ -102,7 +106,20 @@ var evalCmd = &cobra.Command{
 			}
 			fmt.Printf("Resulting value: %t\n", boolVal.Value)
 		} else {
-			fmt.Println("Resulting value is user defined, custom unmarshalling coming soon!")
+			jBytes, err := protojson.MarshalOptions{
+				Resolver: registry,
+			}.Marshal(res)
+			if err != nil {
+				return errors.Wrap(err, "failed to marshal proto to json")
+			}
+			indentedJBytes := bytes.NewBuffer(nil)
+			// encoding/json provides a deterministic serialization output, ensuring
+			// that indentation always uses the same number of characters.
+			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
+				return errors.Wrap(err, "failed to indent json")
+			}
+			fmt.Printf("%v\n", indentedJBytes)
+			// fmt.Println("Resulting value is user defined, custom unmarshalling coming soon!")
 		}
 		return nil
 	},
