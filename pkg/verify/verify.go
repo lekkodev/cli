@@ -66,7 +66,7 @@ func Verify(rootPath string) error {
 					if err := f.RunUnitTests(registry); err != nil {
 						fmt.Printf("FAIL: %v\n", err)
 					} else {
-						fmt.Printf("PASS: %v\n", err)
+						fmt.Println("PASS")
 					}
 				}
 			}

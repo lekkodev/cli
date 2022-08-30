@@ -131,7 +131,6 @@ func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
 		return err
 	}
 	for idx, test := range f.UnitTests {
-		fmt.Printf("Evaluating feature %v\n", test.Context)
 		a, err := eval.Evaluate(test.Context)
 		if err != nil {
 			return err

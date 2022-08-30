@@ -135,7 +135,6 @@ func (fb *featureBuilder) validate(value starlark.Value) error {
 	if err != nil {
 		return errors.Wrap(err, "validator")
 	}
-	// log.Printf("validation result: %v, reporter: %v\n", result, vr)
 	return vr.toErr()
 }
 
@@ -317,7 +316,8 @@ func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 		case starlark.Bool:
 			res = interface{}(v.Truth())
 		case starlark.String:
-			res = interface{}(v.GoString())
+			s := v.GoString()
+			res = interface{}(s)
 		case starlark.Int:
 			// Starlark uses math.Big under the hood, so technically
 			// we could get a very big number that doesn't fit in an i64.
@@ -338,8 +338,11 @@ func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 		default:
 			return nil, fmt.Errorf("unsupported context value %T for context key %s", v, k)
 		}
-		// TODO: we may have to typecheck the key values. String repr for now should work fine.
-		m[k.String()] = res
+		str, ok := k.(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("invalid context key type %T for context key %v", k, k)
+		}
+		m[str.GoString()] = res
 	}
 	return m, nil
 }
