@@ -15,6 +15,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -22,11 +24,15 @@ import (
 
 	"github.com/lekkodev/cli/pkg/eval"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/generate"
+	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/verify"
 	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -88,7 +94,15 @@ var evalCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
 			return err
 		}
-		// TODO do protojson encoding by building the type registry.
+		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(context.Background(), wd, fs.LocalProvider())
+		if err != nil {
+			return errors.Wrap(err, "failed to parse config repo metadata")
+		}
+		registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory)
+		if err != nil {
+			return errors.Wrap(err, "failed to build dynamic type registry")
+		}
+
 		res, err := eval.Eval(wd, args[0], ctxMap)
 		if err != nil {
 			return err
@@ -101,8 +115,18 @@ var evalCmd = &cobra.Command{
 				return err
 			}
 			fmt.Printf("Resulting value: %t\n", boolVal.Value)
-		} else {
-			fmt.Println("Resulting value is user defined, custom unmarshalling coming soon!")
+		} else { // TODO: Handle other types
+			jBytes, err := protojson.MarshalOptions{
+				Resolver: registry,
+			}.Marshal(res)
+			if err != nil {
+				return errors.Wrap(err, "failed to marshal proto to json")
+			}
+			indentedJBytes := bytes.NewBuffer(nil)
+			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
+				return errors.Wrap(err, "failed to indent json")
+			}
+			fmt.Printf("%v\n", indentedJBytes)
 		}
 		return nil
 	},
