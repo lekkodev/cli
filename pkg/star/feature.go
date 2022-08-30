@@ -176,10 +176,7 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
 	rulesVal, err := featureVal.Attr(rulesAttrName)
 	if err != nil {
-		return errors.Wrap(err, "error retrieving rules")
-	}
-	if rulesVal == nil {
-		// Attr returns nil, nil when not present.
+		// Attr returns nil, err when not present, which is terrible.
 		return nil
 	}
 	seq, ok := rulesVal.(starlark.Sequence)
@@ -243,10 +240,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
 	testVal, err := featureVal.Attr(unitTestsAttrName)
 	if err != nil {
-		return errors.Wrap(err, "error retrieving tests")
-	}
-	if testVal == nil {
-		// Attr returns nil, nil when not present.
+		// Attr returns nil, err when not present, which is terrible.
 		return nil
 	}
 	seq, ok := testVal.(starlark.Sequence)
@@ -268,9 +262,9 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 		if tuple.Len() != 2 {
 			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
 		}
-		contextMap, ok := tuple.Index(0).(starlark.HasAttrs)
+		contextMap, ok := tuple.Index(0).(*starlark.Dict)
 		if !ok {
-			return fmt.Errorf("invalid first type of tuple %T, should be a starlark dict or object to build a context object", tuple.Index(0))
+			return fmt.Errorf("invalid first type of tuple %T, should be a starlark dict to build a context object", tuple.Index(0))
 		}
 
 		translatedContextMap, err := translateContext(contextMap)
@@ -311,10 +305,10 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 }
 
 // translateContext takes a starlark native context and builds a generic map[string]interface{} from it.
-func translateContext(hasAttr starlark.HasAttrs) (map[string]interface{}, error) {
+func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 	m := make(map[string]interface{})
-	for _, attr := range hasAttr.AttrNames() {
-		val, err := hasAttr.Attr(attr)
+	for _, k := range dict.Keys() {
+		val, _, err := dict.Get(k)
 		if err != nil {
 			return nil, errors.Wrap(err, "transforming context")
 		}
@@ -330,7 +324,7 @@ func translateContext(hasAttr starlark.HasAttrs) (map[string]interface{}, error)
 			// For now just return an error.
 			i, ok := v.Int64()
 			if !ok {
-				return nil, fmt.Errorf("context key %s would have overflowed", attr)
+				return nil, fmt.Errorf("context key %s would have overflowed", k)
 			}
 			res = interface{}(i)
 		case starlark.Float:
@@ -342,9 +336,10 @@ func translateContext(hasAttr starlark.HasAttrs) (map[string]interface{}, error)
 			}
 			res = interface{}(nestedMap)
 		default:
-			return nil, fmt.Errorf("unsupported context value %T for context key %s", v, attr)
+			return nil, fmt.Errorf("unsupported context value %T for context key %s", v, k)
 		}
-		m[attr] = res
+		// TODO: we may have to typecheck the key values. String repr for now should work fine.
+		m[k.String()] = res
 	}
 	return m, nil
 }

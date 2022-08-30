@@ -21,6 +21,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -114,4 +115,34 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	}
 	ret.Tree = tree
 	return ret, nil
+}
+
+func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
+	res, err := f.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	return &v1beta2{res}, nil
+}
+
+func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
+	eval, err := f.ToEvaluableFeature()
+	if err != nil {
+		return err
+	}
+	for idx, test := range f.UnitTests {
+		fmt.Printf("Evaluating feature %v\n", test.Context)
+		a, err := eval.Evaluate(test.Context)
+		if err != nil {
+			return err
+		}
+		val, err := valToAny(test.ExpectedValue)
+		if err != nil {
+			return err
+		}
+		if !proto.Equal(a, val) {
+			return fmt.Errorf("test failed: %v index: %d %+v %+v", f.Key, idx, a, val)
+		}
+	}
+	return nil
 }
