@@ -85,6 +85,26 @@ func ParseFullConfigRepoMetadataStrict(ctx context.Context, path string, provide
 	return &rootMetadata, nsMDs, nil
 }
 
+func UpdateRootConfigRepoMetadata(ctx context.Context, path string, provider fs.Provider, cw fs.ConfigWriter, f func(*RootConfigRepoMetadata)) error {
+	contents, err := provider.GetFileContents(ctx, filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
+	if err != nil {
+		return fmt.Errorf("could not open root metadata: %v", err)
+	}
+	var rootMetadata RootConfigRepoMetadata
+	if err := UnmarshalYAMLStrict(contents, &rootMetadata); err != nil {
+		return fmt.Errorf("could not parse root metadata: %v", err)
+	}
+	f(&rootMetadata)
+	bytes, err := MarshalYAML(&rootMetadata)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal updated yaml")
+	}
+	if err := cw.WriteFile(filepath.Join(path, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
+		return errors.Wrap(err, "failed to write root md file")
+	}
+	return nil
+}
+
 func ParseNamespaceMetadataStrict(ctx context.Context, rootPath, namespaceName string, provider fs.Provider) (*NamespaceConfigRepoMetadata, error) {
 	contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName))
 	if err != nil {

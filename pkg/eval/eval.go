@@ -40,6 +40,9 @@ func Eval(rootPath string, featurePath string, iCtx map[string]interface{}) (*an
 	if err != nil {
 		return nil, errors.Wrap(err, "parse feature path")
 	}
+	if featureName == "" {
+		return nil, errors.New("no feature name provided")
+	}
 	nsMD, ok := nsNameToNsMDs[ns]
 	if !ok {
 		return nil, fmt.Errorf("invalid namespace: %s, should be of format namespace/feature", ns)

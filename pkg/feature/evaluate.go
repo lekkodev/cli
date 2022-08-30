@@ -203,9 +203,11 @@ func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) 
 
 func ParseFeaturePath(featurePath string) (namespaceName string, featureName string, err error) {
 	splits := strings.SplitN(featurePath, "/", 2)
-	if len(splits) != 2 {
-		return "", "", fmt.Errorf("invalid featurepath: %s, should be of format namespace/feature", featurePath)
+	if len(splits) == 1 {
+		return splits[0], "", nil
 	}
-
-	return splits[0], splits[1], nil
+	if len(splits) == 2 {
+		return splits[0], splits[1], nil
+	}
+	return "", "", fmt.Errorf("invalid featurepath: %s, should be of format namespace[/feature]", featurePath)
 }
