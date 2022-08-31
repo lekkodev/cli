@@ -40,11 +40,22 @@ func (*localConfigWriter) MkdirAll(path string, perm os.FileMode) error {
 }
 
 func (*localConfigWriter) RemoveIfExists(path string) (bool, error) {
-	if err := os.Remove(path); err != nil {
+	fi, err := os.Stat(path)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "os.Remove")
+		return false, errors.Wrap(err, "os.Stat")
+	}
+	rmFn := os.Remove
+	if fi.IsDir() {
+		rmFn = os.RemoveAll
+	}
+	if err := rmFn(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "remove")
 	}
 	return true, nil
 }

@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 
@@ -117,6 +118,7 @@ func Compile(rootPath string) error {
 			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
+			log.Printf("Generated diff for %s/%s\n", ns, ff.Name)
 		}
 	}
 	// Finally, run a sanity check to make sure we compiled everything correctly

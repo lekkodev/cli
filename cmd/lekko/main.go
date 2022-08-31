@@ -135,8 +135,8 @@ var evalCmd = &cobra.Command{
 func addCmd() *cobra.Command {
 	var complexFeature bool
 	ret := &cobra.Command{
-		Use:   "add namespace/feature",
-		Short: "Adds a new feature flag",
+		Use:   "add namespace[/feature]",
+		Short: "Adds a new feature flag or namespace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
@@ -159,8 +159,8 @@ func addCmd() *cobra.Command {
 
 func removeCmd() *cobra.Command {
 	ret := &cobra.Command{
-		Use:   "remove namespace/feature",
-		Short: "Removes an existing feature flag",
+		Use:   "remove namespace[/feature]",
+		Short: "Removes an existing feature flag or namespace",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
@@ -171,7 +171,10 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse feature path")
 			}
-			return generate.Remove(wd, namespace, featureName)
+			if featureName == "" {
+				return generate.RemoveNamespace(wd, namespace)
+			}
+			return generate.RemoveFeature(wd, namespace, featureName)
 		},
 	}
 	return ret

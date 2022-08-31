@@ -39,6 +39,10 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 	} else if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
 	}
+	if featureName == "" {
+		fmt.Printf("Your new namespace has been created: %v\n", filepath.Join(rootPath, namespaceName))
+		return nil
+	}
 	ffs, err := feature.GroupFeatureFiles(ctx, filepath.Join(rootPath, namespaceName), nsMD, provider, true)
 	if err != nil {
 		return fmt.Errorf("failed to group feature files: %v", err)
@@ -58,7 +62,7 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 	return nil
 }
 
-func Remove(rootPath, namespaceName, featureName string) error {
+func RemoveFeature(rootPath, namespaceName, featureName string) error {
 	ctx := context.TODO()
 	provider := fs.LocalProvider()
 	cw := fs.LocalConfigWriter()
@@ -85,5 +89,35 @@ func Remove(rootPath, namespaceName, featureName string) error {
 	} else {
 		fmt.Printf("Feature %s does not exist\n", featureName)
 	}
+	return nil
+}
+
+func RemoveNamespace(rootPath, namespaceName string) error {
+	ctx := context.TODO()
+	provider := fs.LocalProvider()
+	cw := fs.LocalConfigWriter()
+	_, err := metadata.ParseNamespaceMetadataStrict(ctx, rootPath, namespaceName, provider)
+	if err != nil {
+		return fmt.Errorf("error parsing namespace metadata: %v", err)
+	}
+	ok, err := cw.RemoveIfExists(filepath.Join(rootPath, namespaceName))
+	if err != nil {
+		return fmt.Errorf("failed to remove namespace %s: %v", namespaceName, err)
+	}
+	if !ok {
+		fmt.Printf("Namespace %s does not exist\n", namespaceName)
+	}
+	if err := metadata.UpdateRootConfigRepoMetadata(ctx, rootPath, provider, cw, func(rcrm *metadata.RootConfigRepoMetadata) {
+		var updatedNamespaces []string
+		for _, ns := range rcrm.Namespaces {
+			if ns != namespaceName {
+				updatedNamespaces = append(updatedNamespaces, ns)
+			}
+		}
+		rcrm.Namespaces = updatedNamespaces
+	}); err != nil {
+		return fmt.Errorf("failed to update root config md: %v", err)
+	}
+	fmt.Printf("Namespace %s has been removed\n", namespaceName)
 	return nil
 }
