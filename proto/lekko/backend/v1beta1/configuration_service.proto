@@ -22,6 +22,7 @@ import "google/protobuf/any.proto";
 service ConfigurationService {
   rpc GetBoolValue(GetBoolValueRequest) returns (GetBoolValueResponse) {}
   rpc GetProtoValue(GetProtoValueRequest) returns (GetProtoValueResponse) {}
+  rpc GetJsonValue(GetJsonValueRequest) returns (GetJsonValueResponse) {}
 }
 
 message GetBoolValueRequest {
@@ -42,6 +43,16 @@ message GetProtoValueRequest {
 
 message GetProtoValueResponse {
   google.protobuf.Any value = 1;
+}
+
+message GetJsonValueRequest {
+  string key = 1;
+  map<string, Value> context = 2;
+  string namespace = 3;
+}
+
+message GetJsonValueResponse {
+  bytes value = 1;
 }
 
 message Value {
