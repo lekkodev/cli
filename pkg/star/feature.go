@@ -353,6 +353,14 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 				Context:       translatedContextMap,
 				ExpectedValue: bool(typedUnitTestVal),
 			})
+		case feature.FeatureTypeJSON:
+			encoded, err := fb.extractJSON(expectedVal)
+			if err != nil {
+				return errors.Wrap(err, typeError(f.FeatureType, i, expectedVal).Error())
+			}
+			if err := f.AddJSONUnitTest(translatedContextMap, encoded); err != nil {
+				return errors.Wrap(err, "failed to add json unit test")
+			}
 		default:
 			return fmt.Errorf("unsupported type %s for unit test #%d", f.FeatureType, i)
 		}

@@ -123,6 +123,18 @@ func (f *Feature) AddJSONRule(condition string, encoded []byte) error {
 	return nil
 }
 
+func (f *Feature) AddJSONUnitTest(context map[string]interface{}, encoded []byte) error {
+	val, err := valFromJSON(encoded)
+	if err != nil {
+		return errors.Wrap(err, "val from json")
+	}
+	f.UnitTests = append(f.UnitTests, &UnitTest{
+		Context:       context,
+		ExpectedValue: val,
+	})
+	return nil
+}
+
 func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	ret := &lekkov1beta1.Feature{
 		Key:         f.Key,
