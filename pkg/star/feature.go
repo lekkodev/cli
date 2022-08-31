@@ -34,7 +34,6 @@ const (
 	rulesAttrName        string          = "rules"
 	validatorAttrName    string          = "validator"
 	unitTestsAttrName    string          = "tests"
-	jsonValueAttrName    string          = "json"
 )
 
 var (
@@ -44,7 +43,6 @@ var (
 		rulesAttrName:        {},
 		validatorAttrName:    {},
 		unitTestsAttrName:    {},
-		jsonValueAttrName:    {},
 	}
 )
 
@@ -144,14 +142,6 @@ func (fb *featureBuilder) validate(value starlark.Value) error {
 func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feature, error) {
 	defaultVal, err := featureVal.Attr(defaultValueAttrName)
 	if err != nil {
-		nsErr := starlark.NoSuchAttrError("")
-		if ok := errors.As(err, &nsErr); ok {
-			f, err := fb.initJSON(featureVal)
-			if err != nil {
-				return nil, errors.Wrap(err, "no default attr")
-			}
-			return f, nil
-		}
 		return nil, errors.Wrap(err, "default attribute")
 	}
 	if err := fb.validate(defaultVal); err != nil {
@@ -166,31 +156,24 @@ func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feat
 	switch typedVal := defaultVal.(type) {
 	case starlark.Bool:
 		return feature.NewBoolFeature(bool(typedVal)), nil
+	case *starlark.Dict:
+		encoded, err := fb.extractJSON(defaultVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "extract json dict")
+		}
+		return feature.NewJSONFeature(encoded)
+	case *starlark.List:
+		encoded, err := fb.extractJSON(defaultVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "extract json list")
+		}
+		return feature.NewJSONFeature(encoded)
 	default:
 		return nil, fmt.Errorf("received default value with unsupported type %T", typedVal)
 	}
 }
 
-func (fb *featureBuilder) initJSON(featureVal *starlarkstruct.Struct) (*feature.Feature, error) {
-	jsonVal, err := featureVal.Attr(jsonValueAttrName)
-	if err != nil {
-		return nil, errors.Wrap(err, "json attr")
-	}
-	if err := fb.validate(jsonVal); err != nil {
-		return nil, errors.Wrap(err, "json value validate")
-	}
-	encoded, err := fb.extractJSON(jsonVal)
-	if err != nil {
-		return nil, errors.Wrap(err, "extract json")
-	}
-	return feature.NewJSONFeature(encoded)
-}
-
 func (fb *featureBuilder) extractJSON(jsonVal starlark.Value) ([]byte, error) {
-	jsonDict, ok := jsonVal.(*starlark.Dict)
-	if !ok {
-		return nil, fmt.Errorf("json value of type %T expected, found %T instead", jsonDict, jsonVal)
-	}
 	encodeMethodVal, err := json.Module.Attr("encode")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to find encode method in json module")
@@ -200,7 +183,7 @@ func (fb *featureBuilder) extractJSON(jsonVal starlark.Value) ([]byte, error) {
 		return nil, fmt.Errorf("encode method value of type %T expected, found %T instead", encodeMethodBuiltin, encodeMethodVal)
 	}
 	thread := &starlark.Thread{Name: "json encode"}
-	encodedVal, err := encodeMethodBuiltin.CallInternal(thread, starlark.Tuple{jsonDict}, nil)
+	encodedVal, err := encodeMethodBuiltin.CallInternal(thread, starlark.Tuple{jsonVal}, nil)
 	if err != nil {
 		return nil, errors.Wrap(err, "encode builtin")
 	}
