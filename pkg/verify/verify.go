@@ -16,6 +16,7 @@ package verify
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/encoding"
@@ -33,14 +34,41 @@ func Verify(rootPath string) error {
 	if err != nil {
 		return err
 	}
+	registry, err := star.BuildDynamicTypeRegistry(filepath.Join(rootPath, rootMD.ProtoDirectory))
+	if err != nil {
+		return errors.Wrap(err, "failed to build dynamic proto registry")
+	}
+
 	for ns, nsMD := range nsNameToNsMDs {
 		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider(), true)
 		if err != nil {
 			return err
 		}
-		for _, feature := range groupedFeatures {
-			if _, err := encoding.ParseFeature(rootPath, feature, nsMD, fs.LocalProvider()); err != nil {
+		for _, ff := range groupedFeatures {
+			if _, err := encoding.ParseFeature(rootPath, ff, nsMD, fs.LocalProvider()); err != nil {
 				return err
+			}
+			// TODO: share this code between verify and compile, could easily diverge.
+			if nsMD.Version == metadata.LatestNamespaceVersion {
+				// if we compile, then do so.
+				compiler := star.NewCompiler(
+					registry,
+					rootMD.ProtoDirectory,
+					filepath.Join(rootPath, ns, ff.StarlarkFileName),
+					ff.Name,
+				)
+				f, err := compiler.Compile()
+				if err != nil {
+					return err
+				}
+				if len(f.UnitTests) > 0 {
+					fmt.Printf("running %d unit tests for feature %s/%s: ", len(f.UnitTests), ns, ff.Name)
+					if err := f.RunUnitTests(registry); err != nil {
+						fmt.Printf("FAIL: %v\n", err)
+					} else {
+						fmt.Println("PASS")
+					}
+				}
 			}
 		}
 	}

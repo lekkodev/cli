@@ -27,11 +27,12 @@ import (
 
 const (
 	featureConstructor   starlark.String = "feature"
-	featureVariablename  string          = "result"
+	featureVariableName  string          = "result"
 	defaultValueAttrName string          = "default"
 	descriptionAttrName  string          = "description"
 	rulesAttrName        string          = "rules"
 	validatorAttrName    string          = "validator"
+	unitTestsAttrName    string          = "tests"
 )
 
 var (
@@ -40,6 +41,7 @@ var (
 		descriptionAttrName:  {},
 		rulesAttrName:        {},
 		validatorAttrName:    {},
+		unitTestsAttrName:    {},
 	}
 )
 
@@ -62,9 +64,9 @@ func newFeatureBuilder(globals starlark.StringDict) *featureBuilder {
 }
 
 func (fb *featureBuilder) build() (*feature.Feature, error) {
-	resultVal, ok := fb.globals[featureVariablename]
+	resultVal, ok := fb.globals[featureVariableName]
 	if !ok {
-		return nil, fmt.Errorf("required variable %s is not found", featureVariablename)
+		return nil, fmt.Errorf("required variable %s is not found", featureVariableName)
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
@@ -87,9 +89,14 @@ func (fb *featureBuilder) build() (*feature.Feature, error) {
 		return nil, errors.Wrap(err, "description")
 	}
 
-	if err = fb.addRules(f, featureVal); err != nil {
+	if err := fb.addRules(f, featureVal); err != nil {
 		return nil, errors.Wrap(err, "add rules")
 	}
+
+	if err := fb.addUnitTests(f, featureVal); err != nil {
+		return nil, errors.Wrap(err, "add unit tests")
+	}
+	// TODO run unit tests
 	return f, nil
 }
 
@@ -128,7 +135,6 @@ func (fb *featureBuilder) validate(value starlark.Value) error {
 	if err != nil {
 		return errors.Wrap(err, "validator")
 	}
-	// log.Printf("validation result: %v, reporter: %v\n", result, vr)
 	return vr.toErr()
 }
 
@@ -169,7 +175,7 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
 	rulesVal, err := featureVal.Attr(rulesAttrName)
 	if err != nil {
-		// no rules provided
+		// Attr returns nil, err when not present, which is terrible.
 		return nil
 	}
 	seq, ok := rulesVal.(starlark.Sequence)
@@ -195,7 +201,6 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		if !ok {
 			return fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
 		}
-		// TODO: parse into ruleslang
 		if conditionStr.GoString() == "" {
 			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
@@ -229,6 +234,117 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 	}
 
 	return nil
+}
+
+func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
+	testVal, err := featureVal.Attr(unitTestsAttrName)
+	if err != nil {
+		// Attr returns nil, err when not present, which is terrible.
+		return nil
+	}
+	seq, ok := testVal.(starlark.Sequence)
+	if !ok {
+		return fmt.Errorf("tests: did not get back a starlark sequence: %v", testVal)
+	}
+	it := seq.Iterate()
+	defer it.Done()
+	var val starlark.Value
+	var i int
+	for it.Next(&val) {
+		if val == starlark.None {
+			return fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
+		}
+		tuple, ok := val.(starlark.Tuple)
+		if !ok {
+			return fmt.Errorf("type error: expecting tuple, got %v", val.Type())
+		}
+		if tuple.Len() != 2 {
+			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
+		}
+		contextMap, ok := tuple.Index(0).(*starlark.Dict)
+		if !ok {
+			return fmt.Errorf("invalid first type of tuple %T, should be a starlark dict to build a context object", tuple.Index(0))
+		}
+
+		translatedContextMap, err := translateContext(contextMap)
+		if err != nil {
+			return errors.Wrap(err, "error translating starlark context for unit test")
+		}
+
+		expectedVal := tuple.Index(1)
+		if err := fb.validate(expectedVal); err != nil {
+			return errors.Wrap(err, "test value validate")
+		}
+		switch f.FeatureType {
+		case feature.FeatureTypeComplex:
+			message, ok := protomodule.AsProtoMessage(expectedVal)
+			if !ok {
+				return typeError(f.FeatureType, i, expectedVal)
+			}
+			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
+				Context:       translatedContextMap,
+				ExpectedValue: message,
+			})
+		case feature.FeatureTypeBool:
+			typedUnitTestVal, ok := expectedVal.(starlark.Bool)
+			if !ok {
+				return typeError(f.FeatureType, i, expectedVal)
+			}
+			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
+				Context:       translatedContextMap,
+				ExpectedValue: bool(typedUnitTestVal),
+			})
+		default:
+			return fmt.Errorf("unsupported type %s for unit test #%d", f.FeatureType, i)
+		}
+		i++
+	}
+
+	return nil
+}
+
+// translateContext takes a starlark native context and builds a generic map[string]interface{} from it.
+func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
+	m := make(map[string]interface{})
+	for _, k := range dict.Keys() {
+		val, _, err := dict.Get(k)
+		if err != nil {
+			return nil, errors.Wrap(err, "transforming context")
+		}
+		var res interface{}
+		switch v := val.(type) {
+		case starlark.Bool:
+			res = interface{}(v.Truth())
+		case starlark.String:
+			s := v.GoString()
+			res = interface{}(s)
+		case starlark.Int:
+			// Starlark uses math.Big under the hood, so technically
+			// we could get a very big number that doesn't fit in an i64.
+			// For now just return an error.
+			i, ok := v.Int64()
+			if !ok {
+				return nil, fmt.Errorf("context key %s would have overflowed", k)
+			}
+			res = interface{}(i)
+		case starlark.Float:
+			res = interface{}(float64(v))
+		case *starlark.Dict:
+			nestedMap, err := translateContext(v)
+			if err != nil {
+				return nil, err
+			}
+			res = interface{}(nestedMap)
+		default:
+			return nil, fmt.Errorf("unsupported context value %T for context key %s", v, k)
+		}
+		str, ok := k.(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("invalid context key type %T for context key %v", k, k)
+		}
+		m[str.GoString()] = res
+	}
+	return m, nil
 }
 
 func typeError(expectedType feature.FeatureType, ruleIdx int, value starlark.Value) error {

@@ -49,6 +49,7 @@ func traverseConstraint(constraint *featurev1beta1.Constraint, context map[strin
 	if err != nil {
 		return nil, errors.Wrap(err, "processing")
 	}
+
 	if passes {
 		if constraint.Value != nil {
 			return constraint.Value, nil
