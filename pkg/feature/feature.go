@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -30,10 +31,11 @@ import (
 type FeatureType string
 
 const (
-	FeatureTypeBool    FeatureType = "bool"
-	FeatureTypeInt     FeatureType = "int"
-	FeatureTypeString  FeatureType = "string"
-	FeatureTypeComplex FeatureType = "complex"
+	FeatureTypeBool   FeatureType = "bool"
+	FeatureTypeInt    FeatureType = "int"
+	FeatureTypeString FeatureType = "string"
+	FeatureTypeProto  FeatureType = "proto"
+	FeatureTypeJSON   FeatureType = "json"
 )
 
 type Rule struct {
@@ -65,8 +67,19 @@ func NewBoolFeature(value bool) *Feature {
 func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeComplex,
+		FeatureType: FeatureTypeProto,
 	}
+}
+
+func NewJSONFeature(encodedJSON []byte) (*Feature, error) {
+	s, err := valFromJSON(encodedJSON)
+	if err != nil {
+		return nil, errors.Wrap(err, "val from json")
+	}
+	return &Feature{
+		Value:       s,
+		FeatureType: FeatureTypeJSON,
+	}, nil
 }
 
 func valToAny(value interface{}) (*anypb.Any, error) {
@@ -88,6 +101,26 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 		return nil, err
 	}
 	return ret, nil
+}
+
+func valFromJSON(encoded []byte) (interface{}, error) {
+	s := &structpb.Struct{}
+	if err := s.UnmarshalJSON(encoded); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal json into struct")
+	}
+	return s, nil
+}
+
+func (f *Feature) AddJSONRule(condition string, encoded []byte) error {
+	val, err := valFromJSON(encoded)
+	if err != nil {
+		return errors.Wrap(err, "val from json")
+	}
+	f.Rules = append(f.Rules, &Rule{
+		Condition: condition,
+		Value:     val,
+	})
+	return nil
 }
 
 func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
