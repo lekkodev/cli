@@ -54,7 +54,9 @@ type NamespaceConfigRepoMetadata struct {
 
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
 const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
-const LatestNamespaceVersion = "v1beta2"
+const LatestNamespaceVersion = "v1beta3"
+const GenFolderPathJSON = "gen/json"
+const GenFolderPathProto = "gen/proto"
 
 // Parses the lekko metadata from a configuration repo in a strict way, returning a user error on failure.
 //

@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"path/filepath"
 
 	"github.com/pkg/errors"
@@ -42,7 +41,10 @@ import (
 // to make sure the update is backwards compatible and that existing feature flags are not
 // renamed, etc. Only then should we replace existing compiled output with new compiled output.
 func Compile(rootPath string) error {
-	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
+	ctx := context.TODO()
+	cw := fs.LocalConfigWriter()
+	provider := fs.LocalProvider()
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, rootPath, provider)
 	if err != nil {
 		return err
 	}
@@ -51,7 +53,7 @@ func Compile(rootPath string) error {
 		return errors.Wrap(err, "failed to build dynamic proto registry")
 	}
 	for ns, nsMD := range nsNameToNsMDs {
-		if nsMD.Version != metadata.LatestNamespaceVersion {
+		if _, ok := map[string]struct{}{"v1beta2": {}, "v1beta3": {}}[nsMD.Version]; !ok {
 			fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
 			continue
 		}
@@ -83,8 +85,13 @@ func Compile(rootPath string) error {
 			if err != nil {
 				return errors.Wrap(err, "feature to proto")
 			}
-			protoBinFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.proto.bin", ff.Name))
-			diffExists, err := compareExistingProto(protoBinFile, fProto)
+			protoGenPath, jsonGenPath := pathToNamespace, pathToNamespace
+			if nsMD.Version == metadata.LatestNamespaceVersion {
+				jsonGenPath = filepath.Join(pathToNamespace, metadata.GenFolderPathJSON)
+				protoGenPath = filepath.Join(pathToNamespace, metadata.GenFolderPathProto)
+			}
+			protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", ff.Name))
+			diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, provider)
 			if err != nil {
 				return errors.Wrap(err, "comparing with existing proto")
 			}
@@ -106,8 +113,11 @@ func Compile(rootPath string) error {
 			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
 				return errors.Wrap(err, "failed to indent json")
 			}
-			jsonFile := filepath.Join(pathToNamespace, fmt.Sprintf("%s.json", ff.Name))
-			if err := os.WriteFile(jsonFile, indentedJBytes.Bytes(), 0600); err != nil {
+			jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", ff.Name))
+			if err := cw.MkdirAll(jsonGenPath, 0775); err != nil {
+				return errors.Wrap(err, "failed to make gen json directory")
+			}
+			if err := cw.WriteFile(jsonFile, indentedJBytes.Bytes(), 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
 			// Create the proto file
@@ -115,7 +125,10 @@ func Compile(rootPath string) error {
 			if err != nil {
 				return errors.Wrap(err, "failed to marshal to proto")
 			}
-			if err := os.WriteFile(protoBinFile, pBytes, 0600); err != nil {
+			if err := cw.MkdirAll(protoGenPath, 0775); err != nil {
+				return errors.Wrap(err, "failed to make gen proto directory")
+			}
+			if err := cw.WriteFile(protoBinFile, pBytes, 0600); err != nil {
 				return errors.Wrap(err, "failed to write file")
 			}
 			log.Printf("Generated diff for %s/%s\n", ns, ff.Name)
@@ -130,10 +143,10 @@ func Compile(rootPath string) error {
 
 // returns true if there is an actual semantic difference between the existing compiled proto,
 // and the new proto we have on hand.
-func compareExistingProto(existingProtoFilePath string, newProto *featurev1beta1.Feature) (bool, error) {
-	bytes, err := os.ReadFile(existingProtoFilePath)
+func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta1.Feature, provider fs.Provider) (bool, error) {
+	bytes, err := provider.GetFileContents(ctx, existingProtoFilePath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if provider.IsNotExist(err) {
 			return true, nil
 		}
 		return false, errors.Wrap(err, "read existing proto file")

@@ -44,6 +44,8 @@ func ParseFeature(rootPath string, featureFile feature.FeatureFile, nsMD *metada
 		}
 		return feature.NewV1Beta1(&f), nil
 	case "v1beta2":
+		fallthrough
+	case "v1beta3":
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(context.TODO(), filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
 		if err != nil {

@@ -32,7 +32,7 @@ import (
 func Verify(rootPath string) error {
 	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "parse full config repo metadata")
 	}
 	registry, err := star.BuildDynamicTypeRegistry(filepath.Join(rootPath, rootMD.ProtoDirectory))
 	if err != nil {
@@ -42,11 +42,14 @@ func Verify(rootPath string) error {
 	for ns, nsMD := range nsNameToNsMDs {
 		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider(), true)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range groupedFeatures {
+			if err := ff.Verify(); err != nil {
+				return errors.Wrap(err, fmt.Sprintf("verify ns %s", ns))
+			}
 			if _, err := encoding.ParseFeature(rootPath, ff, nsMD, fs.LocalProvider()); err != nil {
-				return err
+				return errors.Wrap(err, "parse feature")
 			}
 			// TODO: share this code between verify and compile, could easily diverge.
 			if nsMD.Version == metadata.LatestNamespaceVersion {
@@ -59,7 +62,7 @@ func Verify(rootPath string) error {
 				)
 				f, err := compiler.Compile()
 				if err != nil {
-					return err
+					return errors.Wrap(err, "compile")
 				}
 				if len(f.UnitTests) > 0 {
 					fmt.Printf("running %d unit tests for feature %s/%s: ", len(f.UnitTests), ns, ff.Name)

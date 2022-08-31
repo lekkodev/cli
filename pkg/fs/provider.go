@@ -34,6 +34,7 @@ type ProviderFile struct {
 type Provider interface {
 	GetFileContents(ctx context.Context, path string) ([]byte, error)
 	GetDirContents(ctx context.Context, path string) ([]ProviderFile, error)
+	IsNotExist(err error) bool
 }
 
 type localProvider struct{}
@@ -52,6 +53,10 @@ func (*localProvider) GetDirContents(_ context.Context, path string) ([]Provider
 		files[i] = ProviderFile{Name: f.Name(), Path: filepath.Join(path, f.Name()), IsDir: f.IsDir()}
 	}
 	return files, nil
+}
+
+func (*localProvider) IsNotExist(err error) bool {
+	return os.IsNotExist(err)
 }
 
 func LocalProvider() Provider {
