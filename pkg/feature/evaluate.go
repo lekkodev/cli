@@ -19,6 +19,7 @@ package feature
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/anypb"
@@ -107,6 +108,73 @@ type FeatureFile struct {
 	CompiledProtoBinFileName string
 }
 
+func (ff FeatureFile) Verify() error {
+	if ff.Name == "" {
+		return fmt.Errorf("feature file has no name")
+	}
+	if ff.StarlarkFileName == "" {
+		return fmt.Errorf("feature file %s has no .star file", ff.Name)
+	}
+	if ff.CompiledJSONFileName == "" {
+		return fmt.Errorf("feature file %s has no .json file", ff.Name)
+	}
+	if ff.CompiledProtoBinFileName == "" {
+		return fmt.Errorf("feature file %s has no .proto.bin file", ff.Name)
+	}
+	return nil
+}
+
+func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFile map[string]FeatureFile, fsProvider fs.Provider) error {
+	files, err := fsProvider.GetDirContents(ctx, path)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("get dir contents for %s", path))
+	}
+	for _, file := range files {
+		if strings.HasSuffix(file.Name, ".json") {
+			featureName := strings.TrimSuffix(file.Name, ".json")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: filepath.Join(nsRelativePath, file.Name)}
+			} else {
+				f.CompiledJSONFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".star") {
+			featureName := strings.TrimSuffix(file.Name, ".star")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: filepath.Join(nsRelativePath, file.Name)}
+			} else {
+				f.StarlarkFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".proto") {
+			featureName := strings.TrimSuffix(file.Name, ".proto")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: filepath.Join(nsRelativePath, file.Name)}
+			} else {
+				f.ProtoFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".proto.bin") {
+			featureName := strings.TrimSuffix(file.Name, ".proto.bin")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: filepath.Join(nsRelativePath, file.Name)}
+			} else {
+				f.CompiledProtoBinFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if file.IsDir {
+			if err := walkNamespace(ctx, file.Path, filepath.Join(nsRelativePath, file.Name), featureToFile, fsProvider); err != nil {
+				return errors.Wrap(err, "walkNamespace")
+			}
+		}
+	}
+	return nil
+}
+
 // This groups feature files in a way that is
 // governed by the namespace metadata.
 // TODO naming conventions.
@@ -118,54 +186,9 @@ func GroupFeatureFiles(
 	validate bool,
 ) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
-	files, err := fsProvider.GetDirContents(ctx, pathToNamespace)
-	if err != nil {
-		return nil, err
+	if err := walkNamespace(ctx, pathToNamespace, "", featureToFile, fsProvider); err != nil {
+		return nil, errors.Wrap(err, "walk namespace")
 	}
-
-	for _, file := range files {
-		if strings.HasSuffix(file.Name, ".json") {
-			featureName := strings.TrimSuffix(file.Name, ".json")
-			f, ok := featureToFile[featureName]
-			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: file.Name}
-			} else {
-				f.CompiledJSONFileName = file.Name
-				featureToFile[featureName] = f
-			}
-		}
-		if strings.HasSuffix(file.Name, ".star") {
-			featureName := strings.TrimSuffix(file.Name, ".star")
-			f, ok := featureToFile[featureName]
-			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: file.Name}
-			} else {
-				f.StarlarkFileName = file.Name
-				featureToFile[featureName] = f
-			}
-		}
-		if strings.HasSuffix(file.Name, ".proto") {
-			featureName := strings.TrimSuffix(file.Name, ".proto")
-			f, ok := featureToFile[featureName]
-			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: file.Name}
-			} else {
-				f.ProtoFileName = file.Name
-				featureToFile[featureName] = f
-			}
-		}
-		if strings.HasSuffix(file.Name, ".proto.bin") {
-			featureName := strings.TrimSuffix(file.Name, ".proto.bin")
-			f, ok := featureToFile[featureName]
-			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: file.Name}
-			} else {
-				f.CompiledProtoBinFileName = file.Name
-				featureToFile[featureName] = f
-			}
-		}
-	}
-
 	featureFiles := make([]FeatureFile, len(featureToFile))
 	// Compliance checks for each version.
 	i := 0
