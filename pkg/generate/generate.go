@@ -87,7 +87,7 @@ func Compile(rootPath string) error {
 			}
 			protoGenPath, jsonGenPath := pathToNamespace, pathToNamespace
 			if nsMD.Version == metadata.LatestNamespaceVersion {
-				jsonGenPath = filepath.Join(pathToNamespace, metadata.GenFolderPathJson)
+				jsonGenPath = filepath.Join(pathToNamespace, metadata.GenFolderPathJSON)
 				protoGenPath = filepath.Join(pathToNamespace, metadata.GenFolderPathProto)
 			}
 			protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", ff.Name))
