@@ -104,11 +104,11 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 }
 
 func valFromJSON(encoded []byte) (interface{}, error) {
-	s := &structpb.Struct{}
-	if err := s.UnmarshalJSON(encoded); err != nil {
+	val := &structpb.Value{}
+	if err := val.UnmarshalJSON(encoded); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal json into struct")
 	}
-	return s, nil
+	return val, nil
 }
 
 func (f *Feature) AddJSONRule(condition string, encoded []byte) error {
