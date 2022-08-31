@@ -255,7 +255,7 @@ func (x *GetProtoValueResponse) GetValue() *anypb.Any {
 	return nil
 }
 
-type GetJsonValueRequest struct {
+type GetJSONValueRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -265,8 +265,8 @@ type GetJsonValueRequest struct {
 	Namespace string            `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 }
 
-func (x *GetJsonValueRequest) Reset() {
-	*x = GetJsonValueRequest{}
+func (x *GetJSONValueRequest) Reset() {
+	*x = GetJSONValueRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -274,13 +274,13 @@ func (x *GetJsonValueRequest) Reset() {
 	}
 }
 
-func (x *GetJsonValueRequest) String() string {
+func (x *GetJSONValueRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetJsonValueRequest) ProtoMessage() {}
+func (*GetJSONValueRequest) ProtoMessage() {}
 
-func (x *GetJsonValueRequest) ProtoReflect() protoreflect.Message {
+func (x *GetJSONValueRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -292,33 +292,33 @@ func (x *GetJsonValueRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetJsonValueRequest.ProtoReflect.Descriptor instead.
-func (*GetJsonValueRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetJSONValueRequest.ProtoReflect.Descriptor instead.
+func (*GetJSONValueRequest) Descriptor() ([]byte, []int) {
 	return file_lekko_backend_v1beta1_configuration_service_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetJsonValueRequest) GetKey() string {
+func (x *GetJSONValueRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *GetJsonValueRequest) GetContext() map[string]*Value {
+func (x *GetJSONValueRequest) GetContext() map[string]*Value {
 	if x != nil {
 		return x.Context
 	}
 	return nil
 }
 
-func (x *GetJsonValueRequest) GetNamespace() string {
+func (x *GetJSONValueRequest) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
 	}
 	return ""
 }
 
-type GetJsonValueResponse struct {
+type GetJSONValueResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -326,8 +326,8 @@ type GetJsonValueResponse struct {
 	Value []byte `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
 }
 
-func (x *GetJsonValueResponse) Reset() {
-	*x = GetJsonValueResponse{}
+func (x *GetJSONValueResponse) Reset() {
+	*x = GetJSONValueResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -335,13 +335,13 @@ func (x *GetJsonValueResponse) Reset() {
 	}
 }
 
-func (x *GetJsonValueResponse) String() string {
+func (x *GetJSONValueResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetJsonValueResponse) ProtoMessage() {}
+func (*GetJSONValueResponse) ProtoMessage() {}
 
-func (x *GetJsonValueResponse) ProtoReflect() protoreflect.Message {
+func (x *GetJSONValueResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -353,12 +353,12 @@ func (x *GetJsonValueResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetJsonValueResponse.ProtoReflect.Descriptor instead.
-func (*GetJsonValueResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use GetJSONValueResponse.ProtoReflect.Descriptor instead.
+func (*GetJSONValueResponse) Descriptor() ([]byte, []int) {
 	return file_lekko_backend_v1beta1_configuration_service_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetJsonValueResponse) GetValue() []byte {
+func (x *GetJSONValueResponse) GetValue() []byte {
 	if x != nil {
 		return x.Value
 	}
@@ -520,12 +520,12 @@ var file_lekko_backend_v1beta1_configuration_service_proto_rawDesc = []byte{
 	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2a, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75,
 	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x41, 0x6e, 0x79, 0x52, 0x05, 0x76,
-	0x61, 0x6c, 0x75, 0x65, 0x22, 0xf2, 0x01, 0x0a, 0x13, 0x47, 0x65, 0x74, 0x4a, 0x73, 0x6f, 0x6e,
+	0x61, 0x6c, 0x75, 0x65, 0x22, 0xf2, 0x01, 0x0a, 0x13, 0x47, 0x65, 0x74, 0x4a, 0x53, 0x4f, 0x4e,
 	0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03,
 	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x51,
 	0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32,
 	0x37, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x61, 0x63, 0x6b, 0x65, 0x6e, 0x64, 0x2e,
-	0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4a, 0x73, 0x6f, 0x6e, 0x56,
+	0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4a, 0x53, 0x4f, 0x4e, 0x56,
 	0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x43, 0x6f, 0x6e, 0x74,
 	0x65, 0x78, 0x74, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78,
 	0x74, 0x12, 0x1c, 0x0a, 0x09, 0x6e, 0x61, 0x6d, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x18, 0x03,
@@ -536,7 +536,7 @@ var file_lekko_backend_v1beta1_configuration_service_proto_rawDesc = []byte{
 	0x32, 0x1c, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x61, 0x63, 0x6b, 0x65, 0x6e, 0x64,
 	0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x05,
 	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x2c, 0x0a, 0x14, 0x47, 0x65, 0x74,
-	0x4a, 0x73, 0x6f, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x4a, 0x53, 0x4f, 0x4e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
 	0x65, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c,
 	0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x22, 0x99, 0x01, 0x0a, 0x05, 0x56, 0x61, 0x6c, 0x75,
 	0x65, 0x12, 0x1f, 0x0a, 0x0a, 0x62, 0x6f, 0x6f, 0x6c, 0x5f, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18,
@@ -563,13 +563,13 @@ var file_lekko_backend_v1beta1_configuration_service_proto_rawDesc = []byte{
 	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x61,
 	0x63, 0x6b, 0x65, 0x6e, 0x64, 0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65,
 	0x74, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x69, 0x0a, 0x0c, 0x47, 0x65, 0x74, 0x4a, 0x73, 0x6f, 0x6e,
+	0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x69, 0x0a, 0x0c, 0x47, 0x65, 0x74, 0x4a, 0x53, 0x4f, 0x4e,
 	0x56, 0x61, 0x6c, 0x75, 0x65, 0x12, 0x2a, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x61,
 	0x63, 0x6b, 0x65, 0x6e, 0x64, 0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65,
-	0x74, 0x4a, 0x73, 0x6f, 0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x4a, 0x53, 0x4f, 0x4e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x1a, 0x2b, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x61, 0x63, 0x6b, 0x65, 0x6e,
-	0x64, 0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4a, 0x73, 0x6f,
-	0x6e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00,
+	0x64, 0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4a, 0x53, 0x4f,
+	0x4e, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00,
 	0x42, 0xfb, 0x01, 0x0a, 0x19, 0x63, 0x6f, 0x6d, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62,
 	0x61, 0x63, 0x6b, 0x65, 0x6e, 0x64, 0x2e, 0x76, 0x31, 0x62, 0x65, 0x74, 0x61, 0x31, 0x42, 0x19,
 	0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x75, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x53, 0x65, 0x72,
@@ -607,28 +607,28 @@ var file_lekko_backend_v1beta1_configuration_service_proto_goTypes = []interface
 	(*GetBoolValueResponse)(nil),  // 1: lekko.backend.v1beta1.GetBoolValueResponse
 	(*GetProtoValueRequest)(nil),  // 2: lekko.backend.v1beta1.GetProtoValueRequest
 	(*GetProtoValueResponse)(nil), // 3: lekko.backend.v1beta1.GetProtoValueResponse
-	(*GetJsonValueRequest)(nil),   // 4: lekko.backend.v1beta1.GetJsonValueRequest
-	(*GetJsonValueResponse)(nil),  // 5: lekko.backend.v1beta1.GetJsonValueResponse
+	(*GetJSONValueRequest)(nil),   // 4: lekko.backend.v1beta1.GetJSONValueRequest
+	(*GetJSONValueResponse)(nil),  // 5: lekko.backend.v1beta1.GetJSONValueResponse
 	(*Value)(nil),                 // 6: lekko.backend.v1beta1.Value
 	nil,                           // 7: lekko.backend.v1beta1.GetBoolValueRequest.ContextEntry
 	nil,                           // 8: lekko.backend.v1beta1.GetProtoValueRequest.ContextEntry
-	nil,                           // 9: lekko.backend.v1beta1.GetJsonValueRequest.ContextEntry
+	nil,                           // 9: lekko.backend.v1beta1.GetJSONValueRequest.ContextEntry
 	(*anypb.Any)(nil),             // 10: google.protobuf.Any
 }
 var file_lekko_backend_v1beta1_configuration_service_proto_depIdxs = []int32{
 	7,  // 0: lekko.backend.v1beta1.GetBoolValueRequest.context:type_name -> lekko.backend.v1beta1.GetBoolValueRequest.ContextEntry
 	8,  // 1: lekko.backend.v1beta1.GetProtoValueRequest.context:type_name -> lekko.backend.v1beta1.GetProtoValueRequest.ContextEntry
 	10, // 2: lekko.backend.v1beta1.GetProtoValueResponse.value:type_name -> google.protobuf.Any
-	9,  // 3: lekko.backend.v1beta1.GetJsonValueRequest.context:type_name -> lekko.backend.v1beta1.GetJsonValueRequest.ContextEntry
+	9,  // 3: lekko.backend.v1beta1.GetJSONValueRequest.context:type_name -> lekko.backend.v1beta1.GetJSONValueRequest.ContextEntry
 	6,  // 4: lekko.backend.v1beta1.GetBoolValueRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
 	6,  // 5: lekko.backend.v1beta1.GetProtoValueRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
-	6,  // 6: lekko.backend.v1beta1.GetJsonValueRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
+	6,  // 6: lekko.backend.v1beta1.GetJSONValueRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
 	0,  // 7: lekko.backend.v1beta1.ConfigurationService.GetBoolValue:input_type -> lekko.backend.v1beta1.GetBoolValueRequest
 	2,  // 8: lekko.backend.v1beta1.ConfigurationService.GetProtoValue:input_type -> lekko.backend.v1beta1.GetProtoValueRequest
-	4,  // 9: lekko.backend.v1beta1.ConfigurationService.GetJsonValue:input_type -> lekko.backend.v1beta1.GetJsonValueRequest
+	4,  // 9: lekko.backend.v1beta1.ConfigurationService.GetJSONValue:input_type -> lekko.backend.v1beta1.GetJSONValueRequest
 	1,  // 10: lekko.backend.v1beta1.ConfigurationService.GetBoolValue:output_type -> lekko.backend.v1beta1.GetBoolValueResponse
 	3,  // 11: lekko.backend.v1beta1.ConfigurationService.GetProtoValue:output_type -> lekko.backend.v1beta1.GetProtoValueResponse
-	5,  // 12: lekko.backend.v1beta1.ConfigurationService.GetJsonValue:output_type -> lekko.backend.v1beta1.GetJsonValueResponse
+	5,  // 12: lekko.backend.v1beta1.ConfigurationService.GetJSONValue:output_type -> lekko.backend.v1beta1.GetJSONValueResponse
 	10, // [10:13] is the sub-list for method output_type
 	7,  // [7:10] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
@@ -691,7 +691,7 @@ func file_lekko_backend_v1beta1_configuration_service_proto_init() {
 			}
 		}
 		file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetJsonValueRequest); i {
+			switch v := v.(*GetJSONValueRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -703,7 +703,7 @@ func file_lekko_backend_v1beta1_configuration_service_proto_init() {
 			}
 		}
 		file_lekko_backend_v1beta1_configuration_service_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetJsonValueResponse); i {
+			switch v := v.(*GetJSONValueResponse); i {
 			case 0:
 				return &v.state
 			case 1:

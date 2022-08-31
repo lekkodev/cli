@@ -44,7 +44,7 @@ const (
 type ConfigurationServiceClient interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
-	GetJsonValue(context.Context, *connect_go.Request[v1beta1.GetJsonValueRequest]) (*connect_go.Response[v1beta1.GetJsonValueResponse], error)
+	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
 }
 
 // NewConfigurationServiceClient constructs a client for the
@@ -67,9 +67,9 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetProtoValue",
 			opts...,
 		),
-		getJsonValue: connect_go.NewClient[v1beta1.GetJsonValueRequest, v1beta1.GetJsonValueResponse](
+		getJSONValue: connect_go.NewClient[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse](
 			httpClient,
-			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetJsonValue",
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetJSONValue",
 			opts...,
 		),
 	}
@@ -79,7 +79,7 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 type configurationServiceClient struct {
 	getBoolValue  *connect_go.Client[v1beta1.GetBoolValueRequest, v1beta1.GetBoolValueResponse]
 	getProtoValue *connect_go.Client[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse]
-	getJsonValue  *connect_go.Client[v1beta1.GetJsonValueRequest, v1beta1.GetJsonValueResponse]
+	getJSONValue  *connect_go.Client[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse]
 }
 
 // GetBoolValue calls lekko.backend.v1beta1.ConfigurationService.GetBoolValue.
@@ -92,9 +92,9 @@ func (c *configurationServiceClient) GetProtoValue(ctx context.Context, req *con
 	return c.getProtoValue.CallUnary(ctx, req)
 }
 
-// GetJsonValue calls lekko.backend.v1beta1.ConfigurationService.GetJsonValue.
-func (c *configurationServiceClient) GetJsonValue(ctx context.Context, req *connect_go.Request[v1beta1.GetJsonValueRequest]) (*connect_go.Response[v1beta1.GetJsonValueResponse], error) {
-	return c.getJsonValue.CallUnary(ctx, req)
+// GetJSONValue calls lekko.backend.v1beta1.ConfigurationService.GetJSONValue.
+func (c *configurationServiceClient) GetJSONValue(ctx context.Context, req *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error) {
+	return c.getJSONValue.CallUnary(ctx, req)
 }
 
 // ConfigurationServiceHandler is an implementation of the
@@ -102,7 +102,7 @@ func (c *configurationServiceClient) GetJsonValue(ctx context.Context, req *conn
 type ConfigurationServiceHandler interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
-	GetJsonValue(context.Context, *connect_go.Request[v1beta1.GetJsonValueRequest]) (*connect_go.Response[v1beta1.GetJsonValueResponse], error)
+	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
 }
 
 // NewConfigurationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -122,9 +122,9 @@ func NewConfigurationServiceHandler(svc ConfigurationServiceHandler, opts ...con
 		svc.GetProtoValue,
 		opts...,
 	))
-	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetJsonValue", connect_go.NewUnaryHandler(
-		"/lekko.backend.v1beta1.ConfigurationService/GetJsonValue",
-		svc.GetJsonValue,
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetJSONValue", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/GetJSONValue",
+		svc.GetJSONValue,
 		opts...,
 	))
 	return "/lekko.backend.v1beta1.ConfigurationService/", mux
@@ -141,6 +141,6 @@ func (UnimplementedConfigurationServiceHandler) GetProtoValue(context.Context, *
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetProtoValue is not implemented"))
 }
 
-func (UnimplementedConfigurationServiceHandler) GetJsonValue(context.Context, *connect_go.Request[v1beta1.GetJsonValueRequest]) (*connect_go.Response[v1beta1.GetJsonValueResponse], error) {
-	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetJsonValue is not implemented"))
+func (UnimplementedConfigurationServiceHandler) GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetJSONValue is not implemented"))
 }
