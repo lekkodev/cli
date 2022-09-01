@@ -20,6 +20,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
+	"go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
@@ -155,9 +156,42 @@ func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feat
 	switch typedVal := defaultVal.(type) {
 	case starlark.Bool:
 		return feature.NewBoolFeature(bool(typedVal)), nil
+	case *starlark.Dict:
+		encoded, err := fb.extractJSON(defaultVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "extract json dict")
+		}
+		return feature.NewJSONFeature(encoded)
+	case *starlark.List:
+		encoded, err := fb.extractJSON(defaultVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "extract json list")
+		}
+		return feature.NewJSONFeature(encoded)
 	default:
 		return nil, fmt.Errorf("received default value with unsupported type %T", typedVal)
 	}
+}
+
+func (fb *featureBuilder) extractJSON(jsonVal starlark.Value) ([]byte, error) {
+	encodeMethodVal, err := json.Module.Attr("encode")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to find encode method in json module")
+	}
+	encodeMethodBuiltin, ok := encodeMethodVal.(*starlark.Builtin)
+	if !ok {
+		return nil, fmt.Errorf("encode method value of type %T expected, found %T instead", encodeMethodBuiltin, encodeMethodVal)
+	}
+	thread := &starlark.Thread{Name: "json encode"}
+	encodedVal, err := encodeMethodBuiltin.CallInternal(thread, starlark.Tuple{jsonVal}, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "encode builtin")
+	}
+	encodedStr, ok := encodedVal.(starlark.String)
+	if !ok {
+		return nil, fmt.Errorf("encoded value of type %T expected, found %T instead", encodedStr, encodedVal)
+	}
+	return []byte(encodedStr), nil
 }
 
 func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (string, error) {
@@ -206,10 +240,10 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		}
 		ruleVal := tuple.Index(1)
 		if err := fb.validate(ruleVal); err != nil {
-			return errors.Wrap(err, "rule value validate")
+			return errors.Wrap(err, fmt.Sprintf("rule #%d value validate", i))
 		}
 		switch f.FeatureType {
-		case feature.FeatureTypeComplex:
+		case feature.FeatureTypeProto:
 			message, ok := protomodule.AsProtoMessage(ruleVal)
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
@@ -227,6 +261,14 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 				Condition: conditionStr.GoString(),
 				Value:     bool(typedRuleVal),
 			})
+		case feature.FeatureTypeJSON:
+			encoded, err := fb.extractJSON(ruleVal)
+			if err != nil {
+				return errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
+			}
+			if err := f.AddJSONRule(conditionStr.GoString(), encoded); err != nil {
+				return errors.Wrap(err, "failed to add json rule")
+			}
 		default:
 			return fmt.Errorf("unsupported type %s for rule #%d", f.FeatureType, i)
 		}
@@ -276,7 +318,7 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			return errors.Wrap(err, "test value validate")
 		}
 		switch f.FeatureType {
-		case feature.FeatureTypeComplex:
+		case feature.FeatureTypeProto:
 			message, ok := protomodule.AsProtoMessage(expectedVal)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
@@ -294,6 +336,14 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 				Context:       translatedContextMap,
 				ExpectedValue: bool(typedUnitTestVal),
 			})
+		case feature.FeatureTypeJSON:
+			encoded, err := fb.extractJSON(expectedVal)
+			if err != nil {
+				return errors.Wrap(err, typeError(f.FeatureType, i, expectedVal).Error())
+			}
+			if err := f.AddJSONUnitTest(translatedContextMap, encoded); err != nil {
+				return errors.Wrap(err, "failed to add json unit test")
+			}
 		default:
 			return fmt.Errorf("unsupported type %s for unit test #%d", f.FeatureType, i)
 		}
@@ -353,7 +403,7 @@ func typeError(expectedType feature.FeatureType, ruleIdx int, value starlark.Val
 
 func starType(ft feature.FeatureType) string {
 	switch ft {
-	case feature.FeatureTypeComplex:
+	case feature.FeatureTypeProto:
 		return "protoMessage"
 	case feature.FeatureTypeBool:
 		return fmt.Sprintf("%T", starlark.False)

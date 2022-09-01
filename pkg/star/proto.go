@@ -28,6 +28,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -87,6 +88,11 @@ func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	// not panic in the event that the user also imported wrappers.proto
 	if err := registerTypes(ret, wrapperspb.File_google_protobuf_wrappers_proto, true); err != nil {
 		return nil, errors.Wrap(err, "registering wrapperspb")
+	}
+	// In the case of json feature flags, we will internally represent the json object as a structpb
+	// proto object.
+	if err := registerTypes(ret, structpb.File_google_protobuf_struct_proto, true); err != nil {
+		return nil, errors.Wrap(err, "registering structpb")
 	}
 	return ret, nil
 }
