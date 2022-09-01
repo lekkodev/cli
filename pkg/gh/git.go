@@ -39,7 +39,6 @@ type ConfigRepo struct {
 }
 
 func New(path string) (*ConfigRepo, error) {
-	fmt.Printf("%s\n", path)
 	repo, err := git.PlainOpen(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open git repo")
