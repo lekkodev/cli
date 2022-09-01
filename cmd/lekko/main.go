@@ -26,6 +26,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/generate"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/verify"
@@ -42,6 +43,8 @@ func main() {
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
+	rootCmd.AddCommand(reviewCmd)
+	rootCmd.AddCommand(mergeCmd)
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -77,6 +80,46 @@ var compileCmd = &cobra.Command{
 			return err
 		}
 		return generate.Compile(wd)
+	},
+}
+
+var reviewCmd = &cobra.Command{
+	Use:   "review your pull request",
+	Short: "creates a pr with your changes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		if err := verify.Verify(wd); err != nil {
+			return errors.Wrap(err, "verification failed")
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		return cr.Review()
+	},
+}
+
+var mergeCmd = &cobra.Command{
+	Use:   "merge your pull request",
+	Short: "merges a pr for the current branch",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		if err := verify.Verify(wd); err != nil {
+			return errors.Wrap(err, "verification failed")
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		return cr.Merge()
 	},
 }
 
