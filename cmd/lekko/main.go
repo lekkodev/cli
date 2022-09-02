@@ -243,6 +243,9 @@ var applyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if err := verify.Verify(wd); err != nil {
+			return errors.Wrap(err, "verification failed")
+		}
 		var kubeconfig, kubeNamespace, defaultKubeconfig string
 		// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
 		home, err := homedir.Dir()
