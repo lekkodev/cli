@@ -62,6 +62,7 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string) (*kubeClient, error) {
 // that representation onto k8s, ensuring that k8s state matches the local working
 // directory exactly. It will delete configmaps that don't exist in the config repo,
 // and apply the ones that do.
+// See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
 func (k *kubeClient) Apply(ctx context.Context, root string) error {
 	provider := fs.LocalProvider()
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
