@@ -57,12 +57,12 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string) (*kubeClient, error) {
 	}, nil
 }
 
-// Sync will construct a representation of what k8s configmaps should look like
+// Apply will construct a representation of what k8s configmaps should look like
 // based on the current, generated proto files in the repo. It will then apply
 // that representation onto k8s, ensuring that k8s state matches the local working
 // directory exactly. It will delete configmaps that don't exist in the config repo,
-// and sync the ones that do.
-func (k *kubeClient) Sync(ctx context.Context, root string) error {
+// and apply the ones that do.
+func (k *kubeClient) Apply(ctx context.Context, root string) error {
 	provider := fs.LocalProvider()
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
@@ -83,13 +83,13 @@ func (k *kubeClient) Sync(ctx context.Context, root string) error {
 
 	for _, md := range nsMD {
 		cmName := fmt.Sprintf("%s%s", lekkoConfigMapPrefix, md.Name)
-		if err := k.syncLekkoNamespace(ctx, root, md, provider, cmName); err != nil {
-			return fmt.Errorf("namespace %s: sync: %w", md.Name, err)
+		if err := k.applyLekkoNamespace(ctx, root, md, provider, cmName); err != nil {
+			return fmt.Errorf("namespace %s: apply: %w", md.Name, err)
 		}
 		delete(existingConfigMaps, cmName)
 	}
 
-	// delete config maps that were not synced
+	// delete config maps that were not applyed
 	for cmName := range existingConfigMaps {
 		if err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).Delete(ctx, cmName, metav1.DeleteOptions{}); err != nil {
 			return errors.Wrap(err, "cm delete")
@@ -98,7 +98,7 @@ func (k *kubeClient) Sync(ctx context.Context, root string) error {
 	return nil
 }
 
-func (k *kubeClient) syncLekkoNamespace(
+func (k *kubeClient) applyLekkoNamespace(
 	ctx context.Context,
 	root string,
 	nsMD *metadata.NamespaceConfigRepoMetadata,

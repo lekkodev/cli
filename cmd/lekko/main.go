@@ -49,7 +49,7 @@ func main() {
 	rootCmd.AddCommand(reviewCmd)
 	rootCmd.AddCommand(mergeCmd)
 	// k8s
-	k8sCmd.AddCommand(syncCmd)
+	k8sCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(k8sCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -235,21 +235,22 @@ var k8sCmd = &cobra.Command{
 	Short: "manage lekko configurations in kubernetes",
 }
 
-var syncCmd = &cobra.Command{
-	Use:   "sync",
-	Short: "push local configuration changes to kubernetes configmaps",
+var applyCmd = &cobra.Command{
+	Use:   "apply",
+	Short: "apply local configurations to kubernetes configmaps",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
 		var kubeconfig, kubeNamespace, defaultKubeconfig string
+		// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
 		home, err := homedir.Dir()
 		if err == nil {
 			defaultKubeconfig = filepath.Join(home, ".kube", "config")
 		}
 		cmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
-		cmd.Flags().StringVarP(&kubeNamespace, "kubenamespace", "n", "default", "kube namespace to sync configmaps into")
+		cmd.Flags().StringVarP(&kubeNamespace, "kubenamespace", "n", "default", "kube namespace to apply configmaps into")
 		if err := cmd.ParseFlags(args); err != nil {
 			return errors.Wrap(err, "failed to parse flags")
 		}
@@ -258,8 +259,8 @@ var syncCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "failed to build k8s client")
 		}
-		if err := kube.Sync(context.Background(), wd); err != nil {
-			return errors.Wrap(err, "sync")
+		if err := kube.Apply(context.Background(), wd); err != nil {
+			return errors.Wrap(err, "apply")
 		}
 
 		return nil
