@@ -6,11 +6,13 @@ require (
 	github.com/bufbuild/connect-go v0.3.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/lekkodev/rules v1.3.0
+	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/apimachinery v0.25.0
 )
 
 require (
@@ -37,7 +39,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v0.0.0-20201106050909-4977a11b4351 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
-	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
@@ -54,7 +55,6 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	k8s.io/api v0.25.0 // indirect
-	k8s.io/apimachinery v0.25.0 // indirect
 	k8s.io/klog/v2 v2.70.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed // indirect
