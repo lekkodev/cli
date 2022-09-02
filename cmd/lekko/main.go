@@ -21,15 +21,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/eval"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/generate"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/verify"
+	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
@@ -45,6 +48,10 @@ func main() {
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(reviewCmd)
 	rootCmd.AddCommand(mergeCmd)
+	// k8s
+	k8sCmd.AddCommand(applyCmd)
+	rootCmd.AddCommand(k8sCmd)
+
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -84,7 +91,7 @@ var compileCmd = &cobra.Command{
 }
 
 var reviewCmd = &cobra.Command{
-	Use:   "review your pull request",
+	Use:   "review",
 	Short: "creates a pr with your changes",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
@@ -104,7 +111,7 @@ var reviewCmd = &cobra.Command{
 }
 
 var mergeCmd = &cobra.Command{
-	Use:   "merge your pull request",
+	Use:   "merge",
 	Short: "merges a pr for the current branch",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
@@ -221,4 +228,44 @@ func removeCmd() *cobra.Command {
 		},
 	}
 	return ret
+}
+
+var k8sCmd = &cobra.Command{
+	Use:   "k8s",
+	Short: "manage lekko configurations in kubernetes",
+}
+
+var applyCmd = &cobra.Command{
+	Use:   "apply",
+	Short: "apply local configurations to kubernetes configmaps",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		if err := verify.Verify(wd); err != nil {
+			return errors.Wrap(err, "verification failed")
+		}
+		var kubeconfig, kubeNamespace, defaultKubeconfig string
+		// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
+		home, err := homedir.Dir()
+		if err == nil {
+			defaultKubeconfig = filepath.Join(home, ".kube", "config")
+		}
+		cmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
+		cmd.Flags().StringVarP(&kubeNamespace, "kubenamespace", "n", "default", "kube namespace to apply configmaps into")
+		if err := cmd.ParseFlags(args); err != nil {
+			return errors.Wrap(err, "failed to parse flags")
+		}
+
+		kube, err := k8s.NewKubernetes(kubeconfig, kubeNamespace)
+		if err != nil {
+			return errors.Wrap(err, "failed to build k8s client")
+		}
+		if err := kube.Apply(context.Background(), wd); err != nil {
+			return errors.Wrap(err, "apply")
+		}
+
+		return nil
+	},
 }

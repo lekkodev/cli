@@ -71,14 +71,14 @@ func RemoveFeature(rootPath, namespaceName, featureName string) error {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
 	}
 	var removed bool
-	for _, filename := range []string{
+	for _, file := range []string{
 		fmt.Sprintf("%s.star", featureName),
-		fmt.Sprintf("%s.json", featureName),
-		fmt.Sprintf("%s.proto.bin", featureName),
+		filepath.Join(metadata.GenFolderPathJSON, fmt.Sprintf("%s.json", featureName)),
+		filepath.Join(metadata.GenFolderPathProto, fmt.Sprintf("%s.proto.bin", featureName)),
 	} {
-		ok, err := cw.RemoveIfExists(filepath.Join(rootPath, namespaceName, filename))
+		ok, err := cw.RemoveIfExists(filepath.Join(rootPath, namespaceName, file))
 		if err != nil {
-			return fmt.Errorf("remove if exists failed to remove %s: %v", filename, err)
+			return fmt.Errorf("remove if exists failed to remove %s: %v", file, err)
 		}
 		if ok {
 			removed = true
