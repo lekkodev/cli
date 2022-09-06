@@ -143,7 +143,7 @@ var authCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
-		
+
 		return cr.Auth()
 	},
 }
