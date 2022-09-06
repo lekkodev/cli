@@ -21,6 +21,8 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
+	github.com/cli/browser v1.0.0 // indirect
+	github.com/cli/safeexec v1.0.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/emirpasic/gods v1.12.0 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
@@ -66,6 +68,7 @@ require (
 require (
 	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20220415221154-79c36419192d // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
+	github.com/cli/oauth v0.9.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1

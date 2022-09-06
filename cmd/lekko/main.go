@@ -48,6 +48,7 @@ func main() {
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(reviewCmd)
 	rootCmd.AddCommand(mergeCmd)
+	rootCmd.AddCommand(authCmd)
 	// k8s
 	k8sCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(k8sCmd)
@@ -127,6 +128,23 @@ var mergeCmd = &cobra.Command{
 		}
 
 		return cr.Merge()
+	},
+}
+
+var authCmd = &cobra.Command{
+	Use:   "auth",
+	Short: "authorize lekko cli with your github account",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		
+		return cr.Auth()
 	},
 }
 
