@@ -32,8 +32,7 @@ const (
 // it will initiate oauth with github.
 func (cr *ConfigRepo) Login() error {
 	defer cr.Status()
-	ghToken := cr.secrets.GetGithubToken()
-	if ghToken != "" {
+	if cr.Secrets.IsGithubAuthenticated() {
 		return nil
 	}
 	flow := &ghauth.Flow{
@@ -44,14 +43,16 @@ func (cr *ConfigRepo) Login() error {
 	if err != nil {
 		return errors.Wrap(err, "gh oauth flow")
 	}
-	cr.secrets.SetGithubToken(token.Token)
+	cr.Secrets.SetGithubToken(token.Token)
 	ctx := context.Background()
-	cr.authenticateGithub(ctx)
+	if err := cr.AuthenticateGithub(ctx); err != nil {
+		return err
+	}
 	user, resp, err := cr.ghCli.Users.Get(ctx, "")
 	if err != nil {
 		return fmt.Errorf("ghCli user %v: %v", resp.Status, err)
 	}
-	cr.secrets.SetGithubUser(user.GetLogin())
+	cr.Secrets.SetGithubUser(user.GetLogin())
 	return nil
 }
 
@@ -64,21 +65,21 @@ func maskToken(token string) string {
 }
 
 func (cr *ConfigRepo) Logout() error {
-	cr.secrets.SetGithubToken("")
-	cr.secrets.SetGithubUser("")
+	cr.Secrets.SetGithubToken("")
+	cr.Secrets.SetGithubUser("")
 	cr.Status()
 	return nil
 }
 
 func (cr *ConfigRepo) Status() {
 	status := "Logged In"
-	if cr.secrets.GetGithubToken() == "" {
+	if !cr.Secrets.IsGithubAuthenticated() {
 		status = "Logged out"
 	}
 	fmt.Printf(
 		"Github Authentication Status: %s\n\tToken: %s\n\tUser: %s\n",
 		status,
-		maskToken(cr.secrets.GetGithubToken()),
-		cr.secrets.GetGithubUser(),
+		maskToken(cr.Secrets.GetGithubToken()),
+		cr.Secrets.GetGithubUser(),
 	)
 }

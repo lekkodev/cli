@@ -21,6 +21,7 @@ import (
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,17 +33,21 @@ import (
 const (
 	lekkoConfigMapPrefix string = "lekko."
 	configMapLabel       string = "lekko"
+	annotationKeyHash    string = "last-applied-hash"
+	annotationKeyBranch  string = "last-applied-branch"
+	annotationKeyUser    string = "last-applied-by"
 )
 
 type kubeClient struct {
 	cs           *kubernetes.Clientset
 	k8sNamespace string
+	cr           *gh.ConfigRepo
 }
 
 // Returns an object that acts as lekko cli's gateway to kubernetes. Handles
 // initializing the client, and operates on the single given namespace.
 // TODO: handle multiple namespaces in the future?
-func NewKubernetes(kubeConfigPath, k8sNamespace string) (*kubeClient, error) {
+func NewKubernetes(kubeConfigPath, k8sNamespace string, cr *gh.ConfigRepo) (*kubeClient, error) {
 	cfg, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
 	if err != nil {
 		return nil, errors.Wrap(err, "build cfg from flags")
@@ -54,6 +59,7 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string) (*kubeClient, error) {
 	return &kubeClient{
 		cs:           clientset,
 		k8sNamespace: k8sNamespace,
+		cr:           cr,
 	}, nil
 }
 
@@ -64,6 +70,9 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string) (*kubeClient, error) {
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
 func (k *kubeClient) Apply(ctx context.Context, root string) error {
+	if err := k.cr.AuthenticateGithub(ctx); err != nil {
+		return errors.Wrap(err, "auth github")
+	}
 	provider := fs.LocalProvider()
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
@@ -99,6 +108,32 @@ func (k *kubeClient) Apply(ctx context.Context, root string) error {
 	return nil
 }
 
+func (k *kubeClient) fieldManager() string {
+	return "lekko"
+}
+
+func (k *kubeClient) annotationKey(key string) string {
+	return fmt.Sprintf("lekko/%s", key)
+}
+
+func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) error {
+	hash, err := k.cr.WorkingDirectoryHash()
+	if err != nil {
+		return errors.Wrap(err, "wd hash")
+	}
+	user := k.cr.Secrets.GetGithubUser()
+	branch, err := k.cr.BranchName()
+	if err != nil {
+		return errors.Wrap(err, "branch name")
+	}
+	cm.WithAnnotations(map[string]string{
+		k.annotationKey(annotationKeyHash):   hash,
+		k.annotationKey(annotationKeyUser):   user,
+		k.annotationKey(annotationKeyBranch): branch,
+	})
+	return nil
+}
+
 func (k *kubeClient) applyLekkoNamespace(
 	ctx context.Context,
 	root string,
@@ -125,8 +160,11 @@ func (k *kubeClient) applyLekkoNamespace(
 		}
 		cm.WithBinaryData(map[string][]byte{ff.Name: bytes})
 	}
+	if err := k.addAnnotations(cm); err != nil {
+		return errors.Wrap(err, "add annotations")
+	}
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).Apply(ctx, cm, metav1.ApplyOptions{
-		FieldManager: "lekko",
+		FieldManager: k.fieldManager(),
 	})
 	if err != nil {
 		return errors.Wrap(err, "cm apply")

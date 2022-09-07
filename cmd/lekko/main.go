@@ -325,7 +325,12 @@ var applyCmd = &cobra.Command{
 			return errors.Wrap(err, "failed to parse flags")
 		}
 
-		kube, err := k8s.NewKubernetes(kubeconfig, kubeNamespace)
+		cr, err := gh.New(wd)
+		if err != nil {
+			return err
+		}
+
+		kube, err := k8s.NewKubernetes(kubeconfig, kubeNamespace, cr)
 		if err != nil {
 			return errors.Wrap(err, "failed to build k8s client")
 		}
