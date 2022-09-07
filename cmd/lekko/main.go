@@ -48,6 +48,11 @@ func main() {
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(reviewCmd)
 	rootCmd.AddCommand(mergeCmd)
+	// auth
+	authCmd.AddCommand(loginCmd)
+	authCmd.AddCommand(logoutCmd)
+	authCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(authCmd)
 	// k8s
 	k8sCmd.AddCommand(applyCmd)
 	rootCmd.AddCommand(k8sCmd)
@@ -94,6 +99,7 @@ var reviewCmd = &cobra.Command{
 	Use:   "review",
 	Short: "creates a pr with your changes",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -106,7 +112,7 @@ var reviewCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 
-		return cr.Review()
+		return cr.Review(ctx)
 	},
 }
 
@@ -125,8 +131,69 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
+		defer cr.Close()
 
 		return cr.Merge()
+	},
+}
+
+var authCmd = &cobra.Command{
+	Use:   "auth",
+	Short: "authenticates lekko with github",
+}
+
+var loginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "authenticate with github",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		defer cr.Close()
+
+		return cr.Login()
+	},
+}
+
+var logoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "log out of github",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		defer cr.Close()
+
+		return cr.Logout()
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "display lekko authentication status",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		defer cr.Close()
+
+		cr.Status()
+		return nil
 	},
 }
 
