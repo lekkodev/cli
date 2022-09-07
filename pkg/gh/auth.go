@@ -23,14 +23,16 @@ import (
 )
 
 const (
+	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
-	// lekkoOAuthClientID string = "82ce82fd4d8f764f1977"
 )
 
-func (cr *ConfigRepo) Auth() error {
+// Login will attempt to read any existing github credentials from disk. If unavailable,
+// it will initiate oauth with github.
+func (cr *ConfigRepo) Login() error {
+	defer cr.Status()
 	ghToken := cr.secrets.GetGithubToken()
 	if ghToken != "" {
-		fmt.Printf("Found existing gh token: %v\n", maskToken(ghToken))
 		return nil
 	}
 	flow := &ghauth.Flow{
@@ -52,4 +54,24 @@ func maskToken(token string) string {
 		ret = append(ret, "*")
 	}
 	return strings.Join(ret, "")
+}
+
+func (cr *ConfigRepo) Logout() error {
+	cr.secrets.SetGithubToken("")
+	cr.secrets.SetGithubUser("")
+	cr.Status()
+	return nil
+}
+
+func (cr *ConfigRepo) Status() {
+	status := "Logged In"
+	if cr.secrets.GetGithubToken() == "" {
+		status = "Logged out"
+	}
+	fmt.Printf(
+		"Github Authentication Status: %s\n\tToken: %s\n\tUser: %s\n",
+		status,
+		maskToken(cr.secrets.GetGithubToken()),
+		cr.secrets.GetGithubUser(),
+	)
 }

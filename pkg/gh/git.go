@@ -71,8 +71,10 @@ func New(path string) (*ConfigRepo, error) {
 	}, nil
 }
 
-func (cr *ConfigRepo) Close() error {
-	return cr.secrets.Close()
+func (cr *ConfigRepo) Close() {
+	if err := cr.secrets.Close(); err != nil {
+		log.Printf("error closing secrets: %v\n", err)
+	}
 }
 
 func (cr *ConfigRepo) Review(ctx context.Context) error {

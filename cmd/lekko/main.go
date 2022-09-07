@@ -48,6 +48,10 @@ func main() {
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(reviewCmd)
 	rootCmd.AddCommand(mergeCmd)
+	// auth
+	authCmd.AddCommand(loginCmd)
+	authCmd.AddCommand(logoutCmd)
+	authCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(authCmd)
 	// k8s
 	k8sCmd.AddCommand(applyCmd)
@@ -107,11 +111,6 @@ var reviewCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-		defer func() {
-			if err := cr.Close(); err != nil {
-				log.Printf("error closing config repo: %v\n", err)
-			}
-		}()
 
 		return cr.Review(ctx)
 	},
@@ -132,11 +131,7 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-		defer func() {
-			if err := cr.Close(); err != nil {
-				log.Printf("error closing config repo: %v\n", err)
-			}
-		}()
+		defer cr.Close()
 
 		return cr.Merge()
 	},
@@ -144,7 +139,12 @@ var mergeCmd = &cobra.Command{
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "authorize lekko cli with your github account",
+	Short: "authenticates lekko with github",
+}
+
+var loginCmd = &cobra.Command{
+	Use:   "login",
+	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -154,13 +154,46 @@ var authCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
-		defer func() {
-			if err := cr.Close(); err != nil {
-				log.Printf("error closing config repo: %v\n", err)
-			}
-		}()
+		defer cr.Close()
 
-		return cr.Auth()
+		return cr.Login()
+	},
+}
+
+var logoutCmd = &cobra.Command{
+	Use:   "logout",
+	Short: "log out of github",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		defer cr.Close()
+
+		return cr.Logout()
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "display lekko authentication status",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		cr, err := gh.New(wd)
+		if err != nil {
+			return errors.Wrap(err, "gh new")
+		}
+		defer cr.Close()
+
+		cr.Status()
+		return nil
 	},
 }
 
