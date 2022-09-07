@@ -15,6 +15,7 @@
 package gh
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -38,13 +39,19 @@ func (cr *ConfigRepo) Login() error {
 	flow := &ghauth.Flow{
 		Host:     ghauth.GitHubHost("https://github.com"),
 		ClientID: lekkoGHAppClientID,
-		Scopes:   []string{"repo", "user"},
 	}
 	token, err := flow.DetectFlow()
 	if err != nil {
 		return errors.Wrap(err, "gh oauth flow")
 	}
 	cr.secrets.SetGithubToken(token.Token)
+	ctx := context.Background()
+	cr.authenticateGithub(ctx)
+	user, resp, err := cr.ghCli.Users.Get(ctx, "")
+	if err != nil {
+		return fmt.Errorf("ghCli user %v: %v", resp.Status, err)
+	}
+	cr.secrets.SetGithubUser(user.GetLogin())
 	return nil
 }
 

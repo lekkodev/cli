@@ -60,15 +60,19 @@ func New(path string) (*ConfigRepo, error) {
 		return nil, errors.Wrap(err, "user home dir")
 	}
 	secrets := metadata.NewSecrets(hd)
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: secrets.GetGithubToken()})
-	tc := oauth2.NewClient(context.Background(), ts)
-	ghCli := github.NewClient(tc)
-	return &ConfigRepo{
+	cr := &ConfigRepo{
 		repo:    repo,
 		wt:      wt,
 		secrets: secrets,
-		ghCli:   ghCli,
-	}, nil
+	}
+	cr.authenticateGithub(context.Background())
+	return cr, nil
+}
+
+func (cr *ConfigRepo) authenticateGithub(ctx context.Context) {
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cr.secrets.GetGithubToken()})
+	tc := oauth2.NewClient(ctx, ts)
+	cr.ghCli = github.NewClient(tc)
 }
 
 func (cr *ConfigRepo) Close() {
