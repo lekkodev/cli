@@ -16,21 +16,40 @@ package gh
 
 import (
 	"fmt"
+	"strings"
 
 	ghauth "github.com/cli/oauth"
 	"github.com/pkg/errors"
 )
 
+const (
+	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
+	// lekkoOAuthClientID string = "82ce82fd4d8f764f1977"
+)
+
 func (cr *ConfigRepo) Auth() error {
+	ghToken := cr.secrets.GetGithubToken()
+	if ghToken != "" {
+		fmt.Printf("Found existing gh token: %v\n", maskToken(ghToken))
+		return nil
+	}
 	flow := &ghauth.Flow{
 		Host:     ghauth.GitHubHost("https://github.com"),
-		ClientID: "82ce82fd4d8f764f1977",
-		Scopes:   []string{"repo"},
+		ClientID: lekkoGHAppClientID,
+		Scopes:   []string{"repo", "user"},
 	}
 	token, err := flow.DetectFlow()
 	if err != nil {
 		return errors.Wrap(err, "gh oauth flow")
 	}
-	fmt.Printf("received token: \n\t%v\n", *token)
+	cr.secrets.SetGithubToken(token.Token)
 	return nil
+}
+
+func maskToken(token string) string {
+	var ret []string
+	for range token {
+		ret = append(ret, "*")
+	}
+	return strings.Join(ret, "")
 }

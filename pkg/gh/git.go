@@ -15,6 +15,7 @@
 package gh
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -25,17 +26,24 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/google/go-github/v47/github"
+	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
+	giturls "github.com/whilp/git-urls"
+	"golang.org/x/oauth2"
 )
 
 const (
 	mainBranchName = "main"
+	remoteName     = "origin"
 )
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
 type ConfigRepo struct {
-	repo *git.Repository
-	wt   *git.Worktree
+	repo    *git.Repository
+	wt      *git.Worktree
+	secrets metadata.Secrets
+	ghCli   *github.Client
 }
 
 func New(path string) (*ConfigRepo, error) {
@@ -47,13 +55,27 @@ func New(path string) (*ConfigRepo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
+	hd, err := os.UserHomeDir()
+	if err != nil {
+		return nil, errors.Wrap(err, "user home dir")
+	}
+	secrets := metadata.NewSecrets(hd)
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: secrets.GetGithubToken()})
+	tc := oauth2.NewClient(context.Background(), ts)
+	ghCli := github.NewClient(tc)
 	return &ConfigRepo{
-		repo: repo,
-		wt:   wt,
+		repo:    repo,
+		wt:      wt,
+		secrets: secrets,
+		ghCli:   ghCli,
 	}, nil
 }
 
-func (cr *ConfigRepo) Review() error {
+func (cr *ConfigRepo) Close() error {
+	return cr.secrets.Close()
+}
+
+func (cr *ConfigRepo) Review(ctx context.Context) error {
 	isMain, err := cr.isMain()
 	if err != nil {
 		return errors.Wrap(err, "is main")
@@ -87,7 +109,11 @@ func (cr *ConfigRepo) Review() error {
 		return errors.Wrap(err, "commit")
 	}
 	log.Printf("committed new hash %s\n", hash)
-	if err := cr.createPR(branchName); err != nil {
+
+	if err := cr.pushLocalBranch(branchName); err != nil {
+		return errors.Wrap(err, "push")
+	}
+	if err := cr.createPR(ctx, branchName); err != nil {
 		return errors.Wrap(err, "create pr")
 	}
 	return nil
@@ -109,6 +135,25 @@ func (cr *ConfigRepo) isMain() (bool, error) {
 		return false, errors.Wrap(err, "head")
 	}
 	return h.Name().IsBranch() && h.Name().Short() == mainBranchName, nil
+}
+
+func (cr *ConfigRepo) getOwnerRepo() (string, string, error) {
+	rm, err := cr.repo.Remote(remoteName)
+	if err != nil {
+		return "", "", errors.Wrap(err, "remote")
+	}
+	if len(rm.Config().URLs) == 0 {
+		return "", "", errors.Wrap(err, "remote has no URLs")
+	}
+	u, err := giturls.Parse(rm.Config().URLs[0])
+	if err != nil {
+		return "", "", errors.Wrap(err, "url parse")
+	}
+	parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid path: %s", u.Path)
+	}
+	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
 }
 
 func (cr *ConfigRepo) wdClean() (bool, error) {
@@ -146,18 +191,32 @@ func (cr *ConfigRepo) checkoutBranch() (string, error) {
 	return branchName, nil
 }
 
-func (cr *ConfigRepo) createPR(branchName string) error {
-	cmd := exec.Command("git", "push", "--set-upstream", "origin", branchName)
+func (cr *ConfigRepo) pushLocalBranch(branchName string) error {
+	cmd := exec.Command("git", "push", "--set-upstream", remoteName, branchName)
 	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
 	if err := cmd.Run(); err != nil {
 		return errors.Wrap(err, "git push set upstream")
 	}
-	cmd = exec.Command("gh", "pr", "create", "-B", mainBranchName, "-H", branchName, "-f")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "gh pr create")
-	}
+	fmt.Printf("Pushed local branch %q to remote %q\n", branchName, remoteName)
 	return nil
+}
+
+func (cr *ConfigRepo) createPR(ctx context.Context, branchName string) error {
+	owner, repo, err := cr.getOwnerRepo()
+	if err != nil {
+		return errors.Wrap(err, "get owner repo")
+	}
+	pr, resp, err := cr.ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+		Title: strPtr("New feature change"),
+		Head:  &branchName,
+		Base:  strPtr(mainBranchName),
+	})
+	if err != nil {
+		return fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
+	}
+	fmt.Printf("Created PR:\n\t%s\n", pr.GetHTMLURL())
+	return nil
+}
+func strPtr(s string) *string {
+	return &s
 }

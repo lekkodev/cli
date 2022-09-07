@@ -95,6 +95,7 @@ var reviewCmd = &cobra.Command{
 	Use:   "review",
 	Short: "creates a pr with your changes",
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx := context.Background()
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
@@ -106,8 +107,13 @@ var reviewCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
+		defer func() {
+			if err := cr.Close(); err != nil {
+				log.Printf("error closing config repo: %v\n", err)
+			}
+		}()
 
-		return cr.Review()
+		return cr.Review(ctx)
 	},
 }
 
@@ -126,6 +132,11 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
+		defer func() {
+			if err := cr.Close(); err != nil {
+				log.Printf("error closing config repo: %v\n", err)
+			}
+		}()
 
 		return cr.Merge()
 	},
@@ -143,6 +154,11 @@ var authCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
+		defer func() {
+			if err := cr.Close(); err != nil {
+				log.Printf("error closing config repo: %v\n", err)
+			}
+		}()
 
 		return cr.Auth()
 	},
