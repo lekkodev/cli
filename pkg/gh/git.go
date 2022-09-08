@@ -40,10 +40,11 @@ const (
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
 type ConfigRepo struct {
-	repo    *git.Repository
-	wt      *git.Worktree
-	secrets metadata.Secrets
-	ghCli   *github.Client
+	Secrets metadata.Secrets
+
+	repo  *git.Repository
+	wt    *git.Worktree
+	ghCli *github.Client
 }
 
 func New(path string) (*ConfigRepo, error) {
@@ -55,33 +56,36 @@ func New(path string) (*ConfigRepo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	hd, err := os.UserHomeDir()
-	if err != nil {
-		return nil, errors.Wrap(err, "user home dir")
-	}
-	secrets := metadata.NewSecrets(hd)
+	secrets := metadata.NewSecretsOrFail()
 	cr := &ConfigRepo{
 		repo:    repo,
 		wt:      wt,
-		secrets: secrets,
+		Secrets: secrets,
 	}
-	cr.authenticateGithub(context.Background())
 	return cr, nil
 }
 
-func (cr *ConfigRepo) authenticateGithub(ctx context.Context) {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cr.secrets.GetGithubToken()})
+func (cr *ConfigRepo) AuthenticateGithub(ctx context.Context) error {
+	if !cr.Secrets.IsGithubAuthenticated() {
+		fmt.Println(metadata.AuthenticateGituhubMessage)
+		return errors.New("user unauthenticated")
+	}
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cr.Secrets.GetGithubToken()})
 	tc := oauth2.NewClient(ctx, ts)
 	cr.ghCli = github.NewClient(tc)
+	return nil
 }
 
 func (cr *ConfigRepo) Close() {
-	if err := cr.secrets.Close(); err != nil {
+	if err := cr.Secrets.Close(); err != nil {
 		log.Printf("error closing secrets: %v\n", err)
 	}
 }
 
 func (cr *ConfigRepo) Review(ctx context.Context) error {
+	if err := cr.AuthenticateGithub(ctx); err != nil {
+		return err
+	}
 	isMain, err := cr.isMain()
 	if err != nil {
 		return errors.Wrap(err, "is main")
@@ -135,12 +139,36 @@ func (cr *ConfigRepo) Merge() error {
 	return nil
 }
 
+func (cr *ConfigRepo) WorkingDirectoryHash() (string, error) {
+	hash, err := cr.repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+	if err != nil {
+		return "", errors.Wrap(err, "resolve revision")
+	}
+	var suffix string
+	clean, err := cr.wdClean()
+	if err != nil {
+		return "", errors.Wrap(err, "wd clean")
+	}
+	if !clean {
+		suffix = "-dirty"
+	}
+	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
+}
+
 func (cr *ConfigRepo) isMain() (bool, error) {
 	h, err := cr.repo.Head()
 	if err != nil {
 		return false, errors.Wrap(err, "head")
 	}
 	return h.Name().IsBranch() && h.Name().Short() == mainBranchName, nil
+}
+
+func (cr *ConfigRepo) BranchName() (string, error) {
+	h, err := cr.repo.Head()
+	if err != nil {
+		return "", errors.Wrap(err, "head")
+	}
+	return h.Name().Short(), nil
 }
 
 func (cr *ConfigRepo) getOwnerRepo() (string, string, error) {

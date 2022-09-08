@@ -24,6 +24,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const AuthenticateGituhubMessage = "User is not authenticated.\nRun 'lekko auth login' to authenticate with GitHub."
+
 // Secrets holds all the user-specific information that needs to exist for the cli
 // to work, but should not live in a shared config repo. For instance, it holds
 // the github auth token. The secrets are backed by the filesystem under the user's home
@@ -33,6 +35,7 @@ type Secrets interface {
 	SetGithubToken(token string)
 	GetGithubUser() string
 	SetGithubUser(token string)
+	IsGithubAuthenticated() bool
 	Close() error
 }
 
@@ -53,6 +56,14 @@ func NewSecrets(homeDir string) Secrets {
 		log.Printf("failed to read secrets: %v\n", err)
 	}
 	return s
+}
+
+func NewSecretsOrFail() Secrets {
+	hd, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("user home directory: %v", err)
+	}
+	return NewSecrets(hd)
 }
 
 func (s *secrets) Read() error {
@@ -111,6 +122,10 @@ func (s *secrets) SetGithubUser(user string) {
 	defer s.Unlock()
 	s.changed = true
 	s.GithubUser = user
+}
+
+func (s *secrets) IsGithubAuthenticated() bool {
+	return s.GetGithubToken() != ""
 }
 
 func (s *secrets) filename() string {
