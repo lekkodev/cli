@@ -17,6 +17,7 @@ package gh
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	ghauth "github.com/cli/oauth"
@@ -30,10 +31,14 @@ const (
 
 // Login will attempt to read any existing github credentials from disk. If unavailable,
 // it will initiate oauth with github.
-func (cr *ConfigRepo) Login() error {
-	defer cr.Status()
-	if cr.Secrets.IsGithubAuthenticated() {
-		return nil
+func (cr *ConfigRepo) Login(ctx context.Context) error {
+	defer cr.Status(ctx)
+	if cr.Secrets.HasGithubToken() {
+		if err := cr.CheckGithubAuth(ctx); err == nil {
+			return nil
+		} else {
+			log.Printf("Existing gh token expired: %v\n", err)
+		}
 	}
 	flow := &ghauth.Flow{
 		Host:     ghauth.GitHubHost("https://github.com"),
@@ -44,8 +49,8 @@ func (cr *ConfigRepo) Login() error {
 		return errors.Wrap(err, "gh oauth flow")
 	}
 	cr.Secrets.SetGithubToken(token.Token)
-	ctx := context.Background()
-	if err := cr.AuthenticateGithub(ctx); err != nil {
+	cr.mkGhCli(ctx)
+	if err := cr.CheckGithubAuth(ctx); err != nil {
 		return err
 	}
 	user, resp, err := cr.ghCli.Users.Get(ctx, "")
@@ -64,17 +69,20 @@ func maskToken(token string) string {
 	return strings.Join(ret, "")
 }
 
-func (cr *ConfigRepo) Logout() error {
+func (cr *ConfigRepo) Logout(ctx context.Context) error {
 	cr.Secrets.SetGithubToken("")
 	cr.Secrets.SetGithubUser("")
-	cr.Status()
+	cr.Status(ctx)
 	return nil
 }
 
-func (cr *ConfigRepo) Status() {
+func (cr *ConfigRepo) Status(ctx context.Context) {
 	status := "Logged In"
-	if !cr.Secrets.IsGithubAuthenticated() {
+	if !cr.Secrets.HasGithubToken() {
 		status = "Logged out"
+	}
+	if err := cr.CheckGithubAuth(ctx); err != nil {
+		status = fmt.Sprintf("Auth Failed: %v", err)
 	}
 	fmt.Printf(
 		"Github Authentication Status: %s\n\tToken: %s\n\tUser: %s\n",

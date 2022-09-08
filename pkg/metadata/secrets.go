@@ -35,7 +35,7 @@ type Secrets interface {
 	SetGithubToken(token string)
 	GetGithubUser() string
 	SetGithubUser(token string)
-	IsGithubAuthenticated() bool
+	HasGithubToken() bool
 	Close() error
 }
 
@@ -124,7 +124,7 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
-func (s *secrets) IsGithubAuthenticated() bool {
+func (s *secrets) HasGithubToken() bool {
 	return s.GetGithubToken() != ""
 }
 

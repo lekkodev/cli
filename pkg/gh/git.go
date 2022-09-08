@@ -47,7 +47,7 @@ type ConfigRepo struct {
 	ghCli *github.Client
 }
 
-func New(path string) (*ConfigRepo, error) {
+func New(ctx context.Context, path string) (*ConfigRepo, error) {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open git repo")
@@ -62,17 +62,25 @@ func New(path string) (*ConfigRepo, error) {
 		wt:      wt,
 		Secrets: secrets,
 	}
+	cr.mkGhCli(ctx)
 	return cr, nil
 }
 
-func (cr *ConfigRepo) AuthenticateGithub(ctx context.Context) error {
-	if !cr.Secrets.IsGithubAuthenticated() {
-		fmt.Println(metadata.AuthenticateGituhubMessage)
-		return errors.New("user unauthenticated")
-	}
+func (cr *ConfigRepo) mkGhCli(ctx context.Context) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cr.Secrets.GetGithubToken()})
 	tc := oauth2.NewClient(ctx, ts)
 	cr.ghCli = github.NewClient(tc)
+}
+
+func (cr *ConfigRepo) CheckGithubAuth(ctx context.Context) error {
+	if !cr.Secrets.HasGithubToken() {
+		fmt.Println(metadata.AuthenticateGituhubMessage)
+		return errors.New("user unauthenticated")
+	}
+	_, resp, err := cr.ghCli.Users.Get(ctx, "")
+	if err != nil {
+		return fmt.Errorf("github auth check failed [%v]: %w", resp, err)
+	}
 	return nil
 }
 
@@ -83,7 +91,7 @@ func (cr *ConfigRepo) Close() {
 }
 
 func (cr *ConfigRepo) Review(ctx context.Context) error {
-	if err := cr.AuthenticateGithub(ctx); err != nil {
+	if err := cr.CheckGithubAuth(ctx); err != nil {
 		return err
 	}
 	isMain, err := cr.isMain()
