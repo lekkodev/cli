@@ -107,7 +107,7 @@ var reviewCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		cr, err := gh.New(wd)
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -127,7 +127,8 @@ var mergeCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		cr, err := gh.New(wd)
+		ctx := context.Background()
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -150,13 +151,14 @@ var loginCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cr, err := gh.New(wd)
+		ctx := context.Background()
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
 		defer cr.Close()
 
-		return cr.Login()
+		return cr.Login(ctx)
 	},
 }
 
@@ -168,13 +170,14 @@ var logoutCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cr, err := gh.New(wd)
+		ctx := context.Background()
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
 		defer cr.Close()
 
-		return cr.Logout()
+		return cr.Logout(ctx)
 	},
 }
 
@@ -186,13 +189,14 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cr, err := gh.New(wd)
+		ctx := context.Background()
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return errors.Wrap(err, "gh new")
 		}
 		defer cr.Close()
 
-		cr.Status()
+		cr.Status(ctx)
 		return nil
 	},
 }
@@ -324,8 +328,8 @@ var applyCmd = &cobra.Command{
 		if err := cmd.ParseFlags(args); err != nil {
 			return errors.Wrap(err, "failed to parse flags")
 		}
-
-		cr, err := gh.New(wd)
+		ctx := context.Background()
+		cr, err := gh.New(ctx, wd)
 		if err != nil {
 			return err
 		}

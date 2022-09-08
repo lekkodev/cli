@@ -70,7 +70,7 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string, cr *gh.ConfigRepo) (*kub
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
 func (k *kubeClient) Apply(ctx context.Context, root string) error {
-	if err := k.cr.AuthenticateGithub(ctx); err != nil {
+	if err := k.cr.CheckGithubAuth(ctx); err != nil {
 		return errors.Wrap(err, "auth github")
 	}
 	provider := fs.LocalProvider()
