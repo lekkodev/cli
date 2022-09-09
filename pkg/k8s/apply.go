@@ -17,7 +17,9 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"text/tabwriter"
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
@@ -63,6 +65,8 @@ func NewKubernetes(kubeConfigPath, k8sNamespace string, cr *gh.ConfigRepo) (*kub
 	}, nil
 }
 
+// func buildConfigFromFlags(kubeContext)
+
 // Apply will construct a representation of what k8s configmaps should look like
 // based on the current, generated proto files in the repo. It will then apply
 // that representation onto k8s, ensuring that k8s state matches the local working
@@ -105,6 +109,26 @@ func (k *kubeClient) Apply(ctx context.Context, root string) error {
 			return errors.Wrap(err, "cm delete")
 		}
 	}
+	return nil
+}
+
+func (k *kubeClient) List(ctx context.Context) error {
+	fmt.Printf("Using namespace %s\n", k.k8sNamespace)
+	// Find all lekko configmaps
+	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
+		// LabelSelector: configMapLabel,
+	})
+	if err != nil {
+		return errors.Wrap(err, "configmaps list")
+	}
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
+	fmt.Fprintf(w, "k8s Namespace\tLekko Namespace\tFeature Name\tSize\n")
+	for _, item := range result.Items {
+		for featureName, featureBytes := range item.BinaryData {
+			fmt.Fprintf(w, "%s\t%s\t%s\t[%d bytes]\n", item.GetNamespace(), item.GetName(), featureName, len(featureBytes))
+		}
+	}
+	w.Flush()
 	return nil
 }
 

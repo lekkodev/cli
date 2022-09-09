@@ -54,7 +54,8 @@ func main() {
 	authCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(authCmd)
 	// k8s
-	k8sCmd.AddCommand(applyCmd)
+	k8sCmd.AddCommand(applyCmd())
+	k8sCmd.AddCommand(listCmd())
 	rootCmd.AddCommand(k8sCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -303,45 +304,80 @@ func removeCmd() *cobra.Command {
 
 var k8sCmd = &cobra.Command{
 	Use:   "k8s",
-	Short: "manage lekko configurations in kubernetes",
+	Short: "manage lekko configurations in kubernetes. Uses the current k8s context set in your kubeconfig file.",
 }
 
-var applyCmd = &cobra.Command{
-	Use:   "apply",
-	Short: "apply local configurations to kubernetes configmaps",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		if err := verify.Verify(wd); err != nil {
-			return errors.Wrap(err, "verification failed")
-		}
-		var kubeconfig, kubeNamespace, defaultKubeconfig string
-		// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
-		home, err := homedir.Dir()
-		if err == nil {
-			defaultKubeconfig = filepath.Join(home, ".kube", "config")
-		}
-		cmd.Flags().StringVarP(&kubeconfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
-		cmd.Flags().StringVarP(&kubeNamespace, "kubenamespace", "n", "default", "kube namespace to apply configmaps into")
-		if err := cmd.ParseFlags(args); err != nil {
-			return errors.Wrap(err, "failed to parse flags")
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return err
-		}
+func localKubeParams(cmd *cobra.Command, kubeConfig *string, kubeNamespace *string) {
+	var defaultKubeconfig string
+	// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
+	home, err := homedir.Dir()
+	if err == nil {
+		defaultKubeconfig = filepath.Join(home, ".kube", "config")
+	}
+	cmd.Flags().StringVarP(kubeConfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
+	cmd.Flags().StringVarP(kubeNamespace, "kubenamespace", "n", "default", "kube namespace to apply configmaps into")
+}
 
-		kube, err := k8s.NewKubernetes(kubeconfig, kubeNamespace, cr)
-		if err != nil {
-			return errors.Wrap(err, "failed to build k8s client")
-		}
-		if err := kube.Apply(context.Background(), wd); err != nil {
-			return errors.Wrap(err, "apply")
-		}
+func applyCmd() *cobra.Command {
+	var kubeConfig, kubeNamespace string
+	ret := &cobra.Command{
+		Use:   "apply",
+		Short: "apply local configurations to kubernetes configmaps",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cmd.ParseFlags(args); err != nil {
+				return errors.Wrap(err, "failed to parse flags")
+			}
 
-		return nil
-	},
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := verify.Verify(wd); err != nil {
+				return errors.Wrap(err, "verification failed")
+			}
+
+			ctx := context.Background()
+			cr, err := gh.New(ctx, wd)
+			if err != nil {
+				return err
+			}
+
+			kube, err := k8s.NewKubernetes(kubeConfig, kubeNamespace, cr)
+			if err != nil {
+				return errors.Wrap(err, "failed to build k8s client")
+			}
+			if err := kube.Apply(ctx, wd); err != nil {
+				return errors.Wrap(err, "apply")
+			}
+
+			return nil
+		},
+	}
+	localKubeParams(ret, &kubeConfig, &kubeNamespace)
+	return ret
+}
+
+func listCmd() *cobra.Command {
+	var kubeConfig, kubeNamespace string
+	ret := &cobra.Command{
+		Use:   "list",
+		Short: "list lekko configurations currently in kubernetes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := cmd.ParseFlags(args); err != nil {
+				return errors.Wrap(err, "failed to parse flags")
+			}
+
+			ctx := context.Background()
+			kube, err := k8s.NewKubernetes(kubeConfig, kubeNamespace, nil)
+			if err != nil {
+				return errors.Wrap(err, "failed to build k8s client")
+			}
+			if err := kube.List(ctx); err != nil {
+				return errors.Wrap(err, "list")
+			}
+			return nil
+		},
+	}
+	localKubeParams(ret, &kubeConfig, &kubeNamespace)
+	return ret
 }
