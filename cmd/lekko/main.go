@@ -103,14 +103,22 @@ func formatCmd() *cobra.Command {
 }
 
 var compileCmd = &cobra.Command{
-	Use:   "compile",
+	Use:   "compile [namespace[/feature]]",
 	Short: "compiles features based on individual definitions",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
-		return generate.Compile(wd)
+		var ns, f string
+		if len(args) > 0 {
+			ns, f, err = feature.ParseFeaturePath(args[0])
+			if err != nil {
+				return err
+			}
+		}
+		return generate.Compile(wd, ns, f)
 	},
 }
 
