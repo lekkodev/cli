@@ -102,7 +102,7 @@ func (f *formatter) Format() error {
 	if bytes.Equal(data, ndata) {
 		return nil
 	}
-	if err := ioutil.WriteFile(f.filePath, ndata, 0666); err != nil {
+	if err := ioutil.WriteFile(f.filePath, ndata, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 	if f.verbose {
