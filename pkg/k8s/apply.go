@@ -33,11 +33,12 @@ import (
 )
 
 const (
-	lekkoConfigMapPrefix string = "lekko."
-	configMapLabel       string = "lekko"
-	annotationKeyHash    string = "last-applied-hash"
-	annotationKeyBranch  string = "last-applied-branch"
-	annotationKeyUser    string = "last-applied-by"
+	lekkoConfigMapPrefix   string = "lekko."
+	configMapLabel         string = "lekko"
+	configMapSchemaVersion string = "v1beta1"
+	annotationKeyHash      string = "last-applied-hash"
+	annotationKeyBranch    string = "last-applied-branch"
+	annotationKeyUser      string = "last-applied-by"
 )
 
 type kubeClient struct {
@@ -49,18 +50,28 @@ type kubeClient struct {
 // Returns an object that acts as lekko cli's gateway to kubernetes. Handles
 // initializing the client, and operates on the single given namespace.
 // TODO: handle multiple namespaces in the future?
-func NewKubernetes(kubeConfigPath, k8sNamespace string, cr *gh.ConfigRepo) (*kubeClient, error) {
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+func NewKubernetes(kubeConfigPath string, cr *gh.ConfigRepo) (*kubeClient, error) {
+	if kubeConfigPath == "" {
+		return nil, errors.New("kubeConfigPath not provided")
+	}
+	cfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}, nil)
+	ns, _, err := cfg.Namespace()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get namespace from kube config")
+	}
+	fmt.Printf("Using kube namespace %s\n", ns)
+	clientCfg, err := cfg.ClientConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "build cfg from flags")
 	}
-	clientset, err := kubernetes.NewForConfig(cfg)
+	clientset, err := kubernetes.NewForConfig(clientCfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "new for config")
 	}
 	return &kubeClient{
 		cs:           clientset,
-		k8sNamespace: k8sNamespace,
+		k8sNamespace: ns,
 		cr:           cr,
 	}, nil
 }
@@ -113,14 +124,14 @@ func (k *kubeClient) Apply(ctx context.Context, root string) error {
 }
 
 func (k *kubeClient) List(ctx context.Context) error {
-	fmt.Printf("Using namespace %s\n", k.k8sNamespace)
 	// Find all lekko configmaps
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
-		// LabelSelector: configMapLabel,
+		LabelSelector: configMapLabel,
 	})
 	if err != nil {
 		return errors.Wrap(err, "configmaps list")
 	}
+
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintf(w, "k8s Namespace\tLekko Namespace\tFeature Name\tSize\n")
 	for _, item := range result.Items {
@@ -187,6 +198,9 @@ func (k *kubeClient) applyLekkoNamespace(
 	if err := k.addAnnotations(cm); err != nil {
 		return errors.Wrap(err, "add annotations")
 	}
+	cm.WithLabels(map[string]string{
+		configMapLabel: configMapSchemaVersion,
+	})
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).Apply(ctx, cm, metav1.ApplyOptions{
 		FieldManager: k.fieldManager(),
 	})

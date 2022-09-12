@@ -307,7 +307,7 @@ var k8sCmd = &cobra.Command{
 	Short: "manage lekko configurations in kubernetes. Uses the current k8s context set in your kubeconfig file.",
 }
 
-func localKubeParams(cmd *cobra.Command, kubeConfig *string, kubeNamespace *string) {
+func localKubeParams(cmd *cobra.Command, kubeConfig *string) {
 	var defaultKubeconfig string
 	// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
 	home, err := homedir.Dir()
@@ -315,11 +315,10 @@ func localKubeParams(cmd *cobra.Command, kubeConfig *string, kubeNamespace *stri
 		defaultKubeconfig = filepath.Join(home, ".kube", "config")
 	}
 	cmd.Flags().StringVarP(kubeConfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
-	cmd.Flags().StringVarP(kubeNamespace, "kubenamespace", "n", "default", "kube namespace to apply configmaps into")
 }
 
 func applyCmd() *cobra.Command {
-	var kubeConfig, kubeNamespace string
+	var kubeConfig string
 	ret := &cobra.Command{
 		Use:   "apply",
 		Short: "apply local configurations to kubernetes configmaps",
@@ -342,7 +341,7 @@ func applyCmd() *cobra.Command {
 				return err
 			}
 
-			kube, err := k8s.NewKubernetes(kubeConfig, kubeNamespace, cr)
+			kube, err := k8s.NewKubernetes(kubeConfig, cr)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
@@ -353,12 +352,12 @@ func applyCmd() *cobra.Command {
 			return nil
 		},
 	}
-	localKubeParams(ret, &kubeConfig, &kubeNamespace)
+	localKubeParams(ret, &kubeConfig)
 	return ret
 }
 
 func listCmd() *cobra.Command {
-	var kubeConfig, kubeNamespace string
+	var kubeConfig string
 	ret := &cobra.Command{
 		Use:   "list",
 		Short: "list lekko configurations currently in kubernetes",
@@ -368,7 +367,7 @@ func listCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			kube, err := k8s.NewKubernetes(kubeConfig, kubeNamespace, nil)
+			kube, err := k8s.NewKubernetes(kubeConfig, nil)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
@@ -378,6 +377,6 @@ func listCmd() *cobra.Command {
 			return nil
 		},
 	}
-	localKubeParams(ret, &kubeConfig, &kubeNamespace)
+	localKubeParams(ret, &kubeConfig)
 	return ret
 }
