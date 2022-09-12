@@ -3,6 +3,7 @@ module github.com/lekkodev/cli
 go 1.18
 
 require (
+	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/bufbuild/connect-go v0.3.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/lekkodev/rules v1.3.0
