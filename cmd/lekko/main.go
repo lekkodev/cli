@@ -43,6 +43,7 @@ import (
 func main() {
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd)
+	rootCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
@@ -82,6 +83,23 @@ var verifyCmd = &cobra.Command{
 		}
 		return verify.Verify(wd)
 	},
+}
+
+func formatCmd() *cobra.Command {
+	var verbose bool
+	cmd := &cobra.Command{
+		Use:   "format",
+		Short: "format star files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			return star.Format(wd, verbose)
+		},
+	}
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	return cmd
 }
 
 var compileCmd = &cobra.Command{

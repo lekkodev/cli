@@ -23,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -34,6 +35,8 @@ type Compiler interface {
 type compiler struct {
 	registry                            *protoregistry.Types
 	protoDir, starfilePath, featureName string
+
+	Formatter
 }
 
 // Compile takes the following parameters:
@@ -46,14 +49,17 @@ func NewCompiler(registry *protoregistry.Types, protoDir, starfilePath, featureN
 		protoDir:     protoDir,
 		starfilePath: starfilePath,
 		featureName:  featureName,
+		Formatter:    NewStarFormatter(starfilePath, featureName, false),
 	}
 }
 
 func (c *compiler) Compile() (*feature.Feature, error) {
+	if err := c.Format(); err != nil {
+		return nil, errors.Wrap(err, "failed to format star file")
+	}
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
-		Name: "load",
-		Load: load,
+		Name: "compile",
 	}
 	reader, err := os.Open(c.starfilePath)
 	if err != nil {
@@ -65,8 +71,13 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 		return nil, errors.Wrap(err, "read starfile")
 	}
 	protoModule := protomodule.NewModule(c.registry)
+	assertModule, err := newAssertModule()
+	if err != nil {
+		return nil, errors.Wrap(err, "new assert module")
+	}
 	globals, err := starlark.ExecFile(thread, c.starfilePath, moduleSource, starlark.StringDict{
 		"proto":   protoModule,
+		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 	})
 	if err != nil {
@@ -85,4 +96,20 @@ func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
 		return starlarktest.LoadAssertModule()
 	}
 	return nil, fmt.Errorf("load not implemented for %s", module)
+}
+
+func newAssertModule() (*starlarkstruct.Module, error) {
+	sd, err := starlarktest.LoadAssertModule()
+	if err != nil {
+		return nil, errors.Wrap(err, "load assert module")
+	}
+	assertVal, ok := sd["assert"]
+	if !ok {
+		return nil, fmt.Errorf("could not find assert value in keys %v", sd.Keys())
+	}
+	assertModule, ok := assertVal.(*starlarkstruct.Module)
+	if !ok {
+		return nil, fmt.Errorf("assertVal incorrect type %T", assertVal)
+	}
+	return assertModule, nil
 }
