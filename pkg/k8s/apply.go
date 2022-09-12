@@ -49,18 +49,27 @@ type kubeClient struct {
 // Returns an object that acts as lekko cli's gateway to kubernetes. Handles
 // initializing the client, and operates on the single given namespace.
 // TODO: handle multiple namespaces in the future?
-func NewKubernetes(kubeConfigPath, k8sNamespace string, cr *gh.ConfigRepo) (*kubeClient, error) {
-	cfg, err := clientcmd.BuildConfigFromFlags("", kubeConfigPath)
+func NewKubernetes(kubeConfigPath string, cr *gh.ConfigRepo) (*kubeClient, error) {
+	if kubeConfigPath == "" {
+		return nil, errors.New("kubeConfigPath not provided")
+	}
+	cfg := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath}, nil)
+	ns, _, err := cfg.Namespace()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get namespace from kube config")
+	}
+	clientCfg, err := cfg.ClientConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "build cfg from flags")
 	}
-	clientset, err := kubernetes.NewForConfig(cfg)
+	clientset, err := kubernetes.NewForConfig(clientCfg)
 	if err != nil {
 		return nil, errors.Wrap(err, "new for config")
 	}
 	return &kubeClient{
 		cs:           clientset,
-		k8sNamespace: k8sNamespace,
+		k8sNamespace: ns,
 		cr:           cr,
 	}, nil
 }
