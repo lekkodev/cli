@@ -27,20 +27,20 @@ import (
 )
 
 const (
-	featureConstructor   starlark.String = "feature"
-	featureVariableName  string          = "result"
-	defaultValueAttrName string          = "default"
-	descriptionAttrName  string          = "description"
-	rulesAttrName        string          = "rules"
+	FeatureConstructor   starlark.String = "feature"
+	FeatureVariableName  string          = "result"
+	DefaultValueAttrName string          = "default"
+	DescriptionAttrName  string          = "description"
+	RulesAttrName        string          = "rules"
 	validatorAttrName    string          = "validator"
 	unitTestsAttrName    string          = "tests"
 )
 
 var (
 	allowedAttrNames map[string]struct{} = map[string]struct{}{
-		defaultValueAttrName: {},
-		descriptionAttrName:  {},
-		rulesAttrName:        {},
+		DefaultValueAttrName: {},
+		DescriptionAttrName:  {},
+		RulesAttrName:        {},
 		validatorAttrName:    {},
 		unitTestsAttrName:    {},
 	}
@@ -50,11 +50,11 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 	if len(args) > 0 {
 		return nil, fmt.Errorf("feature: unexpected positional arguments")
 	}
-	return starlarkstruct.FromKeywords(featureConstructor, kwargs), nil
+	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
 }
 
-type builder interface {
-	build() (*feature.Feature, error)
+type Builder interface {
+	Build() (*feature.Feature, error)
 }
 
 type featureBuilder struct {
@@ -62,20 +62,20 @@ type featureBuilder struct {
 	validator starlark.Callable
 }
 
-func newFeatureBuilder(globals starlark.StringDict) builder {
+func newFeatureBuilder(globals starlark.StringDict) Builder {
 	return &featureBuilder{
 		globals: globals,
 	}
 }
 
-func (fb *featureBuilder) build() (*feature.Feature, error) {
-	resultVal, ok := fb.globals[featureVariableName]
+func (fb *featureBuilder) Build() (*feature.Feature, error) {
+	resultVal, ok := fb.globals[FeatureVariableName]
 	if !ok {
-		return nil, fmt.Errorf("required variable %s is not found", featureVariableName)
+		return nil, fmt.Errorf("required variable %s is not found", FeatureVariableName)
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
-		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", featureConstructor.GoString(), featureVal)
+		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", FeatureConstructor.GoString(), featureVal)
 	}
 	if err := fb.validateFeature(featureVal); err != nil {
 		return nil, errors.Wrap(err, "validate feature")
@@ -144,7 +144,7 @@ func (fb *featureBuilder) validate(value starlark.Value) error {
 }
 
 func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feature, error) {
-	defaultVal, err := featureVal.Attr(defaultValueAttrName)
+	defaultVal, err := featureVal.Attr(DefaultValueAttrName)
 	if err != nil {
 		return nil, errors.Wrap(err, "default attribute")
 	}
@@ -199,7 +199,7 @@ func (fb *featureBuilder) extractJSON(jsonVal starlark.Value) ([]byte, error) {
 }
 
 func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (string, error) {
-	descriptionVal, err := featureVal.Attr(descriptionAttrName)
+	descriptionVal, err := featureVal.Attr(DescriptionAttrName)
 	if err != nil {
 		return "", errors.Wrap(err, "default attribute")
 	}
@@ -211,7 +211,7 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 }
 
 func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
-	rulesVal, err := featureVal.Attr(rulesAttrName)
+	rulesVal, err := featureVal.Attr(RulesAttrName)
 	if err != nil {
 		// Attr returns nil, err when not present, which is terrible.
 		return nil

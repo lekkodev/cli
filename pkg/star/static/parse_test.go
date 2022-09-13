@@ -12,26 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package star
+package static
 
 import (
 	"testing"
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/star"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-const testStar = `
-result = feature(
+const testStar = `result = feature(
     description = "this is a simple feature",
     default = True,
+    rules = [
+        ("age == 10", False),
+        ("city IN ['Rome', 'Milan']", False),
+    ],
 )
 `
 
 func testFile(t *testing.T) *build.File {
-	p := butils.GetParser(inputTypeAuto)
+	p := butils.GetParser(star.InputTypeAuto)
 	file, err := p("test.star", []byte(testStar))
 	require.NoError(t, err, "failed to parse test star file")
 	return file
@@ -39,7 +44,10 @@ func testFile(t *testing.T) *build.File {
 
 func TestStaticBuilder(t *testing.T) {
 	b := newStaticBuilder(testFile(t))
-	f, err := b.build()
+	f, err := b.Build()
 	assert.NoError(t, err)
 	assert.NotNil(t, f)
+	jBytes, err := f.ToJSON(protoregistry.GlobalTypes)
+	require.NoError(t, err)
+	t.Log(string(jBytes))
 }

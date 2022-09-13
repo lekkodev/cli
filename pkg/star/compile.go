@@ -83,7 +83,7 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	f, err := newFeatureBuilder(globals).build()
+	f, err := newFeatureBuilder(globals).Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}

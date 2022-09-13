@@ -31,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/cli/pkg/verify"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -127,7 +128,7 @@ func parseCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
 		Use:   "parse",
-		Short: "parse a starlark file using static analysis",
+		Short: "parse a starlark file using static analysis, and rewrite it",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -136,7 +137,7 @@ func parseCmd() *cobra.Command {
 			if file == "" {
 				return errors.New("no file given")
 			}
-			return star.Parse(wd, filepath.Join(wd, file))
+			return static.Parse(wd, filepath.Join(wd, file))
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "starlark file to walk")
