@@ -44,7 +44,7 @@ func main() {
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(formatCmd())
-	rootCmd.AddCommand(walkCmd())
+	rootCmd.AddCommand(parseCmd())
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
@@ -123,11 +123,11 @@ var compileCmd = &cobra.Command{
 	},
 }
 
-func walkCmd() *cobra.Command {
+func parseCmd() *cobra.Command {
 	var file string
 	cmd := &cobra.Command{
-		Use:   "walk",
-		Short: "walk a starlark file using static analysis",
+		Use:   "parse",
+		Short: "parse a starlark file using static analysis",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -136,7 +136,7 @@ func walkCmd() *cobra.Command {
 			if file == "" {
 				return errors.New("no file given")
 			}
-			return star.Walk(filepath.Join(wd, file))
+			return star.Parse(wd, filepath.Join(wd, file))
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "starlark file to walk")
