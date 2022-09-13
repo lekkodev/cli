@@ -15,15 +15,12 @@
 package generate
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 
@@ -156,23 +153,15 @@ func compileFeature(
 	}
 
 	// Create the json file
-	jBytes, err := protojson.MarshalOptions{
-		Resolver: registry,
-	}.Marshal(fProto)
+	jBytes, err := feature.ProtoToJSON(fProto, registry)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal proto to json")
-	}
-	indentedJBytes := bytes.NewBuffer(nil)
-	// encoding/json provides a deterministic serialization output, ensuring
-	// that indentation always uses the same number of characters.
-	if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
-		return errors.Wrap(err, "failed to indent json")
+		return errors.Wrap(err, "proto to json")
 	}
 	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", ff.Name))
 	if err := cw.MkdirAll(jsonGenPath, 0775); err != nil {
 		return errors.Wrap(err, "failed to make gen json directory")
 	}
-	if err := cw.WriteFile(jsonFile, indentedJBytes.Bytes(), 0600); err != nil {
+	if err := cw.WriteFile(jsonFile, jBytes, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 	// Create the proto file

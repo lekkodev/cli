@@ -15,10 +15,13 @@
 package feature
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 
 	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -160,6 +163,38 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	}
 	ret.Tree = tree
 	return ret, nil
+}
+
+func ProtoToJSON(fProto *lekkov1beta1.Feature, registry *protoregistry.Types) ([]byte, error) {
+	jBytes, err := protojson.MarshalOptions{
+		Resolver: registry,
+	}.Marshal(fProto)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal proto to json")
+	}
+	indentedJBytes := bytes.NewBuffer(nil)
+	// encoding/json provides a deterministic serialization output, ensuring
+	// that indentation always uses the same number of characters.
+	if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
+		return nil, errors.Wrap(err, "failed to indent json")
+	}
+	return indentedJBytes.Bytes(), nil
+}
+
+func (f *Feature) ToJSON(registry *protoregistry.Types) ([]byte, error) {
+	fProto, err := f.ToProto()
+	if err != nil {
+		return nil, errors.Wrap(err, "feature to proto")
+	}
+	return ProtoToJSON(fProto, registry)
+}
+
+func (f *Feature) PrintJSON(registry *protoregistry.Types) {
+	jBytes, err := f.ToJSON(registry)
+	if err != nil {
+		fmt.Printf("failed to convert feature to json: %v\n", err)
+	}
+	fmt.Println(string(jBytes))
 }
 
 func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
