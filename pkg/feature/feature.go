@@ -225,7 +225,3 @@ func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
 	}
 	return nil
 }
-
-func (f *Feature) String() string {
-	return fmt.Sprintf("key: %s\ndescription: %s\nvalue [%T]: %v\nrules: %v", f.Key, f.Description, f.Value, f.Value, f.Rules)
-}

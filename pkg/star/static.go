@@ -29,8 +29,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Parse reads the star file at the given path performs static parsing,
-// converting the feature to our go-native model.
+// Parse reads the star file at the given path and performs
+// static parsing, converting the feature to our go-native model.
 func Parse(root, filename string) error {
 	parser := butils.GetParser(inputTypeAuto)
 	data, err := ioutil.ReadFile(filename)
@@ -64,7 +64,7 @@ type staticBuilder struct {
 	f    *feature.Feature
 }
 
-func newStaticBuilder(file *build.File) *staticBuilder {
+func newStaticBuilder(file *build.File) builder {
 	return &staticBuilder{
 		file: file,
 		f:    &feature.Feature{},
@@ -99,6 +99,8 @@ func (b *staticBuilder) feature() *feature.Feature {
 	return b.f
 }
 
+// Takes an expression that corresponds to the actual feature value
+// (default value or rule value) and converts it to go.
 func (b *staticBuilder) extractFeatureValue(v build.Expr) (interface{}, error) {
 	switch t := v.(type) {
 	case *build.Ident:
@@ -115,6 +117,10 @@ func (b *staticBuilder) extractFeatureValue(v build.Expr) (interface{}, error) {
 	}
 }
 
+// extracts a map of kwargs that are used to construct the resulting
+// feature value. E.g.
+// 		result = feature(description="foo", default=False)
+// has two keys, each with a corresponding build expression.
 func (b *staticBuilder) getFeatureKWArgs() (map[string]build.Expr, error) {
 	ret := make(map[string]build.Expr)
 	for _, expr := range b.file.Stmt {
@@ -126,6 +132,7 @@ func (b *staticBuilder) getFeatureKWArgs() (map[string]build.Expr, error) {
 				if ok && len(rhs.List) > 0 {
 					structName, ok := rhs.X.(*build.Ident)
 					if ok && structName.Name == featureConstructor.GoString() {
+						// we've reached the list of kwarg assignments
 						for _, expr := range rhs.List {
 							assignExpr, ok := expr.(*build.AssignExpr)
 							if ok {

@@ -53,12 +53,16 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 	return starlarkstruct.FromKeywords(featureConstructor, kwargs), nil
 }
 
+type builder interface {
+	build() (*feature.Feature, error)
+}
+
 type featureBuilder struct {
 	globals   starlark.StringDict
 	validator starlark.Callable
 }
 
-func newFeatureBuilder(globals starlark.StringDict) *featureBuilder {
+func newFeatureBuilder(globals starlark.StringDict) builder {
 	return &featureBuilder{
 		globals: globals,
 	}
