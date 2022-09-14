@@ -30,7 +30,7 @@ import (
 )
 
 const (
-	inputTypeAuto string = "auto"
+	InputTypeAuto string = "auto"
 )
 
 type Formatter interface {
@@ -92,7 +92,7 @@ func (f *formatter) Format() error {
 	if err != nil {
 		return errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
-	parser := butils.GetParser(inputTypeAuto)
+	parser := butils.GetParser(InputTypeAuto)
 	bfile, err := parser(f.filePath, data)
 	if err != nil {
 		return errors.Wrap(err, "bparse")
