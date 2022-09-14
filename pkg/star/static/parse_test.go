@@ -43,7 +43,7 @@ func testFile(t *testing.T) *build.File {
 }
 
 func TestStaticBuilder(t *testing.T) {
-	b := newStaticBuilder(testFile(t))
+	b := NewStaticBuilder(testFile(t))
 	f, err := b.Build()
 	assert.NoError(t, err)
 	assert.NotNil(t, f)

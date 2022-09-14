@@ -42,7 +42,7 @@ func Parse(root, filename string) error {
 	if err != nil {
 		return errors.Wrap(err, "parse")
 	}
-	sb := newStaticBuilder(file)
+	sb := NewStaticBuilder(file)
 	f, err := sb.Build()
 	if err != nil {
 		return err
@@ -68,14 +68,14 @@ func Parse(root, filename string) error {
 	return nil
 }
 
-type staticBuilder struct {
+type StaticBuilder struct {
 	file *build.File
 	f    *feature.Feature
 	t    *traverser
 }
 
-func newStaticBuilder(file *build.File) *staticBuilder {
-	b := &staticBuilder{
+func NewStaticBuilder(file *build.File) *StaticBuilder {
+	b := &StaticBuilder{
 		file: file,
 		f:    &feature.Feature{},
 	}
@@ -86,23 +86,23 @@ func newStaticBuilder(file *build.File) *staticBuilder {
 	return b
 }
 
-func (b *staticBuilder) Build() (*feature.Feature, error) {
+func (b *StaticBuilder) Build() (*feature.Feature, error) {
 	if err := b.t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
 	}
 	return b.f, nil
 }
 
-func (b *staticBuilder) format() []byte {
+func (b *StaticBuilder) format() []byte {
 	return b.t.format()
 }
 
-func (b *staticBuilder) description(v *build.StringExpr) error {
+func (b *StaticBuilder) description(v *build.StringExpr) error {
 	b.f.Description = v.Value
 	return nil
 }
 
-func (b *staticBuilder) parseRules(rules []rule) error {
+func (b *StaticBuilder) parseRules(rules []rule) error {
 	for i, r := range rules {
 		rule := &feature.Rule{
 			Condition: r.conditionV.Value,
@@ -122,7 +122,7 @@ func (b *staticBuilder) parseRules(rules []rule) error {
 	return nil
 }
 
-func (b *staticBuilder) extractFeatureValue(v build.Expr) (interface{}, feature.FeatureType, error) {
+func (b *StaticBuilder) extractFeatureValue(v build.Expr) (interface{}, feature.FeatureType, error) {
 	switch t := v.(type) {
 	case *build.Ident:
 		switch t.Name {
@@ -138,7 +138,7 @@ func (b *staticBuilder) extractFeatureValue(v build.Expr) (interface{}, feature.
 	}
 }
 
-func (b *staticBuilder) initFeature(v build.Expr) error {
+func (b *StaticBuilder) initFeature(v build.Expr) error {
 	goVal, featureType, err := b.extractFeatureValue(v)
 	if err != nil {
 		return err
