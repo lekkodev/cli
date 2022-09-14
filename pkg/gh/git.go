@@ -26,6 +26,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
@@ -234,10 +235,23 @@ func (cr *ConfigRepo) checkoutBranch() (string, error) {
 }
 
 func (cr *ConfigRepo) pushLocalBranch(branchName string) error {
-	cmd := exec.Command("git", "push", "--set-upstream", remoteName, branchName)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "git push set upstream")
+	if err := cr.repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		Auth: &http.BasicAuth{
+			Username: cr.Secrets.GetGithubUser(),
+			Password: cr.Secrets.GetGithubToken(),
+		},
+	}); err != nil {
+		return errors.Wrap(err, "push")
+	}
+	// set up tracking in case we need to pull from the
+	// remote branch later
+	if err := cr.repo.CreateBranch(&config.Branch{
+		Name:   branchName,
+		Remote: remoteName,
+		Merge:  plumbing.NewBranchReferenceName(branchName),
+	}); err != nil {
+		return errors.Wrap(err, "create branch tracking configuration")
 	}
 	fmt.Printf("Pushed local branch %q to remote %q\n", branchName, remoteName)
 	return nil
