@@ -158,30 +158,43 @@ func (cr *ConfigRepo) Merge(prNum int) error {
 	if err != nil {
 		return errors.Wrap(err, "head")
 	}
+	localBranchRef := head.Name()
 
 	if err := cr.repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
-		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", head.Name()))},
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
 		Auth: &http.BasicAuth{
 			Username: cr.Secrets.GetGithubUser(),
 			Password: cr.Secrets.GetGithubToken(),
 		},
 	}); err != nil {
-		return fmt.Errorf("delete remote branch name %s: %w", head.Name(), err)
+		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
 	}
-	fmt.Printf("Successfully deleted remote branch %s\n", head.Name())
+	fmt.Printf("Successfully deleted remote branch %s\n", localBranchRef)
 
-	if err := cr.repo.DeleteBranch(head.Name().Short()); err != nil {
-		return fmt.Errorf("delete local branch name %s: %w", head.Name().Short(), err)
+	if err := cr.wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(mainBranchName),
+	}); err != nil {
+		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
 	}
-	fmt.Printf("Successfully deleted local branch %s\n", head.Name().Short())
-
-	// cmd := exec.Command("gh", "pr", "merge", "-sd")
-	// cmd.Stderr = os.Stderr
-	// cmd.Stdout = os.Stdout
-	// if err := cmd.Run(); err != nil {
-	// 	return errors.Wrap(err, "gh pr merge")
-	// }
+	fmt.Printf("Checked out local branch %s\n", mainBranchName)
+	if err := cr.repo.DeleteBranch(localBranchRef.Short()); err != nil {
+		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
+	}
+	if err := cr.repo.Storer.RemoveReference(localBranchRef); err != nil {
+		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
+	}
+	fmt.Printf("Successfully deleted local branch %s\n", localBranchRef.Short())
+	if err := cr.wt.Pull(&git.PullOptions{
+		RemoteName: remoteName,
+		Auth: &http.BasicAuth{
+			Username: cr.Secrets.GetGithubUser(),
+			Password: cr.Secrets.GetGithubToken(),
+		},
+	}); err != nil {
+		return errors.Wrap(err, "failed to pull main")
+	}
+	fmt.Printf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
 	return nil
 }
 
