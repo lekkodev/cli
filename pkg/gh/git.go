@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -138,13 +136,52 @@ func (cr *ConfigRepo) Review(ctx context.Context) error {
 	return nil
 }
 
-func (cr *ConfigRepo) Merge() error {
-	cmd := exec.Command("gh", "pr", "merge", "-sd")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "gh pr merge")
+func (cr *ConfigRepo) Merge(prNum int) error {
+	ctx := context.Background()
+	owner, repo, err := cr.getOwnerRepo()
+	if err != nil {
+		return errors.Wrap(err, "get owner repo")
 	}
+	result, resp, err := cr.ghCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
+		MergeMethod: "squash",
+	})
+	if err != nil {
+		return fmt.Errorf("ghCli merge pr %v: %w", resp.Status, err)
+	}
+	if result.GetMerged() {
+		fmt.Printf("PR #%d: %s\n", prNum, result.GetMessage())
+	} else {
+		return errors.New("Failed to merge pull request.")
+	}
+
+	head, err := cr.repo.Head()
+	if err != nil {
+		return errors.Wrap(err, "head")
+	}
+
+	if err := cr.repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", head.Name()))},
+		Auth: &http.BasicAuth{
+			Username: cr.Secrets.GetGithubUser(),
+			Password: cr.Secrets.GetGithubToken(),
+		},
+	}); err != nil {
+		return fmt.Errorf("delete remote branch name %s: %w", head.Name(), err)
+	}
+	fmt.Printf("Successfully deleted remote branch %s\n", head.Name())
+
+	if err := cr.repo.DeleteBranch(head.Name().Short()); err != nil {
+		return fmt.Errorf("delete local branch name %s: %w", head.Name().Short(), err)
+	}
+	fmt.Printf("Successfully deleted local branch %s\n", head.Name().Short())
+
+	// cmd := exec.Command("gh", "pr", "merge", "-sd")
+	// cmd.Stderr = os.Stderr
+	// cmd.Stdout = os.Stdout
+	// if err := cmd.Run(); err != nil {
+	// 	return errors.Wrap(err, "gh pr merge")
+	// }
 	return nil
 }
 
