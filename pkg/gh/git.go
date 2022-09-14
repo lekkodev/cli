@@ -18,8 +18,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -138,13 +136,65 @@ func (cr *ConfigRepo) Review(ctx context.Context) error {
 	return nil
 }
 
-func (cr *ConfigRepo) Merge() error {
-	cmd := exec.Command("gh", "pr", "merge", "-sd")
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	if err := cmd.Run(); err != nil {
-		return errors.Wrap(err, "gh pr merge")
+func (cr *ConfigRepo) Merge(prNum int) error {
+	ctx := context.Background()
+	owner, repo, err := cr.getOwnerRepo()
+	if err != nil {
+		return errors.Wrap(err, "get owner repo")
 	}
+	result, resp, err := cr.ghCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
+		MergeMethod: "squash",
+	})
+	if err != nil {
+		return fmt.Errorf("ghCli merge pr %v: %w", resp.Status, err)
+	}
+	if result.GetMerged() {
+		fmt.Printf("PR #%d: %s\n", prNum, result.GetMessage())
+	} else {
+		return errors.New("Failed to merge pull request.")
+	}
+
+	head, err := cr.repo.Head()
+	if err != nil {
+		return errors.Wrap(err, "head")
+	}
+	localBranchRef := head.Name()
+
+	if err := cr.repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
+		Auth: &http.BasicAuth{
+			Username: cr.Secrets.GetGithubUser(),
+			Password: cr.Secrets.GetGithubToken(),
+		},
+	}); err != nil {
+		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
+	}
+	fmt.Printf("Successfully deleted remote branch %s\n", localBranchRef)
+
+	if err := cr.wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(mainBranchName),
+	}); err != nil {
+		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+	}
+	fmt.Printf("Checked out local branch %s\n", mainBranchName)
+	if err := cr.repo.DeleteBranch(localBranchRef.Short()); err != nil {
+		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
+	}
+	if err := cr.repo.Storer.RemoveReference(localBranchRef); err != nil {
+		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
+	}
+	fmt.Printf("Successfully deleted local branch %s\n", localBranchRef.Short())
+	if err := cr.wt.Pull(&git.PullOptions{
+		RemoteName: remoteName,
+		Auth: &http.BasicAuth{
+			Username: cr.Secrets.GetGithubUser(),
+			Password: cr.Secrets.GetGithubToken(),
+		},
+	}); err != nil {
+		return errors.Wrap(err, "failed to pull main")
+	}
+	fmt.Printf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
 	return nil
 }
 

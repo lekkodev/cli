@@ -22,6 +22,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/lekkodev/cli/pkg/eval"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -166,8 +167,9 @@ var reviewCmd = &cobra.Command{
 }
 
 var mergeCmd = &cobra.Command{
-	Use:   "merge",
+	Use:   "merge pr-number",
 	Short: "merges a pr for the current branch",
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -182,8 +184,11 @@ var mergeCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 		defer cr.Close()
-
-		return cr.Merge()
+		prNum, err := strconv.Atoi(args[0])
+		if err != nil {
+			return errors.Wrap(err, "pr-number arg")
+		}
+		return cr.Merge(prNum)
 	},
 }
 
