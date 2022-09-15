@@ -79,7 +79,7 @@ func compileNamespace(
 	nsMD *metadata.NamespaceConfigRepoMetadata,
 	featureOverride string,
 ) error {
-	if _, ok := map[string]struct{}{"v1beta2": {}, "v1beta3": {}}[nsMD.Version]; !ok {
+	if _, ok := map[string]struct{}{"v1beta3": {}}[nsMD.Version]; !ok {
 		fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", nsMD.Name, nsMD.Version)
 		return nil
 	}

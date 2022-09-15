@@ -22,10 +22,8 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,18 +31,6 @@ import (
 // type.
 func ParseFeature(rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
 	switch nsMD.Version {
-	case "v1beta1":
-		var f rulesv1beta1.Feature
-		contents, err := provider.GetFileContents(context.TODO(), filepath.Join(rootPath, nsMD.Name, featureFile.CompiledJSONFileName))
-		if err != nil {
-			return nil, err
-		}
-		if err := protojson.Unmarshal(contents, &f); err != nil {
-			return nil, err
-		}
-		return feature.NewV1Beta1(&f), nil
-	case "v1beta2":
-		fallthrough
 	case "v1beta3":
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(context.TODO(), filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
@@ -54,7 +40,7 @@ func ParseFeature(rootPath string, featureFile feature.FeatureFile, nsMD *metada
 		if err := proto.Unmarshal(contents, &f); err != nil {
 			return nil, err
 		}
-		return feature.NewV1Beta2(&f), nil
+		return feature.NewV1Beta3(&f), nil
 	default:
 		return nil, fmt.Errorf("unknown version when parsing feature: %s", nsMD.Version)
 	}

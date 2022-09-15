@@ -22,7 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func EvaluateFeatureV1Beta2(feature *featurev1beta1.Tree, context map[string]interface{}) (*anypb.Any, error) {
+func EvaluateFeatureV1Beta3(feature *featurev1beta1.Tree, context map[string]interface{}) (*anypb.Any, error) {
 	for _, constraint := range feature.Constraints {
 		retVal, err := traverseConstraint(constraint, context)
 		if err != nil {

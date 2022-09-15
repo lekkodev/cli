@@ -23,12 +23,9 @@ import (
 	"strings"
 
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/rules"
 	"github.com/pkg/errors"
@@ -42,59 +39,23 @@ type EvaluableFeature interface {
 	Evaluate(evalContext map[string]interface{}) (*anypb.Any, error)
 }
 
-func NewV1Beta1(f *rulesv1beta1.Feature) EvaluableFeature {
-	return &v1beta1{f}
-}
-
-type v1beta1 struct {
-	*rulesv1beta1.Feature
-}
-
-func (v1beta1 *v1beta1) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
-	ctxMap, err := rules.ContextHelper(evalContext)
-	if err != nil {
-		return nil, err
-	}
-	protobufVal, err := rules.EvaluateFeatureV1Beta1(v1beta1.Feature, ctxMap)
-	if err != nil {
-		return nil, err
-	}
-	switch v := protobufVal.GetKind().(type) {
-	case *structpb.Value_NumberValue:
-		return anypb.New(&wrapperspb.DoubleValue{Value: v.NumberValue})
-	case *structpb.Value_StringValue:
-		return anypb.New(&wrapperspb.StringValue{Value: v.StringValue})
-	case *structpb.Value_BoolValue:
-		return anypb.New(&wrapperspb.BoolValue{Value: v.BoolValue})
-	case *structpb.Value_ListValue:
-		return nil, fmt.Errorf("invalid list value: %v", v)
-	case *structpb.Value_StructValue:
-		// If we ever wanted to support complex types in v1beta1 we would need to change this.
-		return nil, fmt.Errorf("invalid struct value: %v", v)
-	default:
-		return nil, fmt.Errorf("invalid unknown type: %v", v)
-	}
-}
-
-type v1beta2 struct {
+type v1beta3 struct {
 	*featurev1beta1.Feature
 }
 
-func NewV1Beta2(f *featurev1beta1.Feature) EvaluableFeature {
-	return &v1beta2{f}
+func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
+	return &v1beta3{f}
 }
 
 // TODO: pre-compute the ruleslang tree so that we:
 // 1) error on verify time if things aren't valid.
 // 2) pre-compute antlr trees.
-func (v1beta2 *v1beta2) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
-	return rules.EvaluateFeatureV1Beta2(v1beta2.Tree, evalContext)
+func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
+	return rules.EvaluateFeatureV1Beta3(v1b3.Tree, evalContext)
 }
 
 // FeatureFile is a parsed feature from an on desk representation.
 // This is intended to remain stable across feature versions.
-// For now, v1beta1 just has a CompiledJSONFileName and
-// v1beta2 has other files.
 type FeatureFile struct {
 	Name string
 	// Filename of the featureName.star file.
@@ -206,11 +167,7 @@ func GroupFeatureFiles(
 
 func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
-	case "v1beta1":
-		if len(f.CompiledJSONFileName) == 0 {
-			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
-		}
-	case "v1beta2":
+	case "v1beta3":
 		if len(f.CompiledJSONFileName) == 0 {
 			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
 		}
@@ -220,6 +177,8 @@ func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) 
 		if len(f.StarlarkFileName) == 0 {
 			return fmt.Errorf("empty starlark file for feature: %s", f.Name)
 		}
+	default:
+		return fmt.Errorf("unknown namespace version %s", nsMD.Version)
 	}
 	return nil
 }
