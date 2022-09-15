@@ -86,7 +86,7 @@ func TestEvaluateFeatureBoolBeta2(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		val, err := rules.EvaluateFeatureV1Beta2(tc.feature.Tree, tc.context)
+		val, err := rules.EvaluateFeatureV1Beta3(tc.feature.Tree, tc.context)
 		if tc.testErr != nil {
 			require.Error(t, err)
 		} else {

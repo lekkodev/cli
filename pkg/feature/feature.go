@@ -202,7 +202,7 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &v1beta2{res}, nil
+	return &v1beta3{res}, nil
 }
 
 func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
