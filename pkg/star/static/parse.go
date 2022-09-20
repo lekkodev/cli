@@ -52,7 +52,7 @@ func Parse(root, filename string) error {
 	if err != nil {
 		return errors.Wrap(err, "parse root metadata")
 	}
-	registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory)
+	registry, err := star.BuildDynamicTypeRegistryFromFile(rootMD.ProtoDirectory)
 	if err != nil {
 		return errors.Wrap(err, "build dynamic type registry")
 	}

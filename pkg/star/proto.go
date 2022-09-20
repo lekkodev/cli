@@ -40,7 +40,7 @@ For other options, see the installation page here: https://docs.buf.build/instal
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
-func BuildDynamicTypeRegistry(protoDir string) (*protoregistry.Types, error) {
+func BuildDynamicTypeRegistryFromFile(protoDir string) (*protoregistry.Types, error) {
 	image, err := newBufImage(protoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
@@ -61,6 +61,10 @@ func BuildDynamicTypeRegistry(protoDir string) (*protoregistry.Types, error) {
 	}
 	return filesToTypes(files)
 }
+
+// func BuildDynamicTypeRegistry(image []byte) (*protoregistry.Types, error) {
+
+// }
 
 func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	// Start from an empty type registry. All user-defined types

@@ -34,7 +34,7 @@ func Verify(rootPath string) error {
 	if err != nil {
 		return errors.Wrap(err, "parse full config repo metadata")
 	}
-	registry, err := star.BuildDynamicTypeRegistry(filepath.Join(rootPath, rootMD.ProtoDirectory))
+	registry, err := star.BuildDynamicTypeRegistryFromFile(filepath.Join(rootPath, rootMD.ProtoDirectory))
 	if err != nil {
 		return errors.Wrap(err, "failed to build dynamic proto registry")
 	}

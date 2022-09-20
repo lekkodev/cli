@@ -273,7 +273,7 @@ var evalCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "failed to parse config repo metadata")
 		}
-		registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory)
+		registry, err := star.BuildDynamicTypeRegistryFromFile(rootMD.ProtoDirectory)
 		if err != nil {
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}
