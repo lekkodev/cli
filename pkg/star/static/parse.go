@@ -16,14 +16,10 @@ package static
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	"path/filepath"
 	"strings"
 
-	"github.com/bazelbuild/buildtools/build"
-	butils "github.com/bazelbuild/buildtools/buildifier/utils"
-	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
@@ -33,17 +29,12 @@ import (
 // Parse reads the star file at the given path and performs
 // static parsing, converting the feature to our go-native model.
 func Parse(root, filename string) error {
-	parser := butils.GetParser(star.InputTypeAuto)
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return errors.Wrap(err, "read file")
 	}
-	file, err := parser(filename, data)
-	if err != nil {
-		return errors.Wrap(err, "parse")
-	}
-	sb := NewStaticBuilder(file)
-	f, err := sb.Build()
+	w := &walker{filename: filename, starBytes: data}
+	f, err := w.Build()
 	if err != nil {
 		return err
 	}
@@ -60,98 +51,13 @@ func Parse(root, filename string) error {
 	f.PrintJSON(registry)
 	// Rewrite the bytes to the starfile path, based on the parse AST.
 	// This is just an illustration, but in the future we could modify
-	// the AST and use the following code to write it out.
-	bytes := sb.format()
+	// the feature and use the following code to write it out.
+	bytes, err := w.Mutate(f)
+	if err != nil {
+		return errors.Wrap(err, "mutate")
+	}
 	if err := ioutil.WriteFile(filename, bytes, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
-	}
-	return nil
-}
-
-type StaticBuilder struct {
-	file *build.File
-	f    *feature.Feature
-	t    *traverser
-}
-
-func NewStaticBuilder(file *build.File) *StaticBuilder {
-	b := &StaticBuilder{
-		file: file,
-		f:    &feature.Feature{},
-	}
-	b.t = newTraverser(b.file).
-		withDefaultFn(b.initFeature).
-		withDescriptionFn(b.description).
-		withRulesFn(b.parseRules)
-	return b
-}
-
-func (b *StaticBuilder) Build() (*feature.Feature, error) {
-	if err := b.t.traverse(); err != nil {
-		return nil, errors.Wrap(err, "traverse")
-	}
-	return b.f, nil
-}
-
-func (b *StaticBuilder) format() []byte {
-	return b.t.format()
-}
-
-func (b *StaticBuilder) description(v *build.StringExpr) error {
-	b.f.Description = v.Value
-	return nil
-}
-
-func (b *StaticBuilder) parseRules(rules []rule) error {
-	for i, r := range rules {
-		rule := &feature.Rule{
-			Condition: r.conditionV.Value,
-		}
-		goVal, featureType, err := b.extractFeatureValue(r.v)
-		if err != nil {
-			return fmt.Errorf("rule #%d: extract value: %w", i, err)
-		}
-		switch featureType {
-		case feature.FeatureTypeBool:
-			rule.Value = goVal
-		default:
-			return fmt.Errorf("rule #%d: unsupported feature type %s", i, featureType)
-		}
-		b.f.Rules = append(b.f.Rules, rule)
-	}
-	return nil
-}
-
-func (b *StaticBuilder) extractFeatureValue(v build.Expr) (interface{}, feature.FeatureType, error) {
-	switch t := v.(type) {
-	case *build.Ident:
-		switch t.Name {
-		case "True":
-			return true, feature.FeatureTypeBool, nil
-		case "False":
-			return false, feature.FeatureTypeBool, nil
-		default:
-			return nil, "", fmt.Errorf("unsupported identifier name %s", t.Name)
-		}
-	default:
-		return nil, "", fmt.Errorf("unsupported type %T", v)
-	}
-}
-
-func (b *StaticBuilder) initFeature(v build.Expr) error {
-	goVal, featureType, err := b.extractFeatureValue(v)
-	if err != nil {
-		return err
-	}
-	switch featureType {
-	case feature.FeatureTypeBool:
-		boolVal, ok := goVal.(bool)
-		if !ok {
-			return fmt.Errorf("expected bool, got %T", goVal)
-		}
-		b.f = feature.NewBoolFeature(boolVal)
-	default:
-		return fmt.Errorf("unsupported feature type %s", featureType)
 	}
 	return nil
 }

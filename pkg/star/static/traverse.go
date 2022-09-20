@@ -24,16 +24,11 @@ import (
 
 func defaultNoop(v build.Expr) error            { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
-func rulesNoop(rules []rule) error              { return nil }
-
-type rule struct {
-	conditionV *build.StringExpr
-	v          build.Expr
-}
+func rulesNoop(rules *rulesWrapper) error       { return nil }
 
 type defaultFn func(v build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
-type rulesFn func(rules []rule) error
+type rulesFn func(rules *rulesWrapper) error
 
 // Traverses a lekko starlark file, running methods on various
 // components of the file. Methods can be provided to read the
@@ -108,28 +103,24 @@ func (t *traverser) parseRules(v build.Expr) error {
 	if !ok {
 		return fmt.Errorf("expecting list, got %T", v)
 	}
-	rules := make([]rule, len(listV.List))
+	rulesW := &rulesWrapper{}
 	for i, elemV := range listV.List {
-		tupleV, ok := elemV.(*build.TupleExpr)
-		if !ok {
-			return fmt.Errorf("rule #%d: expecting tuple, got %T", i, elemV)
+		r, err := newRule(elemV)
+		if err != nil {
+			return errors.Wrapf(err, "rule %d", i)
 		}
-		if len(tupleV.List) != 2 {
-			return fmt.Errorf("rule #%d: expecting tuple of length 2, got length %d", i, len(tupleV.List))
-		}
-		conditionV := tupleV.List[0]
-		conditionStringV, ok := conditionV.(*build.StringExpr)
-		if !ok {
-			return fmt.Errorf("rule #%d: expecting condition string, got %T", i, conditionV)
-		}
-		rules[i] = rule{
-			conditionV: conditionStringV,
-			v:          tupleV.List[1],
-		}
+		rulesW.rules = append(rulesW.rules, *r)
 	}
-	if err := t.rulesFn(rules); err != nil {
+	if err := t.rulesFn(rulesW); err != nil {
 		return errors.Wrap(err, "rules fn")
 	}
+
+	// Now, use the updated rules and put them back in the AST
+	var newList []build.Expr
+	for _, rule := range rulesW.rules {
+		newList = append(newList, rule.toExpr())
+	}
+	listV.List = newList
 	return nil
 }
 
@@ -171,4 +162,51 @@ func (t *traverser) getFeatureKWArgs() (map[string]build.Expr, error) {
 
 func (t *traverser) format() []byte {
 	return build.FormatWithoutRewriting(t.f)
+}
+
+type rulesWrapper struct {
+	rules []rule
+}
+
+type rule struct {
+	conditionV *build.StringExpr
+	v          build.Expr
+}
+
+func newRule(li build.Expr) (*rule, error) {
+	tupleV, ok := li.(*build.TupleExpr)
+	if !ok {
+		return nil, fmt.Errorf("expecting tuple, got %T", li)
+	}
+	if len(tupleV.List) != 2 {
+		return nil, fmt.Errorf("expecting tuple of length 2, got length %d", len(tupleV.List))
+	}
+	conditionV := tupleV.List[0]
+	conditionStringV, ok := conditionV.(*build.StringExpr)
+	if !ok {
+		return nil, fmt.Errorf("expecting condition string, got %T", conditionV)
+	}
+	return &rule{
+		conditionV: conditionStringV,
+		v:          tupleV.List[1],
+	}, nil
+}
+
+func (r *rule) toExpr() build.Expr {
+	return &build.TupleExpr{
+		List: []build.Expr{r.conditionV, r.v},
+		// TODO: expose the following fields in the mutator to make them round-trip safe
+		Comments: build.Comments{
+			Before: nil,
+			Suffix: nil,
+			After:  nil,
+		},
+		NoBrackets:     false,
+		ForceCompact:   true,
+		ForceMultiLine: false,
+	}
+}
+
+func (r *rule) String() string {
+	return fmt.Sprintf("c: '%s', v: '%v'", r.conditionV.Value, r.v)
 }
