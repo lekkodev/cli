@@ -40,18 +40,10 @@ For other options, see the installation page here: https://docs.buf.build/instal
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
-func BuildDynamicTypeRegistry(protoDir string) (*protoregistry.Types, error) {
-	image, err := newBufImage(protoDir)
-	if err != nil {
-		return nil, errors.Wrap(err, "new buf image")
-	}
-	bytes, err := os.ReadFile(image.filename)
-	if err != nil {
-		return nil, errors.Wrap(err, "os.readfile image bin")
-	}
+func BuildDynamicTypeRegistry(image []byte) (*protoregistry.Types, error) {
 	fds := &descriptorpb.FileDescriptorSet{}
 
-	if err := proto.Unmarshal(bytes, fds); err != nil {
+	if err := proto.Unmarshal(image, fds); err != nil {
 		return nil, errors.Wrap(err, "proto unmarshal")
 	}
 	files, err := protodesc.NewFiles(fds)
@@ -60,6 +52,18 @@ func BuildDynamicTypeRegistry(protoDir string) (*protoregistry.Types, error) {
 		return nil, errors.Wrap(err, "protodesc.NewFiles")
 	}
 	return filesToTypes(files)
+}
+
+func BuildDynamicTypeRegistryFromFile(protoDir string) (*protoregistry.Types, error) {
+	image, err := newBufImage(protoDir)
+	if err != nil {
+		return nil, errors.Wrap(err, "new buf image")
+	}
+	bytes, err := os.ReadFile(image.filename)
+	if err != nil {
+		return nil, errors.Wrap(err, "os.readfile image bin")
+	}
+	return BuildDynamicTypeRegistry(bytes)
 }
 
 func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {

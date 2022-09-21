@@ -145,7 +145,7 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	}
 	defaultAny, err := valToAny(f.Value)
 	if err != nil {
-		return nil, errors.Wrap(err, "default value to any")
+		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
 	tree := &lekkov1beta1.Tree{
 		Default: defaultAny,
