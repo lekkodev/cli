@@ -64,23 +64,23 @@ func NewFS(path string) (*Repo, error) {
 	return cr, nil
 }
 
-func (cr *Repo) CheckGithubAuth(ctx context.Context) error {
-	if cr.User == "" || cr.Token == "" {
+func (r *Repo) CheckGithubAuth(ctx context.Context) error {
+	if r.User == "" || r.Token == "" {
 		return fmt.Errorf("user unauthenticated")
 	}
-	if _, err := cr.GhCli.GetUserLogin(ctx); err != nil {
+	if _, err := r.GhCli.GetUserLogin(ctx); err != nil {
 		return errors.Wrap(err, "get user login")
 	}
 	return nil
 }
 
-func (cr *Repo) WorkingDirectoryHash() (string, error) {
-	hash, err := cr.Repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+func (r *Repo) WorkingDirectoryHash() (string, error) {
+	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
 	if err != nil {
 		return "", errors.Wrap(err, "resolve revision")
 	}
 	var suffix string
-	clean, err := cr.wdClean()
+	clean, err := r.wdClean()
 	if err != nil {
 		return "", errors.Wrap(err, "wd clean")
 	}
@@ -90,24 +90,24 @@ func (cr *Repo) WorkingDirectoryHash() (string, error) {
 	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
 }
 
-func (cr *Repo) isMain() (bool, error) {
-	h, err := cr.Repo.Head()
+func (r *Repo) isMain() (bool, error) {
+	h, err := r.Repo.Head()
 	if err != nil {
 		return false, errors.Wrap(err, "head")
 	}
 	return h.Name().IsBranch() && h.Name().Short() == mainBranchName, nil
 }
 
-func (cr *Repo) BranchName() (string, error) {
-	h, err := cr.Repo.Head()
+func (r *Repo) BranchName() (string, error) {
+	h, err := r.Repo.Head()
 	if err != nil {
 		return "", errors.Wrap(err, "head")
 	}
 	return h.Name().Short(), nil
 }
 
-func (cr *Repo) getOwnerRepo() (string, string, error) {
-	rm, err := cr.Repo.Remote(remoteName)
+func (r *Repo) getOwnerRepo() (string, string, error) {
+	rm, err := r.Repo.Remote(remoteName)
 	if err != nil {
 		return "", "", errors.Wrap(err, "remote")
 	}

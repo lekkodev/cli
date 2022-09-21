@@ -158,12 +158,12 @@ var reviewCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		cr, err := repo.NewFS(wd)
+		r, err := repo.NewFS(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
 
-		return cr.Review(ctx)
+		return r.Review(ctx)
 	},
 }
 
@@ -179,7 +179,7 @@ var mergeCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		cr, err := repo.NewFS(wd)
+		r, err := repo.NewFS(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -187,7 +187,7 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
 		}
-		return cr.Merge(prNum)
+		return r.Merge(prNum)
 	},
 }
 
@@ -360,12 +360,12 @@ func applyCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			cr, err := repo.NewFS(wd)
+			r, err := repo.NewFS(wd)
 			if err != nil {
 				return err
 			}
 
-			kube, err := k8s.NewKubernetes(kubeConfig, cr)
+			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
