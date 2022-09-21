@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gh
+package repo
 
 import (
 	"context"
@@ -26,72 +26,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-github/v47/github"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
-	giturls "github.com/whilp/git-urls"
-	"golang.org/x/oauth2"
 )
 
-const (
-	mainBranchName = "main"
-	remoteName     = "origin"
-)
-
-// Abstraction around git and github operations associated with the lekko configuration repo.
-type ConfigRepo struct {
-	Secrets metadata.Secrets
-
-	repo  *git.Repository
-	wt    *git.Worktree
-	ghCli *github.Client
-}
-
-func New(ctx context.Context, path string) (*ConfigRepo, error) {
-	repo, err := git.PlainOpen(path)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to open git repo")
-	}
-	wt, err := repo.Worktree()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get work tree")
-	}
-	secrets := metadata.NewSecretsOrFail()
-	cr := &ConfigRepo{
-		repo:    repo,
-		wt:      wt,
-		Secrets: secrets,
-	}
-	cr.mkGhCli(ctx)
-	return cr, nil
-}
-
-func (cr *ConfigRepo) mkGhCli(ctx context.Context) {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: cr.Secrets.GetGithubToken()})
-	tc := oauth2.NewClient(ctx, ts)
-	cr.ghCli = github.NewClient(tc)
-}
-
-func (cr *ConfigRepo) CheckGithubAuth(ctx context.Context) error {
-	if !cr.Secrets.HasGithubToken() {
-		fmt.Println(metadata.AuthenticateGituhubMessage)
-		return errors.New("user unauthenticated")
-	}
-	_, resp, err := cr.ghCli.Users.Get(ctx, "")
-	if err != nil {
-		return fmt.Errorf("github auth check failed [%v]: %w", resp, err)
-	}
-	return nil
-}
-
-func (cr *ConfigRepo) Close() {
-	if err := cr.Secrets.Close(); err != nil {
-		log.Printf("error closing secrets: %v\n", err)
-	}
-}
-
-func (cr *ConfigRepo) Review(ctx context.Context) error {
+func (cr *Repo) Review(ctx context.Context) error {
 	if err := cr.CheckGithubAuth(ctx); err != nil {
-		return err
+		return errors.Wrap(err, "check github auth")
 	}
 	isMain, err := cr.isMain()
 	if err != nil {
@@ -136,8 +76,11 @@ func (cr *ConfigRepo) Review(ctx context.Context) error {
 	return nil
 }
 
-func (cr *ConfigRepo) Merge(prNum int) error {
+func (cr *Repo) Merge(prNum int) error {
 	ctx := context.Background()
+	if err := cr.CheckGithubAuth(ctx); err != nil {
+		return errors.Wrap(err, "check github auth")
+	}
 	owner, repo, err := cr.getOwnerRepo()
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
@@ -164,8 +107,8 @@ func (cr *ConfigRepo) Merge(prNum int) error {
 		RemoteName: remoteName,
 		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
 		Auth: &http.BasicAuth{
-			Username: cr.Secrets.GetGithubUser(),
-			Password: cr.Secrets.GetGithubToken(),
+			Username: cr.User,
+			Password: cr.token,
 		},
 	}); err != nil {
 		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
@@ -188,8 +131,8 @@ func (cr *ConfigRepo) Merge(prNum int) error {
 	if err := cr.wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
-			Username: cr.Secrets.GetGithubUser(),
-			Password: cr.Secrets.GetGithubToken(),
+			Username: cr.User,
+			Password: cr.token,
 		},
 	}); err != nil {
 		return errors.Wrap(err, "failed to pull main")
@@ -198,58 +141,7 @@ func (cr *ConfigRepo) Merge(prNum int) error {
 	return nil
 }
 
-func (cr *ConfigRepo) WorkingDirectoryHash() (string, error) {
-	hash, err := cr.repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
-	if err != nil {
-		return "", errors.Wrap(err, "resolve revision")
-	}
-	var suffix string
-	clean, err := cr.wdClean()
-	if err != nil {
-		return "", errors.Wrap(err, "wd clean")
-	}
-	if !clean {
-		suffix = "-dirty"
-	}
-	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
-}
-
-func (cr *ConfigRepo) isMain() (bool, error) {
-	h, err := cr.repo.Head()
-	if err != nil {
-		return false, errors.Wrap(err, "head")
-	}
-	return h.Name().IsBranch() && h.Name().Short() == mainBranchName, nil
-}
-
-func (cr *ConfigRepo) BranchName() (string, error) {
-	h, err := cr.repo.Head()
-	if err != nil {
-		return "", errors.Wrap(err, "head")
-	}
-	return h.Name().Short(), nil
-}
-
-func (cr *ConfigRepo) getOwnerRepo() (string, string, error) {
-	rm, err := cr.repo.Remote(remoteName)
-	if err != nil {
-		return "", "", errors.Wrap(err, "remote")
-	}
-	if len(rm.Config().URLs) == 0 {
-		return "", "", errors.Wrap(err, "remote has no URLs")
-	}
-	u, err := giturls.Parse(rm.Config().URLs[0])
-	if err != nil {
-		return "", "", errors.Wrap(err, "url parse")
-	}
-	parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3)
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid path: %s", u.Path)
-	}
-	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
-}
-
-func (cr *ConfigRepo) wdClean() (bool, error) {
+func (cr *Repo) wdClean() (bool, error) {
 	st, err := cr.wt.Status()
 	if err != nil {
 		return false, errors.Wrap(err, "status")
@@ -257,7 +149,7 @@ func (cr *ConfigRepo) wdClean() (bool, error) {
 	return st.IsClean(), nil
 }
 
-func (cr *ConfigRepo) genBranchName() (string, error) {
+func (cr *Repo) genBranchName() (string, error) {
 	cfg, err := config.LoadConfig(config.GlobalScope)
 	if err != nil {
 		return "", errors.Wrap(err, "load global config")
@@ -269,7 +161,7 @@ func (cr *ConfigRepo) genBranchName() (string, error) {
 	return fmt.Sprintf("%s-review-%d", user, time.Now().Nanosecond()), nil
 }
 
-func (cr *ConfigRepo) checkoutBranch() (string, error) {
+func (cr *Repo) checkoutBranch() (string, error) {
 	branchName, err := cr.genBranchName()
 	if err != nil {
 		return "", errors.Wrap(err, "gen branch name")
@@ -284,12 +176,12 @@ func (cr *ConfigRepo) checkoutBranch() (string, error) {
 	return branchName, nil
 }
 
-func (cr *ConfigRepo) pushLocalBranch(branchName string) error {
+func (cr *Repo) pushLocalBranch(branchName string) error {
 	if err := cr.repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
-			Username: cr.Secrets.GetGithubUser(),
-			Password: cr.Secrets.GetGithubToken(),
+			Username: cr.User,
+			Password: cr.token,
 		},
 	}); err != nil {
 		return errors.Wrap(err, "push")
@@ -307,7 +199,7 @@ func (cr *ConfigRepo) pushLocalBranch(branchName string) error {
 	return nil
 }
 
-func (cr *ConfigRepo) createPR(ctx context.Context, branchName string) error {
+func (cr *Repo) createPR(ctx context.Context, branchName string) error {
 	owner, repo, err := cr.getOwnerRepo()
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
@@ -323,6 +215,7 @@ func (cr *ConfigRepo) createPR(ctx context.Context, branchName string) error {
 	fmt.Printf("Created PR:\n\t%s\n", pr.GetHTMLURL())
 	return nil
 }
+
 func strPtr(s string) *string {
 	return &s
 }

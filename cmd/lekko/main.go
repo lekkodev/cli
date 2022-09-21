@@ -31,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/cli/pkg/verify"
@@ -157,7 +158,7 @@ var reviewCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		cr, err := gh.New(ctx, wd)
+		cr, err := repo.NewFS(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -178,12 +179,10 @@ var mergeCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
+		cr, err := repo.NewFS(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-		defer cr.Close()
 		prNum, err := strconv.Atoi(args[0])
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
@@ -201,18 +200,9 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		return cr.Login(ctx)
+		auth := gh.NewAuthFS()
+		defer auth.Close()
+		return auth.Login(context.Background())
 	},
 }
 
@@ -220,18 +210,9 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "log out of github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		return cr.Logout(ctx)
+		auth := gh.NewAuthFS()
+		defer auth.Close()
+		return auth.Logout(context.Background())
 	},
 }
 
@@ -239,18 +220,8 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		cr.Status(ctx)
+		auth := gh.NewAuthFS()
+		auth.Status(context.Background())
 		return nil
 	},
 }
@@ -389,7 +360,7 @@ func applyCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			cr, err := gh.New(ctx, wd)
+			cr, err := repo.NewFS(wd)
 			if err != nil {
 				return err
 			}

@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	ghauth "github.com/cli/oauth"
+	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
@@ -29,12 +30,30 @@ const (
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
 )
 
+type AuthFS struct {
+	Secrets metadata.Secrets
+}
+
+// Returns an AuthFS object, responsible for managing authentication on the local FS.
+// This is meant to be used by the cli on the user's local filesystem.
+func NewAuthFS() *AuthFS {
+	return &AuthFS{
+		Secrets: metadata.NewSecretsOrFail(),
+	}
+}
+
+func (a *AuthFS) Close() {
+	if err := a.Secrets.Close(); err != nil {
+		log.Printf("error closing secrets: %v\n", err)
+	}
+}
+
 // Login will attempt to read any existing github credentials from disk. If unavailable,
 // it will initiate oauth with github.
-func (cr *ConfigRepo) Login(ctx context.Context) error {
-	defer cr.Status(ctx)
-	if cr.Secrets.HasGithubToken() {
-		if err := cr.CheckGithubAuth(ctx); err == nil {
+func (a *AuthFS) Login(ctx context.Context) error {
+	defer a.Status(ctx)
+	if a.Secrets.HasGithubToken() {
+		if err := a.CheckGithubAuth(ctx); err == nil {
 			return nil
 		} else {
 			log.Printf("Existing gh token expired: %v\n", err)
@@ -48,16 +67,12 @@ func (cr *ConfigRepo) Login(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "gh oauth flow")
 	}
-	cr.Secrets.SetGithubToken(token.Token)
-	cr.mkGhCli(ctx)
-	if err := cr.CheckGithubAuth(ctx); err != nil {
+	a.Secrets.SetGithubToken(token.Token)
+	userLogin, err := a.GetGithubUserLogin(ctx)
+	if err != nil {
 		return err
 	}
-	user, resp, err := cr.ghCli.Users.Get(ctx, "")
-	if err != nil {
-		return fmt.Errorf("ghCli user %v: %v", resp.Status, err)
-	}
-	cr.Secrets.SetGithubUser(user.GetLogin())
+	a.Secrets.SetGithubUser(userLogin)
 	return nil
 }
 
@@ -69,25 +84,41 @@ func maskToken(token string) string {
 	return strings.Join(ret, "")
 }
 
-func (cr *ConfigRepo) Logout(ctx context.Context) error {
-	cr.Secrets.SetGithubToken("")
-	cr.Secrets.SetGithubUser("")
-	cr.Status(ctx)
+func (a *AuthFS) Logout(ctx context.Context) error {
+	a.Secrets.SetGithubToken("")
+	a.Secrets.SetGithubUser("")
+	a.Status(ctx)
 	return nil
 }
 
-func (cr *ConfigRepo) Status(ctx context.Context) {
+func (a *AuthFS) Status(ctx context.Context) {
 	status := "Logged In"
-	if !cr.Secrets.HasGithubToken() {
+	if !a.Secrets.HasGithubToken() {
 		status = "Logged out"
 	}
-	if err := cr.CheckGithubAuth(ctx); err != nil {
+	if err := a.CheckGithubAuth(ctx); err != nil {
 		status = fmt.Sprintf("Auth Failed: %v", err)
 	}
 	fmt.Printf(
 		"Github Authentication Status: %s\n\tToken: %s\n\tUser: %s\n",
 		status,
-		maskToken(cr.Secrets.GetGithubToken()),
-		cr.Secrets.GetGithubUser(),
+		maskToken(a.Secrets.GetGithubToken()),
+		a.Secrets.GetGithubUser(),
 	)
+}
+
+func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, error) {
+	ghCli := NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
+	userLogin, err := ghCli.GetUserLogin(ctx)
+	if err != nil {
+		return "", errors.Wrap(err, "check auth")
+	}
+	return userLogin, nil
+}
+
+func (a *AuthFS) CheckGithubAuth(ctx context.Context) error {
+	if _, err := a.GetGithubUserLogin(ctx); err != nil {
+		return err
+	}
+	return nil
 }
