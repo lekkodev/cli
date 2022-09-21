@@ -85,7 +85,7 @@ func NewJSONFeature(encodedJSON []byte) (*Feature, error) {
 	}, nil
 }
 
-func valToAny(value interface{}) (*anypb.Any, error) {
+func ValToAny(value interface{}) (*anypb.Any, error) {
 	switch typedVal := value.(type) {
 	case bool:
 		return newAny(wrapperspb.Bool(typedVal))
@@ -143,7 +143,7 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 		Key:         f.Key,
 		Description: f.Description,
 	}
-	defaultAny, err := valToAny(f.Value)
+	defaultAny, err := ValToAny(f.Value)
 	if err != nil {
 		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
@@ -152,7 +152,7 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
 	for _, rule := range f.Rules {
-		ruleAny, err := valToAny(rule.Value)
+		ruleAny, err := ValToAny(rule.Value)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
@@ -215,7 +215,7 @@ func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
 		if err != nil {
 			return err
 		}
-		val, err := valToAny(test.ExpectedValue)
+		val, err := ValToAny(test.ExpectedValue)
 		if err != nil {
 			return err
 		}
