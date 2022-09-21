@@ -36,11 +36,11 @@ const (
 // This class can be used either by the cli, or by any other system that intends to manage
 // operations around the lekko config repo.
 type Repo struct {
-	repo  *git.Repository
-	wt    *git.Worktree
-	ghCli *gh.GithubClient
+	Repo  *git.Repository
+	Wt    *git.Worktree
+	GhCli *gh.GithubClient
 
-	User, token string
+	User, Token string
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.
@@ -55,27 +55,27 @@ func NewFS(path string) (*Repo, error) {
 	}
 	secrets := metadata.NewSecretsOrFail()
 	cr := &Repo{
-		repo:  repo,
-		wt:    wt,
-		ghCli: gh.NewGithubClientFromToken(context.Background(), secrets.GetGithubToken()),
+		Repo:  repo,
+		Wt:    wt,
+		GhCli: gh.NewGithubClientFromToken(context.Background(), secrets.GetGithubToken()),
 		User:  secrets.GetGithubUser(),
-		token: secrets.GetGithubToken(),
+		Token: secrets.GetGithubToken(),
 	}
 	return cr, nil
 }
 
 func (cr *Repo) CheckGithubAuth(ctx context.Context) error {
-	if cr.User == "" || cr.token == "" {
+	if cr.User == "" || cr.Token == "" {
 		return fmt.Errorf("user unauthenticated")
 	}
-	if _, err := cr.ghCli.GetUserLogin(ctx); err != nil {
+	if _, err := cr.GhCli.GetUserLogin(ctx); err != nil {
 		return errors.Wrap(err, "get user login")
 	}
 	return nil
 }
 
 func (cr *Repo) WorkingDirectoryHash() (string, error) {
-	hash, err := cr.repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+	hash, err := cr.Repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
 	if err != nil {
 		return "", errors.Wrap(err, "resolve revision")
 	}
@@ -91,7 +91,7 @@ func (cr *Repo) WorkingDirectoryHash() (string, error) {
 }
 
 func (cr *Repo) isMain() (bool, error) {
-	h, err := cr.repo.Head()
+	h, err := cr.Repo.Head()
 	if err != nil {
 		return false, errors.Wrap(err, "head")
 	}
@@ -99,7 +99,7 @@ func (cr *Repo) isMain() (bool, error) {
 }
 
 func (cr *Repo) BranchName() (string, error) {
-	h, err := cr.repo.Head()
+	h, err := cr.Repo.Head()
 	if err != nil {
 		return "", errors.Wrap(err, "head")
 	}
@@ -107,7 +107,7 @@ func (cr *Repo) BranchName() (string, error) {
 }
 
 func (cr *Repo) getOwnerRepo() (string, string, error) {
-	rm, err := cr.repo.Remote(remoteName)
+	rm, err := cr.Repo.Remote(remoteName)
 	if err != nil {
 		return "", "", errors.Wrap(err, "remote")
 	}

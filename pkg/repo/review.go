@@ -54,12 +54,12 @@ func (cr *Repo) Review(ctx context.Context) error {
 		return errors.Wrap(err, "checkout new branch")
 	}
 
-	if err := cr.wt.AddGlob("."); err != nil {
+	if err := cr.Wt.AddGlob("."); err != nil {
 		return errors.Wrap(err, "add glob")
 	}
 	log.Printf("checked out new branch %s\n", branchName)
 
-	hash, err := cr.wt.Commit("new config changes", &git.CommitOptions{
+	hash, err := cr.Wt.Commit("new config changes", &git.CommitOptions{
 		All: true,
 	})
 	if err != nil {
@@ -85,7 +85,7 @@ func (cr *Repo) Merge(prNum int) error {
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
 	}
-	result, resp, err := cr.ghCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
+	result, resp, err := cr.GhCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
 		MergeMethod: "squash",
 	})
 	if err != nil {
@@ -97,42 +97,42 @@ func (cr *Repo) Merge(prNum int) error {
 		return errors.New("Failed to merge pull request.")
 	}
 
-	head, err := cr.repo.Head()
+	head, err := cr.Repo.Head()
 	if err != nil {
 		return errors.Wrap(err, "head")
 	}
 	localBranchRef := head.Name()
 
-	if err := cr.repo.Push(&git.PushOptions{
+	if err := cr.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
 		Auth: &http.BasicAuth{
 			Username: cr.User,
-			Password: cr.token,
+			Password: cr.Token,
 		},
 	}); err != nil {
 		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
 	}
 	fmt.Printf("Successfully deleted remote branch %s\n", localBranchRef)
 
-	if err := cr.wt.Checkout(&git.CheckoutOptions{
+	if err := cr.Wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(mainBranchName),
 	}); err != nil {
 		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
 	}
 	fmt.Printf("Checked out local branch %s\n", mainBranchName)
-	if err := cr.repo.DeleteBranch(localBranchRef.Short()); err != nil {
+	if err := cr.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
 		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
 	}
-	if err := cr.repo.Storer.RemoveReference(localBranchRef); err != nil {
+	if err := cr.Repo.Storer.RemoveReference(localBranchRef); err != nil {
 		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
 	}
 	fmt.Printf("Successfully deleted local branch %s\n", localBranchRef.Short())
-	if err := cr.wt.Pull(&git.PullOptions{
+	if err := cr.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
 			Username: cr.User,
-			Password: cr.token,
+			Password: cr.Token,
 		},
 	}); err != nil {
 		return errors.Wrap(err, "failed to pull main")
@@ -142,7 +142,7 @@ func (cr *Repo) Merge(prNum int) error {
 }
 
 func (cr *Repo) wdClean() (bool, error) {
-	st, err := cr.wt.Status()
+	st, err := cr.Wt.Status()
 	if err != nil {
 		return false, errors.Wrap(err, "status")
 	}
@@ -166,7 +166,7 @@ func (cr *Repo) checkoutBranch() (string, error) {
 	if err != nil {
 		return "", errors.Wrap(err, "gen branch name")
 	}
-	if err := cr.wt.Checkout(&git.CheckoutOptions{
+	if err := cr.Wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(branchName),
 		Create: true,
 		Keep:   true,
@@ -177,18 +177,18 @@ func (cr *Repo) checkoutBranch() (string, error) {
 }
 
 func (cr *Repo) pushLocalBranch(branchName string) error {
-	if err := cr.repo.Push(&git.PushOptions{
+	if err := cr.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
 			Username: cr.User,
-			Password: cr.token,
+			Password: cr.Token,
 		},
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}
 	// set up tracking in case we need to pull from the
 	// remote branch later
-	if err := cr.repo.CreateBranch(&config.Branch{
+	if err := cr.Repo.CreateBranch(&config.Branch{
 		Name:   branchName,
 		Remote: remoteName,
 		Merge:  plumbing.NewBranchReferenceName(branchName),
@@ -204,7 +204,7 @@ func (cr *Repo) createPR(ctx context.Context, branchName string) error {
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
 	}
-	pr, resp, err := cr.ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+	pr, resp, err := cr.GhCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: strPtr("New feature change"),
 		Head:  &branchName,
 		Base:  strPtr(mainBranchName),
