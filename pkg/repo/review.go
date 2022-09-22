@@ -33,12 +33,8 @@ func (r *Repo) Review(ctx context.Context) error {
 	if err := r.CheckGithubAuth(ctx); err != nil {
 		return errors.Wrap(err, "check github auth")
 	}
-	isMain, err := r.isMain()
-	if err != nil {
+	if err := r.ensureMainBranch(false); err != nil {
 		return errors.Wrap(err, "is main")
-	}
-	if !isMain {
-		return errors.New("can only start reviews off the main branch")
 	}
 
 	clean, err := r.wdClean()
@@ -49,7 +45,7 @@ func (r *Repo) Review(ctx context.Context) error {
 		return errors.New("current working directory is clean, nothing to review")
 	}
 
-	branchName, err := r.checkoutBranch()
+	branchName, err := r.checkoutLocalBranch()
 	if err != nil {
 		return errors.Wrap(err, "checkout new branch")
 	}
@@ -67,7 +63,7 @@ func (r *Repo) Review(ctx context.Context) error {
 	}
 	log.Printf("committed new hash %s\n", hash)
 
-	if err := r.pushLocalBranch(branchName); err != nil {
+	if err := r.pushToRemote(branchName); err != nil {
 		return errors.Wrap(err, "push")
 	}
 	if err := r.createPR(ctx, branchName); err != nil {
@@ -92,7 +88,7 @@ func (r *Repo) Merge(prNum int) error {
 		return fmt.Errorf("ghCli merge pr %v: %w", resp.Status, err)
 	}
 	if result.GetMerged() {
-		fmt.Printf("PR #%d: %s\n", prNum, result.GetMessage())
+		r.Logf("PR #%d: %s\n", prNum, result.GetMessage())
 	} else {
 		return errors.New("Failed to merge pull request.")
 	}
@@ -113,21 +109,21 @@ func (r *Repo) Merge(prNum int) error {
 	}); err != nil {
 		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
 	}
-	fmt.Printf("Successfully deleted remote branch %s\n", localBranchRef)
+	r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
 
 	if err := r.Wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(mainBranchName),
 	}); err != nil {
 		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
 	}
-	fmt.Printf("Checked out local branch %s\n", mainBranchName)
+	r.Logf("Checked out local branch %s\n", mainBranchName)
 	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
 		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
 	}
 	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
 		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
 	}
-	fmt.Printf("Successfully deleted local branch %s\n", localBranchRef.Short())
+	r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
 	if err := r.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
@@ -137,7 +133,7 @@ func (r *Repo) Merge(prNum int) error {
 	}); err != nil {
 		return errors.Wrap(err, "failed to pull main")
 	}
-	fmt.Printf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
 	return nil
 }
 
@@ -161,7 +157,7 @@ func (r *Repo) genBranchName() (string, error) {
 	return fmt.Sprintf("%s-review-%d", user, time.Now().Nanosecond()), nil
 }
 
-func (r *Repo) checkoutBranch() (string, error) {
+func (r *Repo) checkoutLocalBranch() (string, error) {
 	branchName, err := r.genBranchName()
 	if err != nil {
 		return "", errors.Wrap(err, "gen branch name")
@@ -173,12 +169,20 @@ func (r *Repo) checkoutBranch() (string, error) {
 	}); err != nil {
 		return "", errors.Wrap(err, "checkout")
 	}
+	r.Logf("Checked out local branch %s\n", branchName)
 	return branchName, nil
 }
 
-func (r *Repo) pushLocalBranch(branchName string) error {
+func (r *Repo) pushToRemote(branchName string) error {
 	if err := r.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
+		RefSpecs: []config.RefSpec{
+			config.RefSpec(fmt.Sprintf(
+				"%s:%s",
+				plumbing.NewBranchReferenceName(branchName),
+				plumbing.NewRemoteReferenceName(remoteName, branchName),
+			)),
+		},
 		Auth: &http.BasicAuth{
 			Username: r.User,
 			Password: r.Token,
@@ -186,8 +190,11 @@ func (r *Repo) pushLocalBranch(branchName string) error {
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}
-	// set up tracking in case we need to pull from the
-	// remote branch later
+	r.Logf("Pushed local branch %q to remote %q\n", branchName, remoteName)
+	return nil
+}
+
+func (r *Repo) setTrackingConfig(branchName string) error {
 	if err := r.Repo.CreateBranch(&config.Branch{
 		Name:   branchName,
 		Remote: remoteName,
@@ -195,7 +202,8 @@ func (r *Repo) pushLocalBranch(branchName string) error {
 	}); err != nil {
 		return errors.Wrap(err, "create branch tracking configuration")
 	}
-	fmt.Printf("Pushed local branch %q to remote %q\n", branchName, remoteName)
+	r.Logf("Local branch %s has been set up to track changes from %s\n",
+		branchName, plumbing.NewRemoteReferenceName(remoteName, branchName))
 	return nil
 }
 
@@ -212,7 +220,7 @@ func (r *Repo) createPR(ctx context.Context, branchName string) error {
 	if err != nil {
 		return fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
 	}
-	fmt.Printf("Created PR:\n\t%s\n", pr.GetHTMLURL())
+	r.Logf("Created PR:\n\t%s\n", pr.GetHTMLURL())
 	return nil
 }
 

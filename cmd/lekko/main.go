@@ -62,6 +62,9 @@ func main() {
 	k8sCmd.AddCommand(applyCmd())
 	k8sCmd.AddCommand(listCmd())
 	rootCmd.AddCommand(k8sCmd)
+	// exp
+	experimentalCmd.AddCommand(startCmd)
+	rootCmd.AddCommand(experimentalCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
@@ -158,7 +161,7 @@ var reviewCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		r, err := repo.NewFS(wd)
+		r, err := repo.NewLocal(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -179,7 +182,7 @@ var mergeCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		r, err := repo.NewFS(wd)
+		r, err := repo.NewLocal(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -360,7 +363,7 @@ func applyCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			r, err := repo.NewFS(wd)
+			r, err := repo.NewLocal(wd)
 			if err != nil {
 				return err
 			}
@@ -403,4 +406,29 @@ func listCmd() *cobra.Command {
 	}
 	localKubeParams(ret, &kubeConfig)
 	return ret
+}
+
+var experimentalCmd = &cobra.Command{
+	Use:   "exp",
+	Short: "experimental commands",
+}
+
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "sets up the local config repo for making changes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		if _, err = r.Start(); err != nil {
+			return err
+		}
+		return nil
+	},
 }
