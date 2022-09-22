@@ -18,6 +18,8 @@ package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
 
+option go_package = "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1";
+
 // A prototype of the wrapper type that will be used to house all feature flags for
 // the 'homegrown' feature flagging solution:
 //  User-defined proto defintions, and a tree-based constraints system.
