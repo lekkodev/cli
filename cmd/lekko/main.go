@@ -169,8 +169,13 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
+			secrets := metadata.NewSecretsOrFail()
+			ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+			if _, err := ghCli.GetUserLogin(ctx); err != nil {
+				return errors.Wrap(err, "github auth fail")
+			}
 
-			return r.Review(ctx, title)
+			return r.Review(ctx, title, ghCli)
 		},
 	}
 	cmd.Flags().StringVarP(&title, "title", "t", "New feature change", "Title of pull request")
@@ -197,7 +202,13 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
 		}
-		return r.Merge(context.Background(), prNum)
+		ctx := context.Background()
+		secrets := metadata.NewSecretsOrFail()
+		ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+		if _, err := ghCli.GetUserLogin(ctx); err != nil {
+			return errors.Wrap(err, "github auth fail")
+		}
+		return r.Merge(ctx, prNum, ghCli)
 	},
 }
 

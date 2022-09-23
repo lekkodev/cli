@@ -21,13 +21,14 @@ import (
 	"time"
 
 	"github.com/go-git/go-billy/v5"
+	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
@@ -42,10 +43,9 @@ const (
 // This class can be used either by the cli, or by any other system that intends to manage
 // operations around the lekko config repo.
 type Repo struct {
-	Repo  *git.Repository
-	Wt    *git.Worktree
-	Fs    billy.Filesystem
-	GhCli *gh.GithubClient
+	Repo *git.Repository
+	Wt   *git.Worktree
+	Fs   billy.Filesystem
 
 	User, Token    string
 	LoggingEnabled bool
@@ -68,12 +68,38 @@ func NewLocal(path string) (*Repo, error) {
 		Repo:           repo,
 		Wt:             wt,
 		Fs:             wt.Filesystem,
-		GhCli:          gh.NewGithubClientFromToken(context.Background(), secrets.GetGithubToken()),
 		User:           secrets.GetGithubUser(),
 		Token:          secrets.GetGithubToken(),
 		LoggingEnabled: true,
 	}
 	return cr, nil
+}
+
+// Creates a new instance of Repo designed to work with ephemeral repos.
+func NewEphemeral(url, user, token string) (*Repo, error) {
+	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
+		URL: url,
+		Auth: &http.BasicAuth{
+			Username: user,
+			Password: token,
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to clone in-mem repo")
+	}
+	wt, err := r.Worktree()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get work tree")
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "git clone")
+	}
+	return &Repo{
+		Repo:  r,
+		Wt:    wt,
+		User:  user,
+		Token: token,
+	}, nil
 }
 
 // Start is invoked right before one is about to start working on a config change.
@@ -104,8 +130,8 @@ func (r *Repo) Start() (string, error) {
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
 func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
-	if err := r.CheckGithubAuth(ctx); err != nil {
-		return "", errors.Wrap(err, "github auth")
+	if r.User == "" || r.Token == "" {
+		return "", fmt.Errorf("user unauthenticated")
 	}
 	if message == "" {
 		message = "new config changes"
@@ -165,6 +191,8 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 	}
 	r.Logf("Checked out local branch %s\n", mainBranchName)
 	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
+		cfg, err := r.Repo.Config()
+		fmt.Printf("config: %v, %v\n", cfg.Branches, err)
 		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
 	}
 	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
@@ -177,19 +205,16 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 			Username: r.User,
 			Password: r.Token,
 		},
-	}); err != nil {
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull main")
 	}
 	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
 	return nil
 }
 
-func (r *Repo) CheckGithubAuth(ctx context.Context) error {
+func (r *Repo) CheckUserAuthenticated() error {
 	if r.User == "" || r.Token == "" {
 		return fmt.Errorf("user unauthenticated")
-	}
-	if _, err := r.GhCli.GetUserLogin(ctx); err != nil {
-		return errors.Wrap(err, "get user login")
 	}
 	return nil
 }

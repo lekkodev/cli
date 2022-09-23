@@ -85,8 +85,8 @@ func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
 func (k *kubeClient) Apply(ctx context.Context, root string) error {
-	if err := k.r.CheckGithubAuth(ctx); err != nil {
-		return errors.Wrap(err, "auth github")
+	if err := k.r.CheckUserAuthenticated(); err != nil {
+		return errors.Wrap(err, "check auth")
 	}
 	provider := fs.LocalProvider()
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist

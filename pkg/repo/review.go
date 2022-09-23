@@ -25,15 +25,16 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-github/v47/github"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/pkg/errors"
 )
 
 // Review will open a pull request. It takes different actions depending on
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
-func (r *Repo) Review(ctx context.Context, title string) error {
-	if err := r.CheckGithubAuth(ctx); err != nil {
-		return errors.Wrap(err, "check github auth")
+func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) error {
+	if err := r.CheckUserAuthenticated(); err != nil {
+		return errors.Wrap(err, "check auth")
 	}
 	var main, clean bool
 	var err error
@@ -55,6 +56,10 @@ func (r *Repo) Review(ctx context.Context, title string) error {
 		if err != nil {
 			return errors.Wrap(err, "checkout new branch")
 		}
+		// set up remote branch tracking
+		if err := r.setTrackingConfig(branchName); err != nil {
+			return errors.Wrap(err, "push to remote")
+		}
 		if _, err := r.Commit(ctx, ""); err != nil {
 			return errors.Wrap(err, "add commit push")
 		}
@@ -70,21 +75,21 @@ func (r *Repo) Review(ctx context.Context, title string) error {
 			}
 		}
 	}
-	if err := r.createPR(ctx, branchName, title); err != nil {
+	if err := r.createPR(ctx, branchName, title, ghCli); err != nil {
 		return errors.Wrap(err, "create pr")
 	}
 	return nil
 }
 
-func (r *Repo) Merge(ctx context.Context, prNum int) error {
-	if err := r.CheckGithubAuth(ctx); err != nil {
-		return errors.Wrap(err, "check github auth")
+func (r *Repo) Merge(ctx context.Context, prNum int, ghCli *gh.GithubClient) error {
+	if err := r.CheckUserAuthenticated(); err != nil {
+		return errors.Wrap(err, "check auth")
 	}
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
 	}
-	result, resp, err := r.GhCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
+	result, resp, err := ghCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
 		MergeMethod: "squash",
 	})
 	if err != nil {
@@ -164,12 +169,12 @@ func (r *Repo) setTrackingConfig(branchName string) error {
 	return nil
 }
 
-func (r *Repo) createPR(ctx context.Context, branchName, title string) error {
+func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) error {
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
 	}
-	pr, resp, err := r.GhCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
+	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
 		Head:  &branchName,
 		Base:  strPtr(mainBranchName),
