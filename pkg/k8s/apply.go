@@ -108,7 +108,7 @@ func (k *kubeClient) Apply(ctx context.Context, root string) error {
 
 	for _, md := range nsMD {
 		cmName := fmt.Sprintf("%s%s", lekkoConfigMapPrefix, md.Name)
-		if err := k.applyLekkoNamespace(ctx, root, md, provider, cmName); err != nil {
+		if err := k.applyLekkoNamespace(ctx, root, md.Name, provider, cmName); err != nil {
 			return fmt.Errorf("namespace %s: apply: %w", md.Name, err)
 		}
 		delete(existingConfigMaps, cmName)
@@ -172,18 +172,16 @@ func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) erro
 func (k *kubeClient) applyLekkoNamespace(
 	ctx context.Context,
 	root string,
-	nsMD *metadata.NamespaceConfigRepoMetadata,
+	namespaceName string,
 	provider fs.Provider,
 	cmName string,
 ) error {
 	cm := corev1.ConfigMap(cmName, k.k8sNamespace)
-	nsPath := filepath.Join(root, nsMD.Name)
+	nsPath := filepath.Join(root, namespaceName)
 	featureFiles, err := feature.GroupFeatureFiles(
 		context.Background(),
 		nsPath,
-		nsMD,
 		provider,
-		false,
 	)
 	if err != nil {
 		return fmt.Errorf("group feature files: %w", err)

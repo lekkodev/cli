@@ -142,25 +142,17 @@ func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFi
 func GroupFeatureFiles(
 	ctx context.Context,
 	pathToNamespace string,
-	nsMD *metadata.NamespaceConfigRepoMetadata,
 	fsProvider fs.Provider,
-	validate bool,
 ) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
 	if err := walkNamespace(ctx, pathToNamespace, "", featureToFile, fsProvider); err != nil {
 		return nil, errors.Wrap(err, "walk namespace")
 	}
 	featureFiles := make([]FeatureFile, len(featureToFile))
-	// Compliance checks for each version.
 	i := 0
 	for _, feature := range featureToFile {
 		featureFiles[i] = feature
 		i = i + 1
-		if validate {
-			if err := ComplianceCheck(feature, nsMD); err != nil {
-				return nil, errors.Wrap(err, "feature file compliance check")
-			}
-		}
 	}
 	return featureFiles, nil
 }

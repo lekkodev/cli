@@ -17,22 +17,31 @@ package repo
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
-func (r *Repo) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {
+func (r *Repo) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error) {
 	_, nsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse root md")
 	}
-	nsMD, ok := nsMDs[namespace]
-	if !ok {
-		return nil, fmt.Errorf("namespace %s not found in root metadata", namespace)
+	ret := make(map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, len(nsMDs))
+	for namespace, nsMD := range nsMDs {
+		ffs, err := r.GetFeatureFiles(ctx, namespace)
+		if err != nil {
+			return nil, errors.Wrap(err, "get feature files")
+		}
+		ret[*nsMD] = ffs
 	}
-	ffs, err := feature.GroupFeatureFiles(ctx, namespace, nsMD, r, true)
+	return ret, nil
+}
+
+func (r *Repo) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {
+	ffs, err := feature.GroupFeatureFiles(ctx, namespace, r)
 	if err != nil {
 		return nil, errors.Wrap(err, "group feature files")
 	}
@@ -56,4 +65,16 @@ func (r *Repo) GetFeatureFile(ctx context.Context, namespace, featureName string
 		return nil, fmt.Errorf("feature '%s' not found in namespace '%s'", featureName, namespace)
 	}
 	return ff, nil
+}
+
+func (r *Repo) GetFeatureContents(ctx context.Context, namespace, feature string) (*feature.FeatureFile, []byte, error) {
+	ff, err := r.GetFeatureFile(ctx, namespace, feature)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get feature file")
+	}
+	starBytes, err := r.Read(filepath.Join(namespace, ff.StarlarkFileName))
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "failed to read star bytes")
+	}
+	return ff, starBytes, nil
 }
