@@ -26,6 +26,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
@@ -48,6 +49,8 @@ type Repo struct {
 
 	User, Token    string
 	LoggingEnabled bool
+
+	fs.Provider
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.

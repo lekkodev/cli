@@ -15,9 +15,11 @@
 package repo
 
 import (
+	"context"
 	"fmt"
 	"io"
 
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/pkg/errors"
 )
 
@@ -51,4 +53,14 @@ func (r *Repo) Read(path string) ([]byte, error) {
 		_ = f.Close()
 	}()
 	return io.ReadAll(f)
+}
+
+func (r *Repo) GetFileContents(ctx context.Context, path string) ([]byte, error) {
+	return nil, nil
+}
+func (r *Repo) GetDirContents(ctx context.Context, path string) ([]fs.ProviderFile, error) {
+	return nil, nil
+}
+func (r *Repo) IsNotExist(err error) bool {
+	return false
 }
