@@ -67,6 +67,8 @@ type FeatureFile struct {
 	CompiledJSONFileName string
 	// Filename of a compiled .proto.bin file.
 	CompiledProtoBinFileName string
+	// name of the namespace directory
+	NamespaceName string
 }
 
 type FeatureContents struct {
@@ -93,7 +95,11 @@ func (ff FeatureFile) Verify() error {
 	return nil
 }
 
-func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFile map[string]FeatureFile, fsProvider fs.Provider) error {
+func (ff FeatureFile) RootPath(filename string) string {
+	return filepath.Join(ff.NamespaceName, filename)
+}
+
+func walkNamespace(ctx context.Context, nsName, path, nsRelativePath string, featureToFile map[string]FeatureFile, fsProvider fs.Provider) error {
 	files, err := fsProvider.GetDirContents(ctx, path)
 	if err != nil {
 		return errors.Wrap(err, fmt.Sprintf("get dir contents for %s", path))
@@ -103,7 +109,7 @@ func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFi
 			featureName := strings.TrimSuffix(file.Name, ".json")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: filepath.Join(nsRelativePath, file.Name)}
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
 			} else {
 				f.CompiledJSONFileName = filepath.Join(nsRelativePath, file.Name)
 				featureToFile[featureName] = f
@@ -112,7 +118,7 @@ func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFi
 			featureName := strings.TrimSuffix(file.Name, ".star")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: filepath.Join(nsRelativePath, file.Name)}
+				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
 			} else {
 				f.StarlarkFileName = filepath.Join(nsRelativePath, file.Name)
 				featureToFile[featureName] = f
@@ -121,7 +127,7 @@ func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFi
 			featureName := strings.TrimSuffix(file.Name, ".proto")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: filepath.Join(nsRelativePath, file.Name)}
+				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
 			} else {
 				f.ProtoFileName = filepath.Join(nsRelativePath, file.Name)
 				featureToFile[featureName] = f
@@ -130,13 +136,13 @@ func walkNamespace(ctx context.Context, path, nsRelativePath string, featureToFi
 			featureName := strings.TrimSuffix(file.Name, ".proto.bin")
 			f, ok := featureToFile[featureName]
 			if !ok {
-				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: filepath.Join(nsRelativePath, file.Name)}
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
 			} else {
 				f.CompiledProtoBinFileName = filepath.Join(nsRelativePath, file.Name)
 				featureToFile[featureName] = f
 			}
 		} else if file.IsDir {
-			if err := walkNamespace(ctx, file.Path, filepath.Join(nsRelativePath, file.Name), featureToFile, fsProvider); err != nil {
+			if err := walkNamespace(ctx, nsName, file.Path, filepath.Join(nsRelativePath, file.Name), featureToFile, fsProvider); err != nil {
 				return errors.Wrap(err, "walkNamespace")
 			}
 		}
@@ -153,7 +159,7 @@ func GroupFeatureFiles(
 	fsProvider fs.Provider,
 ) ([]FeatureFile, error) {
 	featureToFile := make(map[string]FeatureFile)
-	if err := walkNamespace(ctx, pathToNamespace, "", featureToFile, fsProvider); err != nil {
+	if err := walkNamespace(ctx, filepath.Base(pathToNamespace), pathToNamespace, "", featureToFile, fsProvider); err != nil {
 		return nil, errors.Wrap(err, "walk namespace")
 	}
 	featureFiles := make([]FeatureFile, len(featureToFile))

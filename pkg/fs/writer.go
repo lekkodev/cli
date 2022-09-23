@@ -21,15 +21,19 @@ import (
 )
 
 // FileSystem abstraction so we can use the same writing code
-// for both local and remote configuration repos.
+// for both local and ephemeral configuration repos.
 type ConfigWriter interface {
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	MkdirAll(path string, perm os.FileMode) error
 	// Returns whether or not anything was removed.
 	RemoveIfExists(path string) (bool, error)
+
+	Provider
 }
 
-type localConfigWriter struct{}
+type localConfigWriter struct {
+	Provider
+}
 
 func (*localConfigWriter) WriteFile(name string, data []byte, perm os.FileMode) error {
 	return os.WriteFile(name, data, perm)
@@ -61,5 +65,7 @@ func (*localConfigWriter) RemoveIfExists(path string) (bool, error) {
 }
 
 func LocalConfigWriter() ConfigWriter {
-	return &localConfigWriter{}
+	return &localConfigWriter{
+		Provider: LocalProvider(),
+	}
 }

@@ -51,6 +51,7 @@ type Repo struct {
 	LoggingEnabled bool
 
 	fs.Provider
+	fs.ConfigWriter
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.

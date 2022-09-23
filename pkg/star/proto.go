@@ -15,12 +15,14 @@
 package star
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -40,7 +42,11 @@ For other options, see the installation page here: https://docs.buf.build/instal
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
-func BuildDynamicTypeRegistry(image []byte) (*protoregistry.Types, error) {
+func BuildDynamicTypeRegistry(protoDir string, provider fs.Provider) (*protoregistry.Types, error) {
+	image, err := provider.GetFileContents(context.Background(), bufImageFilepath(protoDir))
+	if err != nil {
+		return nil, errors.Wrap(err, "read buf image")
+	}
 	fds := &descriptorpb.FileDescriptorSet{}
 
 	if err := proto.Unmarshal(image, fds); err != nil {
@@ -54,16 +60,17 @@ func BuildDynamicTypeRegistry(image []byte) (*protoregistry.Types, error) {
 	return filesToTypes(files)
 }
 
-func BuildDynamicTypeRegistryFromFile(protoDir string) (*protoregistry.Types, error) {
-	image, err := newBufImage(protoDir)
+// Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
+func ReBuildDynamicTypeRegistry(protoDir string, cw fs.ConfigWriter) (*protoregistry.Types, error) {
+	_, err := newBufImage(protoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
-	bytes, err := os.ReadFile(image.filename)
-	if err != nil {
-		return nil, errors.Wrap(err, "os.readfile image bin")
-	}
-	return BuildDynamicTypeRegistry(bytes)
+	return BuildDynamicTypeRegistry(protoDir, cw)
+}
+
+func bufImageFilepath(protoDir string) string {
+	return filepath.Join(protoDir, "image.bin")
 }
 
 func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
@@ -158,7 +165,7 @@ func newBufImage(protoDir string) (*bufImage, error) {
 	if err := checkBufExists(); err != nil {
 		return nil, err
 	}
-	outputFile := filepath.Join(protoDir, "image.bin")
+	outputFile := bufImageFilepath(protoDir)
 	args := []string{
 		"build",
 		protoDir,

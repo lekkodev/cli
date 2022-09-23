@@ -47,7 +47,6 @@ func main() {
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd)
 	rootCmd.AddCommand(formatCmd())
-	rootCmd.AddCommand(parseCmd())
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
@@ -63,6 +62,7 @@ func main() {
 	k8sCmd.AddCommand(listCmd())
 	rootCmd.AddCommand(k8sCmd)
 	// exp
+	experimentalCmd.AddCommand(parseCmd())
 	experimentalCmd.AddCommand(startCmd)
 	experimentalCmd.AddCommand(commitCmd())
 	experimentalCmd.AddCommand(cleanupCmd)
@@ -144,7 +144,7 @@ func parseCmd() *cobra.Command {
 			if file == "" {
 				return errors.New("no file given")
 			}
-			return static.Parse(wd, filepath.Join(wd, file))
+			return static.Parse(wd, filepath.Join(wd, file), fs.LocalConfigWriter())
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "starlark file to walk")
@@ -265,7 +265,7 @@ var evalCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "failed to parse config repo metadata")
 		}
-		registry, err := star.BuildDynamicTypeRegistryFromFile(rootMD.ProtoDirectory)
+		registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory, fs.LocalProvider())
 		if err != nil {
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}

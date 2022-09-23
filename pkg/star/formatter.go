@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"path/filepath"
 
 	"github.com/bazelbuild/buildtools/build"
@@ -33,19 +32,10 @@ const (
 	InputTypeAuto string = "auto"
 )
 
-type Formatter interface {
-	Format() error
-}
-
-type formatter struct {
-	filePath, featureName string
-	verbose               bool
-}
-
 func Format(root string, verbose bool) error {
 	ctx := context.Background()
-	provider := fs.LocalProvider()
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, provider)
+	cw := fs.LocalConfigWriter()
+	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, cw)
 	if err != nil {
 		return err
 	}
@@ -67,7 +57,7 @@ func Format(root string, verbose bool) error {
 		for _, ff := range featureFiles {
 			formatter := NewStarFormatter(
 				filepath.Join(root, ns, ff.StarlarkFileName),
-				ff.Name, verbose,
+				ff.Name, verbose, cw,
 			)
 			if err := formatter.Format(); err != nil {
 				return errors.Wrap(err, "star format")
@@ -77,16 +67,28 @@ func Format(root string, verbose bool) error {
 	return nil
 }
 
-func NewStarFormatter(filePath, featureName string, verbose bool) Formatter {
+type Formatter interface {
+	Format() error
+}
+
+type formatter struct {
+	filePath, featureName string
+	verbose               bool
+
+	cw fs.ConfigWriter
+}
+
+func NewStarFormatter(filePath, featureName string, verbose bool, cw fs.ConfigWriter) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
 		verbose:     verbose,
+		cw:          cw,
 	}
 }
 
 func (f *formatter) Format() error {
-	data, err := ioutil.ReadFile(f.filePath)
+	data, err := f.cw.GetFileContents(context.Background(), f.filePath)
 	if err != nil {
 		return errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
@@ -100,7 +102,7 @@ func (f *formatter) Format() error {
 	if bytes.Equal(data, ndata) {
 		return nil
 	}
-	if err := ioutil.WriteFile(f.filePath, ndata, 0600); err != nil {
+	if err := f.cw.WriteFile(f.filePath, ndata, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 	if f.verbose {

@@ -30,39 +30,36 @@ import (
 // Verifies that a configuration from a root is properly formatted.
 // TODO: do even more validation including compilation.
 func Verify(rootPath string) error {
-	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, fs.LocalProvider())
+	cw := fs.LocalConfigWriter()
+	rootMD, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(context.TODO(), rootPath, cw)
 	if err != nil {
 		return errors.Wrap(err, "parse full config repo metadata")
 	}
-	registry, err := star.BuildDynamicTypeRegistryFromFile(filepath.Join(rootPath, rootMD.ProtoDirectory))
+	registry, err := star.BuildDynamicTypeRegistry(filepath.Join(rootPath, rootMD.ProtoDirectory), cw)
 	if err != nil {
 		return errors.Wrap(err, "failed to build dynamic proto registry")
 	}
 
 	for ns, nsMD := range nsNameToNsMDs {
-		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), fs.LocalProvider())
+		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), cw)
 		if err != nil {
 			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range groupedFeatures {
+			ff := ff
 			if err := feature.ComplianceCheck(ff, nsMD); err != nil {
 				return fmt.Errorf("compliance check for feature %s: %w", ff.Name, err)
 			}
 			if err := ff.Verify(); err != nil {
 				return errors.Wrap(err, fmt.Sprintf("verify ns %s", ns))
 			}
-			if _, err := encoding.ParseFeature(rootPath, ff, nsMD, fs.LocalProvider()); err != nil {
+			if _, err := encoding.ParseFeature(rootPath, ff, nsMD, cw); err != nil {
 				return errors.Wrap(err, "parse feature")
 			}
 			// TODO: share this code between verify and compile, could easily diverge.
 			if nsMD.Version == metadata.LatestNamespaceVersion {
 				// if we compile, then do so.
-				compiler := star.NewCompiler(
-					registry,
-					rootMD.ProtoDirectory,
-					filepath.Join(rootPath, ns, ff.StarlarkFileName),
-					ff.Name,
-				)
+				compiler := star.NewCompiler(registry, &ff, cw)
 				f, err := compiler.Compile()
 				if err != nil {
 					return errors.Wrap(err, "compile")

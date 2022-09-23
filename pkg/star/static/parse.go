@@ -16,7 +16,6 @@ package static
 
 import (
 	"context"
-	"io/ioutil"
 	"path/filepath"
 	"strings"
 
@@ -28,8 +27,9 @@ import (
 
 // Parse reads the star file at the given path and performs
 // static parsing, converting the feature to our go-native model.
-func Parse(root, filename string) error {
-	data, err := ioutil.ReadFile(filename)
+func Parse(root, filename string, cw fs.ConfigWriter) error {
+	ctx := context.Background()
+	data, err := cw.GetFileContents(ctx, filename)
 	if err != nil {
 		return errors.Wrap(err, "read file")
 	}
@@ -39,11 +39,11 @@ func Parse(root, filename string) error {
 		return err
 	}
 	f.Key = strings.Split(filepath.Base(filename), ".")[0]
-	rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(context.Background(), root, fs.LocalProvider())
+	rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, fs.LocalProvider())
 	if err != nil {
 		return errors.Wrap(err, "parse root metadata")
 	}
-	registry, err := star.BuildDynamicTypeRegistryFromFile(rootMD.ProtoDirectory)
+	registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory, cw)
 	if err != nil {
 		return errors.Wrap(err, "build dynamic type registry")
 	}
@@ -56,7 +56,7 @@ func Parse(root, filename string) error {
 	if err != nil {
 		return errors.Wrap(err, "mutate")
 	}
-	if err := ioutil.WriteFile(filename, bytes, 0600); err != nil {
+	if err := cw.WriteFile(filename, bytes, 0600); err != nil {
 		return errors.Wrap(err, "failed to write file")
 	}
 	return nil

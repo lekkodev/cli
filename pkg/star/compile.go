@@ -15,26 +15,33 @@
 package star
 
 import (
+	"context"
 	"fmt"
-	"io/ioutil"
-	"os"
+	"log"
+	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/fs"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 type Compiler interface {
 	Compile() (*feature.Feature, error)
+	Persist(f *feature.Feature) error
 }
 
 type compiler struct {
-	registry                            *protoregistry.Types
-	protoDir, starfilePath, featureName string
+	registry *protoregistry.Types
+	ff       *feature.FeatureFile
+	cw       fs.ConfigWriter
 
 	Formatter
 }
@@ -43,13 +50,12 @@ type compiler struct {
 // 		protoDir: path to the proto directory that stores all user-defined proto files
 // 		starfilePath: path to the .star file that defines this feature flag
 // 		featureName: human-readable name of this feature flag. Also matches the starfile name.
-func NewCompiler(registry *protoregistry.Types, protoDir, starfilePath, featureName string) Compiler {
+func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.ConfigWriter) Compiler {
 	return &compiler{
-		registry:     registry,
-		protoDir:     protoDir,
-		starfilePath: starfilePath,
-		featureName:  featureName,
-		Formatter:    NewStarFormatter(starfilePath, featureName, false),
+		registry:  registry,
+		ff:        ff,
+		cw:        cw,
+		Formatter: NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, false, cw),
 	}
 }
 
@@ -61,12 +67,7 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	thread := &starlark.Thread{
 		Name: "compile",
 	}
-	reader, err := os.Open(c.starfilePath)
-	if err != nil {
-		return nil, errors.Wrap(err, "open starfile")
-	}
-	defer reader.Close()
-	moduleSource, err := ioutil.ReadAll(reader)
+	moduleSource, err := c.cw.GetFileContents(context.Background(), c.ff.RootPath(c.ff.StarlarkFileName))
 	if err != nil {
 		return nil, errors.Wrap(err, "read starfile")
 	}
@@ -75,7 +76,7 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "new assert module")
 	}
-	globals, err := starlark.ExecFile(thread, c.starfilePath, moduleSource, starlark.StringDict{
+	globals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
 		"proto":   protoModule,
 		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
@@ -87,8 +88,80 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}
-	f.Key = c.featureName
+	f.Key = c.ff.Name
 	return f, nil
+}
+
+func (c *compiler) Persist(f *feature.Feature) error {
+	ctx := context.Background()
+	fProto, err := f.ToProto()
+	if err != nil {
+		return errors.Wrap(err, "feature to proto")
+	}
+	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
+	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
+	protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", c.ff.Name))
+	diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
+	if err != nil {
+		return errors.Wrap(err, "comparing with existing proto")
+	}
+	if !diffExists {
+		// skipping i/o as no diff exists
+		return nil
+	}
+
+	// Create the json file
+	jBytes, err := feature.ProtoToJSON(fProto, c.registry)
+	if err != nil {
+		return errors.Wrap(err, "proto to json")
+	}
+	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", c.ff.Name))
+	if err := c.cw.MkdirAll(jsonGenPath, 0775); err != nil {
+		return errors.Wrap(err, "failed to make gen json directory")
+	}
+	if err := c.cw.WriteFile(jsonFile, jBytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write file")
+	}
+	// Create the proto file
+	pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(fProto)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal to proto")
+	}
+	if err := c.cw.MkdirAll(protoGenPath, 0775); err != nil {
+		return errors.Wrap(err, "failed to make gen proto directory")
+	}
+	if err := c.cw.WriteFile(protoBinFile, pBytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write file")
+	}
+	log.Printf("Generated diff for %s/%s\n", c.ff.NamespaceName, c.ff.Name)
+	return nil
+}
+
+// returns true if there is an actual semantic difference between the existing compiled proto,
+// and the new proto we have on hand.
+func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta1.Feature, provider fs.Provider) (bool, error) {
+	bytes, err := provider.GetFileContents(ctx, existingProtoFilePath)
+	if err != nil {
+		if provider.IsNotExist(err) {
+			return true, nil
+		}
+		return false, errors.Wrap(err, "read existing proto file")
+	}
+	existingProto := &featurev1beta1.Feature{}
+	if err := proto.Unmarshal(bytes, existingProto); err != nil {
+		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
+	}
+	if existingProto.GetKey() != newProto.GetKey() {
+		return false, fmt.Errorf("cannot change key of feature flag: old %s, new %s", existingProto.GetKey(), newProto.GetKey())
+	}
+	if existingProto.GetTree().GetDefault().GetTypeUrl() != newProto.GetTree().GetDefault().GetTypeUrl() {
+		return false, fmt.Errorf(
+			"cannot change feature flag type: old %s, new %s",
+			existingProto.GetTree().GetDefault().GetTypeUrl(),
+			newProto.GetTree().GetDefault().GetTypeUrl(),
+		)
+	}
+	return !proto.Equal(existingProto, newProto), nil
 }
 
 func load(thread *starlark.Thread, module string) (starlark.StringDict, error) {
