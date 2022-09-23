@@ -51,7 +51,7 @@ func main() {
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
-	rootCmd.AddCommand(reviewCmd)
+	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
 	// auth
 	authCmd.AddCommand(loginCmd)
@@ -64,6 +64,8 @@ func main() {
 	rootCmd.AddCommand(k8sCmd)
 	// exp
 	experimentalCmd.AddCommand(startCmd)
+	experimentalCmd.AddCommand(commitCmd())
+	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -149,25 +151,30 @@ func parseCmd() *cobra.Command {
 	return cmd
 }
 
-var reviewCmd = &cobra.Command{
-	Use:   "review",
-	Short: "creates a pr with your changes",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		if err := verify.Verify(wd); err != nil {
-			return errors.Wrap(err, "verification failed")
-		}
-		r, err := repo.NewLocal(wd)
-		if err != nil {
-			return errors.Wrap(err, "new repo")
-		}
+func reviewCmd() *cobra.Command {
+	var title string
+	cmd := &cobra.Command{
+		Use:   "review",
+		Short: "creates a pr with your changes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := verify.Verify(wd); err != nil {
+				return errors.Wrap(err, "verification failed")
+			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
 
-		return r.Review(ctx)
-	},
+			return r.Review(ctx, title)
+		},
+	}
+	cmd.Flags().StringVarP(&title, "title", "t", "New feature change", "Title of pull request")
+	return cmd
 }
 
 var mergeCmd = &cobra.Command{
@@ -190,7 +197,7 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
 		}
-		return r.Merge(prNum)
+		return r.Merge(context.Background(), prNum)
 	},
 }
 
@@ -427,6 +434,53 @@ var startCmd = &cobra.Command{
 		}
 
 		if _, err = r.Start(); err != nil {
+			return err
+		}
+		return nil
+	},
+}
+
+func commitCmd() *cobra.Command {
+	var message string
+	cmd := &cobra.Command{
+		Use:   "commit",
+		Short: "commits local changes to the remote branch",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := verify.Verify(wd); err != nil {
+				return err
+			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			if _, err = r.Commit(context.Background(), message); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&message, "message", "m", "config change commit", "commit message")
+	return cmd
+}
+
+var cleanupCmd = &cobra.Command{
+	Use:   "cleanup",
+	Short: "deletes the current local branch (and its remote counterpart)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		if err = r.Cleanup(context.Background()); err != nil {
 			return err
 		}
 		return nil

@@ -17,14 +17,15 @@ package repo
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
@@ -72,6 +73,114 @@ func NewLocal(path string) (*Repo, error) {
 	return cr, nil
 }
 
+// Start is invoked right before one is about to start working on a config change.
+// It checks that we are on a clean master, checks out a local branch and syncs
+// it to the remote to ensure any future changes can be saved.
+func (r *Repo) Start() (string, error) {
+	clean, err := r.wdClean()
+	if err != nil {
+		return "", errors.Wrap(err, "wdClean")
+	}
+	if !clean {
+		return "", fmt.Errorf("expecting clean working directory")
+	}
+	if err := r.ensureMainBranch(true); err != nil {
+		return "", errors.Wrap(err, "is main")
+	}
+	branchName, err := r.checkoutLocalBranch()
+	if err != nil {
+		return "", errors.Wrap(err, "checkout new branch")
+	}
+	// set up remote branch tracking
+	if err := r.setTrackingConfig(branchName); err != nil {
+		return "", errors.Wrap(err, "push to remote")
+	}
+	return branchName, nil
+}
+
+// Commit will take an optional commit message and push the changes in the
+// local working directory to the remote branch.
+func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
+	if err := r.CheckGithubAuth(ctx); err != nil {
+		return "", errors.Wrap(err, "github auth")
+	}
+	if message == "" {
+		message = "new config changes"
+	}
+	if err := r.Wt.AddGlob("."); err != nil {
+		return "", errors.Wrap(err, "add glob")
+	}
+
+	hash, err := r.Wt.Commit(message, &git.CommitOptions{
+		All: true,
+		Author: &object.Signature{
+			Name: r.User,
+			// TODO: add author email here
+			When: time.Now(),
+		},
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "commit")
+	}
+	r.Logf("Committed new hash %s locally\n", hash)
+	branchName, err := r.BranchName()
+	if err != nil {
+		return "", errors.Wrap(err, "branch name")
+	}
+	if err := r.pushToRemote(ctx, branchName); err != nil {
+		return "", errors.Wrap(err, "push to remote")
+	}
+	return hash.String(), nil
+}
+
+// Cleans up all resources and references associated with the current working
+// branch on local and remote. Will switch the current branch back to main, and
+// pull from remote to ensure we are on the latest commit.
+func (r *Repo) Cleanup(ctx context.Context) error {
+	head, err := r.Repo.Head()
+	if err != nil {
+		return errors.Wrap(err, "head")
+	}
+	localBranchRef := head.Name()
+
+	if err := r.Repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
+		Auth: &http.BasicAuth{
+			Username: r.User,
+			Password: r.Token,
+		},
+	}); err != nil {
+		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
+	}
+	r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
+
+	if err := r.Wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(mainBranchName),
+	}); err != nil {
+		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+	}
+	r.Logf("Checked out local branch %s\n", mainBranchName)
+	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
+		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
+	}
+	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
+		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
+	}
+	r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
+	if err := r.Wt.Pull(&git.PullOptions{
+		RemoteName: remoteName,
+		Auth: &http.BasicAuth{
+			Username: r.User,
+			Password: r.Token,
+		},
+	}); err != nil {
+		return errors.Wrap(err, "failed to pull main")
+	}
+	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	return nil
+}
+
 func (r *Repo) CheckGithubAuth(ctx context.Context) error {
 	if r.User == "" || r.Token == "" {
 		return fmt.Errorf("user unauthenticated")
@@ -98,36 +207,6 @@ func (r *Repo) WorkingDirectoryHash() (string, error) {
 	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
 }
 
-// Start is invoked right before one is about to start working on a config change.
-// It checks that we are on a clean master, checks out a local branch and syncs
-// it to the remote to ensure any future changes can be saved.
-func (r *Repo) Start() (string, error) {
-	clean, err := r.wdClean()
-	if err != nil {
-		return "", errors.Wrap(err, "wdClean")
-	}
-	if !clean {
-		return "", fmt.Errorf("expecting clean working directory")
-	}
-	if err := r.ensureMainBranch(true); err != nil {
-		return "", errors.Wrap(err, "is main")
-	}
-	branchName, err := r.checkoutLocalBranch()
-	if err != nil {
-		return "", errors.Wrap(err, "checkout new branch")
-	}
-	// init the remote branch
-	if err := r.pushToRemote(branchName); err != nil {
-		return "", errors.Wrap(err, "push to remote")
-	}
-	// set up tracking in case we need to pull from the
-	// remote branch later
-	if err := r.setTrackingConfig(branchName); err != nil {
-		return "", errors.Wrap(err, "push to remote")
-	}
-	return branchName, nil
-}
-
 func (r *Repo) ensureMainBranch(switchToMain bool) error {
 	h, err := r.Repo.Head()
 	if err != nil {
@@ -136,7 +215,11 @@ func (r *Repo) ensureMainBranch(switchToMain bool) error {
 	if !h.Name().IsBranch() {
 		return fmt.Errorf("expecting branch, got %s", h.Name().String())
 	}
-	if h.Name().Short() != mainBranchName {
+	isMain, err := r.isMain()
+	if err != nil {
+		return err
+	}
+	if !isMain {
 		if switchToMain {
 			if err := r.Wt.Checkout(&git.CheckoutOptions{
 				Branch: plumbing.NewBranchReferenceName(mainBranchName),
@@ -150,64 +233,15 @@ func (r *Repo) ensureMainBranch(switchToMain bool) error {
 	return nil
 }
 
-func (r *Repo) Save(path string, bytes []byte) error {
-	f, err := r.Fs.TempFile("", path)
+func (r *Repo) isMain() (bool, error) {
+	h, err := r.Repo.Head()
 	if err != nil {
-		return errors.Wrap(err, "temp file")
+		return false, errors.Wrap(err, "head")
 	}
-	defer func() {
-		_ = f.Close()
-	}()
-	if _, err = f.Write(bytes); err != nil {
-		return fmt.Errorf("write to temp file '%s': %w", f.Name(), err)
+	if !h.Name().IsBranch() {
+		return false, fmt.Errorf("expecting branch, got %s", h.Name().String())
 	}
-	if err := r.Fs.Rename(f.Name(), path); err != nil {
-		return errors.Wrap(err, "fs rename")
-	}
-	return nil
-}
-
-func (r *Repo) Read(path string) ([]byte, error) {
-	f, err := r.Fs.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file at path %s: %w", path, err)
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-	return io.ReadAll(f)
-}
-
-// Commit will take an optional commit message and push the changes in the
-// local working directory to the remote branch.
-func (r *Repo) Commit(message string) (string, error) {
-	if message == "" {
-		message = "new config changes"
-	}
-	if err := r.Wt.AddGlob("."); err != nil {
-		return "", errors.Wrap(err, "add glob")
-	}
-
-	hash, err := r.Wt.Commit(message, &git.CommitOptions{
-		All: true,
-		Author: &object.Signature{
-			Name: r.User,
-			// TODO: add author email here
-			When: time.Now(),
-		},
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "commit")
-	}
-	r.Logf("committed new hash %s locally\n", hash)
-	branchName, err := r.BranchName()
-	if err != nil {
-		return "", errors.Wrap(err, "branch name")
-	}
-	if err := r.pushToRemote(branchName); err != nil {
-		return "", errors.Wrap(err, "push to remote")
-	}
-	return hash.String(), nil
+	return h.Name().Short() == mainBranchName, nil
 }
 
 func (r *Repo) BranchName() (string, error) {
