@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -106,6 +107,26 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 	return ret, nil
 }
 
+func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
+	b := wrapperspb.BoolValue{}
+	if err := a.UnmarshalTo(&b); err == nil {
+		return b.Value, FeatureTypeBool, nil // bool type
+	}
+	s := wrapperspb.StringValue{}
+	if err := a.UnmarshalTo(&s); err == nil {
+		return b.Value, FeatureTypeString, nil // string type
+	}
+	v := structpb.Value{}
+	if err := a.UnmarshalTo(&v); err == nil {
+		return b.Value, FeatureTypeJSON, nil // json type
+	}
+	p := dynamicpb.Message{}
+	if err := a.UnmarshalTo(&p); err == nil {
+		return b.Value, FeatureTypeProto, nil // proto type. TODO: check that this works
+	}
+	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
+}
+
 func valFromJSON(encoded []byte) (interface{}, error) {
 	val := &structpb.Value{}
 	if err := val.UnmarshalJSON(encoded); err != nil {
@@ -162,6 +183,32 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 		})
 	}
 	ret.Tree = tree
+	return ret, nil
+}
+
+func FromProto(fProto *lekkov1beta1.Feature) (*Feature, error) {
+	ret := &Feature{
+		Key:         fProto.Key,
+		Description: fProto.Description,
+	}
+	var err error
+	ret.Value, ret.FeatureType, err = AnyToVal(fProto.GetTree().GetDefault())
+	if err != nil {
+		return nil, errors.Wrap(err, "any to val")
+	}
+	for _, constraint := range fProto.GetTree().GetConstraints() {
+		ruleVal, fType, err := AnyToVal(constraint.GetValue())
+		if err != nil {
+			return nil, errors.Wrap(err, "rule any to val")
+		}
+		if fType != ret.FeatureType {
+			return nil, fmt.Errorf("expecting rule feature type %s, got %s", ret.FeatureType, fType)
+		}
+		ret.Rules = append(ret.Rules, &Rule{
+			Condition: constraint.Rule,
+			Value:     ruleVal,
+		})
+	}
 	return ret, nil
 }
 
