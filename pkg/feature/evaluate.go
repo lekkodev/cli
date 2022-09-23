@@ -69,6 +69,14 @@ type FeatureFile struct {
 	CompiledProtoBinFileName string
 }
 
+type FeatureContents struct {
+	File *FeatureFile
+
+	Star  []byte
+	JSON  []byte
+	Proto []byte
+}
+
 func (ff FeatureFile) Verify() error {
 	if ff.Name == "" {
 		return fmt.Errorf("feature file has no name")

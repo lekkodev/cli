@@ -67,14 +67,27 @@ func (r *Repo) GetFeatureFile(ctx context.Context, namespace, featureName string
 	return ff, nil
 }
 
-func (r *Repo) GetFeatureContents(ctx context.Context, namespace, feature string) (*feature.FeatureFile, []byte, error) {
-	ff, err := r.GetFeatureFile(ctx, namespace, feature)
+func (r *Repo) GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error) {
+	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "get feature file")
+		return nil, errors.Wrap(err, "get feature file")
 	}
-	starBytes, err := r.Read(filepath.Join(namespace, ff.StarlarkFileName))
+	star, err := r.Read(filepath.Join(namespace, ff.StarlarkFileName))
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to read star bytes")
+		return nil, errors.Wrap(err, "failed to read star bytes")
 	}
-	return ff, starBytes, nil
+	json, err := r.Read(filepath.Join(namespace, ff.CompiledJSONFileName))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read json bytes")
+	}
+	proto, err := r.Read(filepath.Join(namespace, ff.CompiledProtoBinFileName))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to read proto bytes")
+	}
+	return &feature.FeatureContents{
+		File:  ff,
+		Star:  star,
+		JSON:  json,
+		Proto: proto,
+	}, nil
 }
