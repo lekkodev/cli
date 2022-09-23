@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/pkg/errors"
@@ -55,12 +57,26 @@ func (r *Repo) Read(path string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
-func (r *Repo) GetFileContents(ctx context.Context, path string) ([]byte, error) {
-	return nil, nil
+func (r *Repo) GetFileContents(_ context.Context, path string) ([]byte, error) {
+	return r.Read(path)
 }
-func (r *Repo) GetDirContents(ctx context.Context, path string) ([]fs.ProviderFile, error) {
-	return nil, nil
+
+func (r *Repo) GetDirContents(_ context.Context, path string) ([]fs.ProviderFile, error) {
+	fi, err := r.Fs.ReadDir(path)
+	if err != nil {
+		return nil, errors.Wrap(err, "fs read dir")
+	}
+	var ret []fs.ProviderFile
+	for _, info := range fi {
+		ret = append(ret, fs.ProviderFile{
+			Name:  info.Name(),
+			Path:  filepath.Join(path, info.Name()),
+			IsDir: info.IsDir(),
+		})
+	}
+	return ret, nil
 }
 func (r *Repo) IsNotExist(err error) bool {
-	return false
+	// both memfs and osfs return 'os' errors.
+	return os.IsNotExist(err)
 }
