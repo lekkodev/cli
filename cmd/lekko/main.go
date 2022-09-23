@@ -31,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/cli/pkg/verify"
@@ -50,7 +51,7 @@ func main() {
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
-	rootCmd.AddCommand(reviewCmd)
+	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
 	// auth
 	authCmd.AddCommand(loginCmd)
@@ -61,6 +62,11 @@ func main() {
 	k8sCmd.AddCommand(applyCmd())
 	k8sCmd.AddCommand(listCmd())
 	rootCmd.AddCommand(k8sCmd)
+	// exp
+	experimentalCmd.AddCommand(startCmd)
+	experimentalCmd.AddCommand(commitCmd())
+	experimentalCmd.AddCommand(cleanupCmd)
+	rootCmd.AddCommand(experimentalCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Println(err)
@@ -145,25 +151,35 @@ func parseCmd() *cobra.Command {
 	return cmd
 }
 
-var reviewCmd = &cobra.Command{
-	Use:   "review",
-	Short: "creates a pr with your changes",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		if err := verify.Verify(wd); err != nil {
-			return errors.Wrap(err, "verification failed")
-		}
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "new repo")
-		}
+func reviewCmd() *cobra.Command {
+	var title string
+	cmd := &cobra.Command{
+		Use:   "review",
+		Short: "creates a pr with your changes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := verify.Verify(wd); err != nil {
+				return errors.Wrap(err, "verification failed")
+			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			secrets := metadata.NewSecretsOrFail()
+			ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+			if _, err := ghCli.GetUserLogin(ctx); err != nil {
+				return errors.Wrap(err, "github auth fail")
+			}
 
-		return cr.Review(ctx)
-	},
+			return r.Review(ctx, title, ghCli)
+		},
+	}
+	cmd.Flags().StringVarP(&title, "title", "t", "New feature change", "Title of pull request")
+	return cmd
 }
 
 var mergeCmd = &cobra.Command{
@@ -178,17 +194,21 @@ var mergeCmd = &cobra.Command{
 		if err := verify.Verify(wd); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
+		r, err := repo.NewLocal(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-		defer cr.Close()
 		prNum, err := strconv.Atoi(args[0])
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
 		}
-		return cr.Merge(prNum)
+		ctx := context.Background()
+		secrets := metadata.NewSecretsOrFail()
+		ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+		if _, err := ghCli.GetUserLogin(ctx); err != nil {
+			return errors.Wrap(err, "github auth fail")
+		}
+		return r.Merge(ctx, prNum, ghCli)
 	},
 }
 
@@ -201,18 +221,9 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		return cr.Login(ctx)
+		auth := gh.NewAuthFS()
+		defer auth.Close()
+		return auth.Login(context.Background())
 	},
 }
 
@@ -220,18 +231,9 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "log out of github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		return cr.Logout(ctx)
+		auth := gh.NewAuthFS()
+		defer auth.Close()
+		return auth.Logout(context.Background())
 	},
 }
 
@@ -239,18 +241,8 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		ctx := context.Background()
-		cr, err := gh.New(ctx, wd)
-		if err != nil {
-			return errors.Wrap(err, "gh new")
-		}
-		defer cr.Close()
-
-		cr.Status(ctx)
+		auth := gh.NewAuthFS()
+		auth.Status(context.Background())
 		return nil
 	},
 }
@@ -389,12 +381,12 @@ func applyCmd() *cobra.Command {
 			}
 
 			ctx := context.Background()
-			cr, err := gh.New(ctx, wd)
+			r, err := repo.NewLocal(wd)
 			if err != nil {
 				return err
 			}
 
-			kube, err := k8s.NewKubernetes(kubeConfig, cr)
+			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
@@ -432,4 +424,76 @@ func listCmd() *cobra.Command {
 	}
 	localKubeParams(ret, &kubeConfig)
 	return ret
+}
+
+var experimentalCmd = &cobra.Command{
+	Use:   "exp",
+	Short: "experimental commands",
+}
+
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "sets up the local config repo for making changes",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		if _, err = r.Start(); err != nil {
+			return err
+		}
+		return nil
+	},
+}
+
+func commitCmd() *cobra.Command {
+	var message string
+	cmd := &cobra.Command{
+		Use:   "commit",
+		Short: "commits local changes to the remote branch",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			if err := verify.Verify(wd); err != nil {
+				return err
+			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			if _, err = r.Commit(context.Background(), message); err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&message, "message", "m", "config change commit", "commit message")
+	return cmd
+}
+
+var cleanupCmd = &cobra.Command{
+	Use:   "cleanup",
+	Short: "deletes the current local branch (and its remote counterpart)",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+
+		if err = r.Cleanup(context.Background()); err != nil {
+			return err
+		}
+		return nil
+	},
 }

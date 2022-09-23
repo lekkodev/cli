@@ -66,6 +66,18 @@ func NewSecretsOrFail() Secrets {
 	return NewSecrets(hd)
 }
 
+func NewSecretsOrError() (Secrets, error) {
+	hd, err := os.UserHomeDir()
+	if err != nil {
+		return nil, errors.Wrap(err, "user home directory")
+	}
+	s := &secrets{homeDir: hd}
+	if err := s.Read(); err != nil {
+		return nil, errors.Wrap(err, "failed to read secrets")
+	}
+	return s, nil
+}
+
 func (s *secrets) Read() error {
 	s.Lock()
 	defer s.Unlock()

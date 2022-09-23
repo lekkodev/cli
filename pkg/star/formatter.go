@@ -59,9 +59,7 @@ func Format(root string, verbose bool) error {
 		featureFiles, err := feature.GroupFeatureFiles(
 			context.Background(),
 			pathToNamespace,
-			nsMD,
 			fs.LocalProvider(),
-			false,
 		)
 		if err != nil {
 			return errors.Wrap(err, "group feature files")

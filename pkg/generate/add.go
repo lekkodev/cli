@@ -43,11 +43,14 @@ func Add(rootPath, namespaceName, featureName string, complexFeature bool) error
 		fmt.Printf("Your new namespace has been created: %v\n", filepath.Join(rootPath, namespaceName))
 		return nil
 	}
-	ffs, err := feature.GroupFeatureFiles(ctx, filepath.Join(rootPath, namespaceName), nsMD, provider, true)
+	ffs, err := feature.GroupFeatureFiles(ctx, filepath.Join(rootPath, namespaceName), provider)
 	if err != nil {
 		return fmt.Errorf("failed to group feature files: %v", err)
 	}
 	for _, ff := range ffs {
+		if err := feature.ComplianceCheck(ff, nsMD); err != nil {
+			return fmt.Errorf("compliance check for feature %s: %w", ff.Name, err)
+		}
 		if ff.Name == featureName {
 			return fmt.Errorf("feature named %s already exists", featureName)
 		}

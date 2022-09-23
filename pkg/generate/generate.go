@@ -88,9 +88,7 @@ func compileNamespace(
 	featureFiles, err := feature.GroupFeatureFiles(
 		ctx,
 		pathToNamespace,
-		nsMD,
 		fs.LocalProvider(),
-		false,
 	)
 	if err != nil {
 		return errors.Wrap(err, "group feature files")

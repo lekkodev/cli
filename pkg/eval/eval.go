@@ -48,9 +48,15 @@ func Eval(rootPath string, featurePath string, iCtx map[string]interface{}) (*an
 		return nil, fmt.Errorf("invalid namespace: %s, should be of format namespace/feature", ns)
 	}
 
-	groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider(), true)
+	groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), fs.LocalProvider())
 	if err != nil {
 		return nil, err
+	}
+	// compliance check
+	for _, ff := range groupedFeatures {
+		if err := feature.ComplianceCheck(ff, nsMD); err != nil {
+			return nil, fmt.Errorf("compliance check for feature %s: %w", ff.Name, err)
+		}
 	}
 
 	idx := slices.IndexFunc(groupedFeatures, func(c feature.FeatureFile) bool { return c.Name == featureName })

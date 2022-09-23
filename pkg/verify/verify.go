@@ -40,11 +40,14 @@ func Verify(rootPath string) error {
 	}
 
 	for ns, nsMD := range nsNameToNsMDs {
-		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), nsMD, fs.LocalProvider(), true)
+		groupedFeatures, err := feature.GroupFeatureFiles(context.Background(), filepath.Join(rootPath, ns), fs.LocalProvider())
 		if err != nil {
 			return errors.Wrap(err, "group feature files")
 		}
 		for _, ff := range groupedFeatures {
+			if err := feature.ComplianceCheck(ff, nsMD); err != nil {
+				return fmt.Errorf("compliance check for feature %s: %w", ff.Name, err)
+			}
 			if err := ff.Verify(); err != nil {
 				return errors.Wrap(err, fmt.Sprintf("verify ns %s", ns))
 			}
