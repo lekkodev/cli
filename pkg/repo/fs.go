@@ -57,6 +57,8 @@ func (r *Repo) Read(path string) ([]byte, error) {
 	return io.ReadAll(f)
 }
 
+/* Implement fs.Provider */
+
 func (r *Repo) GetFileContents(_ context.Context, path string) ([]byte, error) {
 	return r.Read(path)
 }
@@ -76,6 +78,7 @@ func (r *Repo) GetDirContents(_ context.Context, path string) ([]fs.ProviderFile
 	}
 	return ret, nil
 }
+
 func (r *Repo) IsNotExist(err error) bool {
 	// both memfs and osfs return 'os' errors.
 	return os.IsNotExist(err)
