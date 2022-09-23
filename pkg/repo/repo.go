@@ -63,7 +63,11 @@ func NewLocal(path string) (*Repo, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	secrets := metadata.NewSecretsOrFail()
+
+	secrets, err := metadata.NewSecretsOrError()
+	if err != nil {
+		return nil, errors.Wrap(err, "new secrets")
+	}
 	cr := &Repo{
 		Repo:           repo,
 		Wt:             wt,
@@ -113,7 +117,7 @@ func (r *Repo) Start() (string, error) {
 	if !clean {
 		return "", fmt.Errorf("expecting clean working directory")
 	}
-	if err := r.ensureMainBranch(true); err != nil {
+	if err := r.ensureMainBranch(); err != nil {
 		return "", errors.Wrap(err, "is main")
 	}
 	branchName, err := r.checkoutLocalBranch()
@@ -174,7 +178,9 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 
 	if err := r.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
-		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
+		// Note: the fact that the source ref is empty means this is a delete. This is
+		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
+		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
 		Auth: &http.BasicAuth{
 			Username: r.User,
 			Password: r.Token,
@@ -235,7 +241,7 @@ func (r *Repo) WorkingDirectoryHash() (string, error) {
 	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
 }
 
-func (r *Repo) ensureMainBranch(switchToMain bool) error {
+func (r *Repo) ensureMainBranch() error {
 	h, err := r.Repo.Head()
 	if err != nil {
 		return errors.Wrap(err, "head")
@@ -248,15 +254,12 @@ func (r *Repo) ensureMainBranch(switchToMain bool) error {
 		return err
 	}
 	if !isMain {
-		if switchToMain {
-			if err := r.Wt.Checkout(&git.CheckoutOptions{
-				Branch: plumbing.NewBranchReferenceName(mainBranchName),
-			}); err != nil {
-				return errors.Wrap(err, "checkout main")
-			}
-			return nil
+		if err := r.Wt.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(mainBranchName),
+		}); err != nil {
+			return errors.Wrap(err, "checkout main")
 		}
-		return fmt.Errorf("expecting main branch, currently on %s", h.Name().Short())
+		return nil
 	}
 	return nil
 }
