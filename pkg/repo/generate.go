@@ -95,6 +95,9 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context) (*protoregistry.Typ
 }
 
 // Actually regenerates the buf image, and writes it to the file system.
+// Note: we don't have a way yet to run this from an ephemeral repo,
+// because we need to first ensure that buf cmd line can be executed in the
+// ephemeral env.
 func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context) (*protoregistry.Types, error) {
 	rootMd, _, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
 	if err != nil {

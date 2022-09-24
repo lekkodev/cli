@@ -90,6 +90,7 @@ var verifyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		// TODO: repo.Verify
 		return verify.Verify(wd)
 	},
 }
@@ -104,6 +105,7 @@ func formatCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// TODO: repo.Format
 			return star.Format(wd, verbose)
 		},
 	}
@@ -136,13 +138,22 @@ var compileCmd = &cobra.Command{
 				return err
 			}
 		}
-		if ns != "" {
-			if f != "" {
-				return r.CompileFeature(ctx, registry, ns, f)
+
+		compile := func() error {
+			if ns != "" {
+				if f != "" {
+					return r.CompileFeature(ctx, registry, ns, f)
+				}
+				return r.CompileNamespace(ctx, registry, ns)
 			}
-			return r.CompileNamespace(ctx, registry, ns)
+			return r.Compile(ctx, registry)
 		}
-		return r.Compile(ctx, registry)
+
+		if err := compile(); err != nil {
+			return errors.Wrap(err, "compile")
+		}
+		// TODO: repo.Verify
+		return verify.Verify(wd)
 	},
 }
 
@@ -285,6 +296,7 @@ var evalCmd = &cobra.Command{
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}
 
+		// TODO: repo.Eval
 		res, err := eval.Eval(wd, args[0], ctxMap)
 		if err != nil {
 			return err
@@ -332,6 +344,7 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse feature path")
 			}
+			// TODO: repo.Add
 			return generate.Add(wd, namespace, featureName, complexFeature)
 		},
 	}
@@ -356,6 +369,7 @@ func removeCmd() *cobra.Command {
 			if featureName == "" {
 				return generate.RemoveNamespace(wd, namespace)
 			}
+			// TODO: repo.Remove
 			return generate.RemoveFeature(wd, namespace, featureName)
 		},
 	}
