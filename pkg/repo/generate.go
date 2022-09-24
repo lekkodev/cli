@@ -23,14 +23,57 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-func (r *Repo) CompileFeature(ctx context.Context, namespace, featureName string) error {
+func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types) error {
+	var err error
+	if registry == nil {
+		registry, err = r.BuildDynamicTypeRegistry(ctx)
+		if err != nil {
+			return errors.Wrap(err, "build dynamic type registry")
+		}
+	}
+	contents, err := r.GetContents(ctx)
+	if err != nil {
+		return errors.Wrap(err, "get contents")
+	}
+	for nsMD, ffs := range contents {
+		for _, ff := range ffs {
+			if err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name); err != nil {
+				return errors.Wrap(err, "compile feature")
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string) error {
+	ffs, err := r.GetFeatureFiles(ctx, namespace)
+	if err != nil {
+		return errors.Wrap(err, "get feature files")
+	}
+	if registry == nil {
+		registry, err = r.BuildDynamicTypeRegistry(ctx)
+		if err != nil {
+			return errors.Wrap(err, "build dynamic type registry")
+		}
+	}
+	for _, ff := range ffs {
+		if err := r.CompileFeature(ctx, registry, namespace, ff.Name); err != nil {
+			return errors.Wrap(err, "compile feature")
+		}
+	}
+	return nil
+}
+
+func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) error {
 	fc, err := r.GetFeatureContents(ctx, namespace, featureName)
 	if err != nil {
 		return errors.Wrap(err, "get feature contents")
 	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx)
-	if err != nil {
-		return errors.Wrap(err, "build dynamic type registry")
+	if registry == nil {
+		registry, err = r.BuildDynamicTypeRegistry(ctx)
+		if err != nil {
+			return errors.Wrap(err, "build dynamic type registry")
+		}
 	}
 	compiler := star.NewCompiler(registry, fc.File, r)
 	f, err := compiler.Compile()
@@ -49,4 +92,13 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context) (*protoregistry.Typ
 		return nil, errors.Wrap(err, "parse root md")
 	}
 	return star.BuildDynamicTypeRegistry(rootMd.ProtoDirectory, r)
+}
+
+// Actually regenerates the buf image, and writes it to the file system.
+func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context) (*protoregistry.Types, error) {
+	rootMd, _, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse root md")
+	}
+	return star.ReBuildDynamicTypeRegistry(rootMd.ProtoDirectory, r)
 }

@@ -120,6 +120,15 @@ var compileCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return err
+		}
+		ctx := context.Background()
+		registry, err := r.ReBuildDynamicTypeRegistry(ctx)
+		if err != nil {
+			return errors.Wrap(err, "rebuild type registry")
+		}
 		var ns, f string
 		if len(args) > 0 {
 			ns, f, err = feature.ParseFeaturePath(args[0])
@@ -127,7 +136,13 @@ var compileCmd = &cobra.Command{
 				return err
 			}
 		}
-		return generate.Compile(wd, ns, f)
+		if ns != "" {
+			if f != "" {
+				return r.CompileFeature(ctx, registry, ns, f)
+			}
+			return r.CompileNamespace(ctx, registry, ns)
+		}
+		return r.Compile(ctx, registry)
 	},
 }
 
