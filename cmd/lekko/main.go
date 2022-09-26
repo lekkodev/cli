@@ -211,7 +211,8 @@ func reviewCmd() *cobra.Command {
 				return errors.Wrap(err, "github auth fail")
 			}
 
-			return r.Review(ctx, title, ghCli)
+			_, err = r.Review(ctx, title, ghCli)
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&title, "title", "t", "New feature change", "Title of pull request")
