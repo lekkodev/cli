@@ -29,23 +29,6 @@ import (
 	fs.go contains methods to interact with go's filesystem abstraction, billy.Filesystem.
 */
 
-func (r *Repo) Save(path string, bytes []byte) error {
-	f, err := r.Fs.TempFile("", path)
-	if err != nil {
-		return errors.Wrap(err, "temp file")
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-	if _, err = f.Write(bytes); err != nil {
-		return fmt.Errorf("write to temp file '%s': %w", f.Name(), err)
-	}
-	if err := r.Fs.Rename(f.Name(), path); err != nil {
-		return errors.Wrap(err, "fs rename")
-	}
-	return nil
-}
-
 func (r *Repo) Read(path string) ([]byte, error) {
 	f, err := r.Fs.Open(path)
 	if err != nil {

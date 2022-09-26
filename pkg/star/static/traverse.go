@@ -22,11 +22,11 @@ import (
 	"github.com/pkg/errors"
 )
 
-func defaultNoop(v build.Expr) error            { return nil }
+func defaultNoop(v *build.Expr) error           { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
 func rulesNoop(rules *rulesWrapper) error       { return nil }
 
-type defaultFn func(v build.Expr) error
+type defaultFn func(v *build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
 type rulesFn func(rules *rulesWrapper) error
 
@@ -74,7 +74,6 @@ func (t *traverser) traverse() error {
 	if !ok {
 		return fmt.Errorf("could not find %s attribute", star.DefaultValueAttrName)
 	}
-
 	if err := t.defaultFn(defaultExpr); err != nil {
 		return errors.Wrap(err, "default fn")
 	}
@@ -82,15 +81,16 @@ func (t *traverser) traverse() error {
 	for k, v := range kwargs {
 		switch k {
 		case star.DescriptionAttrName:
-			descriptionStr, ok := v.(*build.StringExpr)
+			vExpr := *v
+			descriptionStr, ok := vExpr.(*build.StringExpr)
 			if !ok {
-				return fmt.Errorf("description kwarg: expected string, got %T", v)
+				return fmt.Errorf("description kwarg: expected string, got %T", vExpr)
 			}
 			if err := t.descriptionFn(descriptionStr); err != nil {
 				return errors.Wrap(err, "description fn")
 			}
 		case star.RulesAttrName:
-			if err := t.parseRules(v); err != nil {
+			if err := t.parseRules(*v); err != nil {
 				return errors.Wrap(err, "parse rules")
 			}
 		}
@@ -128,8 +128,8 @@ func (t *traverser) parseRules(v build.Expr) error {
 // feature value. E.g.
 // 		result = feature(description="foo", default=False)
 // has two keys, each with a corresponding build expression.
-func (t *traverser) getFeatureKWArgs() (map[string]build.Expr, error) {
-	ret := make(map[string]build.Expr)
+func (t *traverser) getFeatureKWArgs() (map[string]*build.Expr, error) {
+	ret := make(map[string]*build.Expr)
 	for _, expr := range t.f.Stmt {
 		switch t := expr.(type) {
 		case *build.AssignExpr:
@@ -145,7 +145,7 @@ func (t *traverser) getFeatureKWArgs() (map[string]build.Expr, error) {
 							if ok {
 								kwargName, ok := assignExpr.LHS.(*build.Ident)
 								if ok {
-									ret[kwargName.Name] = assignExpr.RHS
+									ret[kwargName.Name] = &assignExpr.RHS
 								}
 							}
 						}
