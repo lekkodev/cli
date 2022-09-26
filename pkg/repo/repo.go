@@ -103,6 +103,7 @@ func NewEphemeral(url, user, token string) (*Repo, error) {
 	return &Repo{
 		Repo:  r,
 		Wt:    wt,
+		Fs:    wt.Filesystem,
 		User:  user,
 		Token: token,
 	}, nil
