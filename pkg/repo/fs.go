@@ -34,6 +34,7 @@ func (r *Repo) Save(path string, bytes []byte) error {
 	if err != nil {
 		return errors.Wrap(err, "temp file")
 	}
+	fmt.Printf("Created temp file %s. Gave path %s\n", f.Name(), path)
 	defer func() {
 		_ = f.Close()
 	}()
