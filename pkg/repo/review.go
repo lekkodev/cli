@@ -32,53 +32,54 @@ import (
 // Review will open a pull request. It takes different actions depending on
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
-func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) error {
+func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) (string, error) {
 	if err := r.CheckUserAuthenticated(); err != nil {
-		return errors.Wrap(err, "check auth")
+		return "", errors.Wrap(err, "check auth")
 	}
 	var main, clean bool
 	var err error
 	main, err = r.isMain()
 	if err != nil {
-		return errors.Wrap(err, "is main")
+		return "", errors.Wrap(err, "is main")
 	}
 	clean, err = r.wdClean()
 	if err != nil {
-		return errors.Wrap(err, "wd clean")
+		return "", errors.Wrap(err, "wd clean")
 	}
 	var branchName string
 	if main {
 		if clean {
-			return errors.Errorf("nothing to review on main with clean wd")
+			return "", errors.Errorf("nothing to review on main with clean wd")
 		}
 		// dirty working directory on main
 		branchName, err = r.checkoutLocalBranch()
 		if err != nil {
-			return errors.Wrap(err, "checkout new branch")
+			return "", errors.Wrap(err, "checkout new branch")
 		}
 		// set up remote branch tracking
 		if err := r.setTrackingConfig(branchName); err != nil {
-			return errors.Wrap(err, "push to remote")
+			return "", errors.Wrap(err, "push to remote")
 		}
 		if _, err := r.Commit(ctx, ""); err != nil {
-			return errors.Wrap(err, "add commit push")
+			return "", errors.Wrap(err, "add commit push")
 		}
 	} else {
 		branchName, err = r.BranchName()
 		if err != nil {
-			return err
+			return "", err
 		}
 		// TODO: check if pr already exists on current branch, and if so, exit early
 		if !clean {
 			if _, err := r.Commit(ctx, ""); err != nil {
-				return errors.Wrap(err, "add commit push")
+				return "", errors.Wrap(err, "add commit push")
 			}
 		}
 	}
-	if err := r.createPR(ctx, branchName, title, ghCli); err != nil {
-		return errors.Wrap(err, "create pr")
+	url, err := r.createPR(ctx, branchName, title, ghCli)
+	if err != nil {
+		return "", errors.Wrap(err, "create pr")
 	}
-	return nil
+	return url, nil
 }
 
 func (r *Repo) Merge(ctx context.Context, prNum int, ghCli *gh.GithubClient) error {
@@ -169,10 +170,10 @@ func (r *Repo) setTrackingConfig(branchName string) error {
 	return nil
 }
 
-func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) error {
+func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) (string, error) {
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
-		return errors.Wrap(err, "get owner repo")
+		return "", errors.Wrap(err, "get owner repo")
 	}
 	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
@@ -180,10 +181,10 @@ func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh
 		Base:  strPtr(mainBranchName),
 	})
 	if err != nil {
-		return fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
+		return "", fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
 	}
 	r.Logf("Created PR:\n\t%s\n", pr.GetHTMLURL())
-	return nil
+	return pr.GetHTMLURL(), nil
 }
 
 func strPtr(s string) *string {

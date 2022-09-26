@@ -29,23 +29,6 @@ import (
 	fs.go contains methods to interact with go's filesystem abstraction, billy.Filesystem.
 */
 
-func (r *Repo) Save(path string, bytes []byte) error {
-	f, err := r.Fs.TempFile("", path)
-	if err != nil {
-		return errors.Wrap(err, "temp file")
-	}
-	defer func() {
-		_ = f.Close()
-	}()
-	if _, err = f.Write(bytes); err != nil {
-		return fmt.Errorf("write to temp file '%s': %w", f.Name(), err)
-	}
-	if err := r.Fs.Rename(f.Name(), path); err != nil {
-		return errors.Wrap(err, "fs rename")
-	}
-	return nil
-}
-
 func (r *Repo) Read(path string) ([]byte, error) {
 	f, err := r.Fs.Open(path)
 	if err != nil {
@@ -81,5 +64,55 @@ func (r *Repo) GetDirContents(_ context.Context, path string) ([]fs.ProviderFile
 
 func (r *Repo) IsNotExist(err error) bool {
 	// both memfs and osfs return 'os' errors.
-	return os.IsNotExist(err)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+/* Implement fs.ConfigWriter */
+
+// WriteFile writes data to the named file, creating it if necessary.
+// If the file does not exist, WriteFile creates it with permissions perm (before umask);
+// otherwise WriteFile truncates it before writing, without changing permissions.
+func (r *Repo) WriteFile(name string, data []byte, perm os.FileMode) error {
+	f, err := r.Fs.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err1 := f.Close(); err1 != nil && err == nil {
+		err = err1
+	}
+	return err
+}
+
+func (r *Repo) MkdirAll(path string, perm os.FileMode) error {
+	return r.Fs.MkdirAll(path, perm)
+}
+
+func (r *Repo) RemoveIfExists(path string) (bool, error) {
+	fi, err := r.Fs.Stat(path)
+	if err != nil {
+		if r.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "fs.Stat")
+	}
+	if fi.IsDir() {
+		fis, err := r.Fs.ReadDir(path)
+		if err != nil {
+			return false, errors.Wrap(err, "read dir")
+		}
+		for _, subFI := range fis {
+			subPath := filepath.Join(path, subFI.Name())
+			if _, err := r.RemoveIfExists(subPath); err != nil {
+				return false, fmt.Errorf("remove '%s' if exists: %w", subPath, err)
+			}
+		}
+	}
+	if err := r.Fs.Remove(path); err != nil {
+		if r.IsNotExist(err) {
+			return false, nil
+		}
+		return false, errors.Wrap(err, "remove")
+	}
+	return true, nil
 }

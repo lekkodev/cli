@@ -18,12 +18,8 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"text/tabwriter"
 
-	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,11 +80,10 @@ func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
 // directory exactly. It will delete configmaps that don't exist in the config repo,
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
-func (k *kubeClient) Apply(ctx context.Context, root string) error {
+func (k *kubeClient) Apply(ctx context.Context) error {
 	if err := k.r.CheckUserAuthenticated(); err != nil {
 		return errors.Wrap(err, "check auth")
 	}
-	provider := fs.LocalProvider()
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
 		LabelSelector: configMapLabel,
@@ -101,14 +96,14 @@ func (k *kubeClient) Apply(ctx context.Context, root string) error {
 		existingConfigMaps[item.GetName()] = struct{}{}
 	}
 
-	_, nsMD, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, provider)
+	_, nsMD, err := k.r.ParseMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse full config repo metadata")
 	}
 
 	for _, md := range nsMD {
 		cmName := fmt.Sprintf("%s%s", lekkoConfigMapPrefix, md.Name)
-		if err := k.applyLekkoNamespace(ctx, root, md.Name, provider, cmName); err != nil {
+		if err := k.applyLekkoNamespace(ctx, md.Name, cmName); err != nil {
 			return fmt.Errorf("namespace %s: apply: %w", md.Name, err)
 		}
 		delete(existingConfigMaps, cmName)
@@ -171,23 +166,16 @@ func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) erro
 
 func (k *kubeClient) applyLekkoNamespace(
 	ctx context.Context,
-	root string,
 	namespaceName string,
-	provider fs.Provider,
 	cmName string,
 ) error {
 	cm := corev1.ConfigMap(cmName, k.k8sNamespace)
-	nsPath := filepath.Join(root, namespaceName)
-	featureFiles, err := feature.GroupFeatureFiles(
-		context.Background(),
-		nsPath,
-		provider,
-	)
+	ffs, err := k.r.GetFeatureFiles(ctx, namespaceName)
 	if err != nil {
-		return fmt.Errorf("group feature files: %w", err)
+		return fmt.Errorf("get feature files: %w", err)
 	}
-	for _, ff := range featureFiles {
-		bytes, err := provider.GetFileContents(ctx, filepath.Join(nsPath, ff.CompiledProtoBinFileName))
+	for _, ff := range ffs {
+		bytes, err := k.r.GetFileContents(ctx, ff.RootPath(ff.CompiledProtoBinFileName))
 		if err != nil {
 			return fmt.Errorf("file %s: get file contents: %w", ff.Name, err)
 		}

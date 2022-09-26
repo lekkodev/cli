@@ -47,10 +47,11 @@ type Repo struct {
 	Wt   *git.Worktree
 	Fs   billy.Filesystem
 
-	User, Token    string
-	LoggingEnabled bool
+	User, Token                string
+	loggingEnabled, bufEnabled bool
 
 	fs.Provider
+	fs.ConfigWriter
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.
@@ -74,7 +75,8 @@ func NewLocal(path string) (*Repo, error) {
 		Fs:             wt.Filesystem,
 		User:           secrets.GetGithubUser(),
 		Token:          secrets.GetGithubToken(),
-		LoggingEnabled: true,
+		loggingEnabled: true,
+		bufEnabled:     true,
 	}
 	return cr, nil
 }
@@ -101,6 +103,7 @@ func NewEphemeral(url, user, token string) (*Repo, error) {
 	return &Repo{
 		Repo:  r,
 		Wt:    wt,
+		Fs:    wt.Filesystem,
 		User:  user,
 		Token: token,
 	}, nil
@@ -170,41 +173,45 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 // branch on local and remote. Will switch the current branch back to main, and
 // pull from remote to ensure we are on the latest commit.
 func (r *Repo) Cleanup(ctx context.Context) error {
-	head, err := r.Repo.Head()
+	isMain, err := r.isMain()
 	if err != nil {
-		return errors.Wrap(err, "head")
+		return errors.Wrap(err, "is main")
 	}
-	localBranchRef := head.Name()
+	if !isMain { // delete local and remote branches, and switch back to main
+		head, err := r.Repo.Head()
+		if err != nil {
+			return errors.Wrap(err, "head")
+		}
+		localBranchRef := head.Name()
 
-	if err := r.Repo.Push(&git.PushOptions{
-		RemoteName: remoteName,
-		// Note: the fact that the source ref is empty means this is a delete. This is
-		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
-		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
-		Auth: &http.BasicAuth{
-			Username: r.User,
-			Password: r.Token,
-		},
-	}); err != nil {
-		return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
-	}
-	r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
+		if err := r.Repo.Push(&git.PushOptions{
+			RemoteName: remoteName,
+			// Note: the fact that the source ref is empty means this is a delete. This is
+			// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
+			RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
+			Auth: &http.BasicAuth{
+				Username: r.User,
+				Password: r.Token,
+			},
+		}); err != nil {
+			return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
+		}
+		r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
 
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(mainBranchName),
-	}); err != nil {
-		return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+		if err := r.Wt.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(mainBranchName),
+		}); err != nil {
+			return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+		}
+		r.Logf("Checked out local branch %s\n", mainBranchName)
+		if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
+			return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
+		}
+		if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
+			return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
+		}
+		r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
 	}
-	r.Logf("Checked out local branch %s\n", mainBranchName)
-	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
-		cfg, err := r.Repo.Config()
-		fmt.Printf("config: %v, %v\n", cfg.Branches, err)
-		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
-	}
-	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
-		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
-	}
-	r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
 	if err := r.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
 		Auth: &http.BasicAuth{
@@ -303,7 +310,7 @@ func (r *Repo) getOwnerRepo() (string, string, error) {
 }
 
 func (r *Repo) Logf(format string, a ...any) {
-	if !r.LoggingEnabled {
+	if !r.loggingEnabled {
 		return
 	}
 	fmt.Printf(format, a...)

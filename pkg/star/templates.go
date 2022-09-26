@@ -14,6 +14,12 @@
 
 package star
 
+import (
+	"fmt"
+
+	"github.com/lekkodev/cli/pkg/feature"
+)
+
 const simpleStar = `result=feature(
 	description="my feature description",
 	default=False
@@ -44,9 +50,13 @@ result=feature(
 )
 `
 
-func GetTemplate(complexFeature bool) []byte {
-	if complexFeature {
-		return []byte(complexStar)
+func GetTemplate(fType feature.FeatureType) ([]byte, error) {
+	switch fType {
+	case feature.FeatureTypeBool:
+		return []byte(simpleStar), nil
+	case feature.FeatureTypeProto:
+		return []byte(complexStar), nil
+	default:
+		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)
 	}
-	return []byte(simpleStar)
 }

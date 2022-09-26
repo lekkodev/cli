@@ -70,6 +70,21 @@ func TestWalkerMutateNoop(t *testing.T) {
 	assert.EqualValues(t, []byte(testStar), bytes)
 }
 
+func TestWalkerMutateDefault(t *testing.T) {
+	b := testWalker()
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	defaultVal, ok := f.Value.(bool)
+	require.True(t, ok)
+	require.True(t, defaultVal)
+
+	f.Value = false
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotEqualValues(t, []byte(testStar), bytes)
+}
+
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	b := testWalker()
 	f, err := b.Build()

@@ -88,7 +88,11 @@ func (w *walker) genAST() (*build.File, error) {
 
 /** Methods helpful for building a go-native representation of a feature **/
 
-func (w *walker) extractValue(v build.Expr) (interface{}, feature.FeatureType, error) {
+func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureType, error) {
+	if vPtr == nil {
+		return nil, "", fmt.Errorf("received nil value")
+	}
+	v := *vPtr
 	switch t := v.(type) {
 	case *build.Ident:
 		switch t.Name {
@@ -117,7 +121,7 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			rule := &feature.Rule{
 				Condition: r.conditionV.Value,
 			}
-			goVal, featureType, err := w.extractValue(r.v)
+			goVal, featureType, err := w.extractValue(&r.v)
 			if err != nil {
 				return fmt.Errorf("rule #%d: extract value: %w", i, err)
 			}
@@ -134,7 +138,7 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 }
 
 func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
-	return func(v build.Expr) error {
+	return func(v *build.Expr) error {
 		goVal, featureType, err := w.extractValue(v)
 		if err != nil {
 			return err
@@ -180,7 +184,7 @@ func (w *walker) mutateValue(v *build.Expr, goVal interface{}) error {
 }
 
 func (w *walker) mutateDefaultFn(f *feature.Feature) defaultFn {
-	return func(v build.Expr) error {
+	return func(v *build.Expr) error {
 		_, featureType, err := w.extractValue(v)
 		if err != nil {
 			return errors.Wrap(err, "extract default value")
@@ -188,7 +192,7 @@ func (w *walker) mutateDefaultFn(f *feature.Feature) defaultFn {
 		if featureType != f.FeatureType {
 			return errors.Wrapf(err, "cannot mutate star type %T with feature type %v", v, featureType)
 		}
-		if err := w.mutateValue(&v, f.Value); err != nil {
+		if err := w.mutateValue(v, f.Value); err != nil {
 			return errors.Wrap(err, "mutate default feature value")
 		}
 		return nil
