@@ -87,8 +87,8 @@ func ParseFullConfigRepoMetadataStrict(ctx context.Context, path string, provide
 	return &rootMetadata, nsMDs, nil
 }
 
-func UpdateRootConfigRepoMetadata(ctx context.Context, path string, provider fs.Provider, cw fs.ConfigWriter, f func(*RootConfigRepoMetadata)) error {
-	contents, err := provider.GetFileContents(ctx, filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
+func UpdateRootConfigRepoMetadata(ctx context.Context, path string, cw fs.ConfigWriter, f func(*RootConfigRepoMetadata)) error {
+	contents, err := cw.GetFileContents(ctx, filepath.Join(path, DefaultRootConfigRepoMetadataFileName))
 	if err != nil {
 		return fmt.Errorf("could not open root metadata: %v", err)
 	}
@@ -122,7 +122,7 @@ func ParseNamespaceMetadataStrict(ctx context.Context, rootPath, namespaceName s
 	return &nsConfig, nil
 }
 
-func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, provider fs.Provider, cw fs.ConfigWriter) error {
+func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, cw fs.ConfigWriter) error {
 	if err := cw.MkdirAll(filepath.Join(rootPath, namespaceName), 0755); err != nil {
 		return errors.Wrap(err, "failed to mkdir")
 	}
@@ -138,7 +138,7 @@ func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string
 		return errors.Wrap(err, "failed to write file")
 	}
 	// now, add the new namespace to the root repo metadata
-	rootMD, _, err := ParseFullConfigRepoMetadataStrict(ctx, rootPath, provider)
+	rootMD, _, err := ParseFullConfigRepoMetadataStrict(ctx, rootPath, cw)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse root config repo metadata")
 	}

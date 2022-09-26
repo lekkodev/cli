@@ -25,7 +25,7 @@ import (
 )
 
 func (r *Repo) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error) {
-	_, nsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
+	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse root md")
 	}
@@ -90,4 +90,8 @@ func (r *Repo) GetFeatureContents(ctx context.Context, namespace, featureName st
 		JSON:  json,
 		Proto: proto,
 	}, nil
+}
+
+func (r *Repo) ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error) {
+	return metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
 }

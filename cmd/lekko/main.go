@@ -24,17 +24,14 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/lekkodev/cli/pkg/eval"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/generate"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
-	"github.com/lekkodev/cli/pkg/verify"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 
@@ -68,7 +65,7 @@ func main() {
 	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
@@ -85,13 +82,15 @@ var verifyCmd = &cobra.Command{
 	Use:   "verify",
 	Short: "verify a config repository with a lekko.root.yaml",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// TODO lint the repo with the right proto files.
 		wd, err := os.Getwd()
 		if err != nil {
 			return err
 		}
-		// TODO: repo.Verify
-		return verify.Verify(wd)
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new local repo")
+		}
+		return r.Verify(cmd.Context())
 	},
 }
 
@@ -105,8 +104,11 @@ func formatCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// TODO: repo.Format
-			return star.Format(wd, verbose)
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			return r.Format(cmd.Context())
 		},
 	}
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
@@ -126,8 +128,12 @@ var compileCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		ctx := context.Background()
-		registry, err := r.ReBuildDynamicTypeRegistry(ctx)
+		ctx := cmd.Context()
+		rootMD, _, err := r.ParseMetadata(ctx)
+		if err != nil {
+			return errors.Wrap(err, "parse metadata")
+		}
+		registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
 		if err != nil {
 			return errors.Wrap(err, "rebuild type registry")
 		}
@@ -142,7 +148,8 @@ var compileCmd = &cobra.Command{
 		compile := func() error {
 			if ns != "" {
 				if f != "" {
-					return r.CompileFeature(ctx, registry, ns, f)
+					_, err = r.CompileFeature(ctx, registry, ns, f, true)
+					return err
 				}
 				return r.CompileNamespace(ctx, registry, ns)
 			}
@@ -152,8 +159,7 @@ var compileCmd = &cobra.Command{
 		if err := compile(); err != nil {
 			return errors.Wrap(err, "compile")
 		}
-		// TODO: repo.Verify
-		return verify.Verify(wd)
+		return r.Verify(ctx)
 	},
 }
 
@@ -183,18 +189,19 @@ func reviewCmd() *cobra.Command {
 		Use:   "review",
 		Short: "creates a pr with your changes",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx := cmd.Context()
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
-			}
-			if err := verify.Verify(wd); err != nil {
-				return errors.Wrap(err, "verification failed")
 			}
 			r, err := repo.NewLocal(wd)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
+			if err := r.Verify(ctx); err != nil {
+				return errors.Wrap(err, "verify")
+			}
+
 			secrets := metadata.NewSecretsOrFail()
 			ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
 			if _, err := ghCli.GetUserLogin(ctx); err != nil {
@@ -217,18 +224,19 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		if err := verify.Verify(wd); err != nil {
-			return errors.Wrap(err, "verification failed")
-		}
 		r, err := repo.NewLocal(wd)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
+		}
+		ctx := cmd.Context()
+		if err := r.Verify(ctx); err != nil {
+			return errors.Wrap(err, "verification failed")
 		}
 		prNum, err := strconv.Atoi(args[0])
 		if err != nil {
 			return errors.Wrap(err, "pr-number arg")
 		}
-		ctx := context.Background()
+
 		secrets := metadata.NewSecretsOrFail()
 		ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
 		if _, err := ghCli.GetUserLogin(ctx); err != nil {
@@ -249,7 +257,7 @@ var loginCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		auth := gh.NewAuthFS()
 		defer auth.Close()
-		return auth.Login(context.Background())
+		return auth.Login(cmd.Context())
 	},
 }
 
@@ -259,7 +267,7 @@ var logoutCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		auth := gh.NewAuthFS()
 		defer auth.Close()
-		return auth.Logout(context.Background())
+		return auth.Logout(cmd.Context())
 	},
 }
 
@@ -268,7 +276,7 @@ var statusCmd = &cobra.Command{
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		auth := gh.NewAuthFS()
-		auth.Status(context.Background())
+		auth.Status(cmd.Context())
 		return nil
 	},
 }
@@ -282,12 +290,16 @@ var evalCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
 
 		ctxMap := make(map[string]interface{})
 		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
 			return err
 		}
-		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(context.Background(), wd, fs.LocalProvider())
+		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(cmd.Context(), wd, fs.LocalProvider())
 		if err != nil {
 			return errors.Wrap(err, "failed to parse config repo metadata")
 		}
@@ -295,9 +307,12 @@ var evalCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}
+		namespace, featureName, err := feature.ParseFeaturePath(args[0])
+		if err != nil {
+			return errors.Wrap(err, "parse feature path")
+		}
 
-		// TODO: repo.Eval
-		res, err := eval.Eval(wd, args[0], ctxMap)
+		res, err := r.Eval(cmd.Context(), namespace, featureName, ctxMap)
 		if err != nil {
 			return err
 		}
@@ -327,7 +342,7 @@ var evalCmd = &cobra.Command{
 }
 
 func addCmd() *cobra.Command {
-	var complexFeature bool
+	var fType string
 	ret := &cobra.Command{
 		Use:   "add namespace[/feature]",
 		Short: "Adds a new feature flag or namespace",
@@ -337,18 +352,18 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := cmd.ParseFlags(args); err != nil {
-				return errors.Wrap(err, "parse flags")
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
 			}
 			namespace, featureName, err := feature.ParseFeaturePath(args[0])
 			if err != nil {
 				return errors.Wrap(err, "parse feature path")
 			}
-			// TODO: repo.Add
-			return generate.Add(wd, namespace, featureName, complexFeature)
+			return r.Add(cmd.Context(), namespace, featureName, feature.FeatureType(fType))
 		},
 	}
-	ret.Flags().BoolVarP(&complexFeature, "complex", "c", false, "create a complex configuration with proto, rules and validation")
+	ret.Flags().StringVarP(&fType, "type", "t", string(feature.FeatureTypeBool), "feature type to add")
 	return ret
 }
 
@@ -362,15 +377,19 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
 			namespace, featureName, err := feature.ParseFeaturePath(args[0])
 			if err != nil {
 				return errors.Wrap(err, "parse feature path")
 			}
+			ctx := cmd.Context()
 			if featureName == "" {
-				return generate.RemoveNamespace(wd, namespace)
+				return r.RemoveNamespace(ctx, namespace)
 			}
-			// TODO: repo.Remove
-			return generate.RemoveFeature(wd, namespace, featureName)
+			return r.RemoveFeature(ctx, namespace, featureName)
 		},
 	}
 	return ret
@@ -405,16 +424,14 @@ func applyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := verify.Verify(wd); err != nil {
-				return errors.Wrap(err, "verification failed")
-			}
-
-			ctx := context.Background()
 			r, err := repo.NewLocal(wd)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "new repo")
 			}
-
+			ctx := cmd.Context()
+			if err := r.Verify(ctx); err != nil {
+				return errors.Wrap(err, "verification failed")
+			}
 			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
@@ -440,12 +457,11 @@ func listCmd() *cobra.Command {
 				return errors.Wrap(err, "failed to parse flags")
 			}
 
-			ctx := context.Background()
 			kube, err := k8s.NewKubernetes(kubeConfig, nil)
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
-			if err := kube.List(ctx); err != nil {
+			if err := kube.List(cmd.Context()); err != nil {
 				return errors.Wrap(err, "list")
 			}
 			return nil
@@ -490,14 +506,15 @@ func commitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := verify.Verify(wd); err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if _, err = r.Commit(context.Background(), message); err != nil {
+			ctx := cmd.Context()
+			if err := r.Verify(ctx); err != nil {
+				return err
+			}
+			if _, err = r.Commit(ctx, message); err != nil {
 				return err
 			}
 			return nil
@@ -520,7 +537,7 @@ var cleanupCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 
-		if err = r.Cleanup(context.Background()); err != nil {
+		if err = r.Cleanup(cmd.Context()); err != nil {
 			return err
 		}
 		return nil

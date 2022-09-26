@@ -35,15 +35,13 @@ import (
 
 type Compiler interface {
 	Compile() (*feature.Feature, error)
-	Persist(f *feature.Feature) error
+	Persist(context.Context, *feature.Feature) error
 }
 
 type compiler struct {
 	registry *protoregistry.Types
 	ff       *feature.FeatureFile
 	cw       fs.ConfigWriter
-
-	Formatter
 }
 
 // Compile takes the following parameters:
@@ -52,17 +50,13 @@ type compiler struct {
 // 		featureName: human-readable name of this feature flag. Also matches the starfile name.
 func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.ConfigWriter) Compiler {
 	return &compiler{
-		registry:  registry,
-		ff:        ff,
-		cw:        cw,
-		Formatter: NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, false, cw),
+		registry: registry,
+		ff:       ff,
+		cw:       cw,
 	}
 }
 
 func (c *compiler) Compile() (*feature.Feature, error) {
-	if err := c.Format(); err != nil {
-		return nil, errors.Wrap(err, "failed to format star file")
-	}
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
@@ -92,8 +86,7 @@ func (c *compiler) Compile() (*feature.Feature, error) {
 	return f, nil
 }
 
-func (c *compiler) Persist(f *feature.Feature) error {
-	ctx := context.Background()
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
 	fProto, err := f.ToProto()
 	if err != nil {
 		return errors.Wrap(err, "feature to proto")

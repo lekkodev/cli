@@ -29,11 +29,11 @@ import (
 
 // Takes a version number and parses file contents into the corresponding
 // type.
-func ParseFeature(rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
+func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
 	switch nsMD.Version {
 	case "v1beta3":
 		var f featurev1beta1.Feature
-		contents, err := provider.GetFileContents(context.TODO(), filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
+		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
 		if err != nil {
 			return nil, err
 		}

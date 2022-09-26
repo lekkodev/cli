@@ -17,14 +17,10 @@ package star
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"path/filepath"
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
-	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
@@ -32,81 +28,41 @@ const (
 	InputTypeAuto string = "auto"
 )
 
-func Format(root string, verbose bool) error {
-	ctx := context.Background()
-	cw := fs.LocalConfigWriter()
-	_, nsNameToNsMDs, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, cw)
-	if err != nil {
-		return err
-	}
-	for ns, nsMD := range nsNameToNsMDs {
-		if _, ok := map[string]struct{}{"v1beta2": {}, "v1beta3": {}}[nsMD.Version]; !ok {
-			fmt.Printf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
-			continue
-		}
-
-		pathToNamespace := filepath.Join(root, ns)
-		featureFiles, err := feature.GroupFeatureFiles(
-			context.Background(),
-			pathToNamespace,
-			fs.LocalProvider(),
-		)
-		if err != nil {
-			return errors.Wrap(err, "group feature files")
-		}
-		for _, ff := range featureFiles {
-			formatter := NewStarFormatter(
-				filepath.Join(root, ns, ff.StarlarkFileName),
-				ff.Name, verbose, cw,
-			)
-			if err := formatter.Format(); err != nil {
-				return errors.Wrap(err, "star format")
-			}
-		}
-	}
-	return nil
-}
-
 type Formatter interface {
-	Format() error
+	Format() (bool, error)
 }
 
 type formatter struct {
 	filePath, featureName string
-	verbose               bool
 
 	cw fs.ConfigWriter
 }
 
-func NewStarFormatter(filePath, featureName string, verbose bool, cw fs.ConfigWriter) Formatter {
+func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
-		verbose:     verbose,
 		cw:          cw,
 	}
 }
 
-func (f *formatter) Format() error {
+func (f *formatter) Format() (bool, error) {
 	data, err := f.cw.GetFileContents(context.Background(), f.filePath)
 	if err != nil {
-		return errors.Wrapf(err, "failed to read file %s", f.filePath)
+		return false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
 	parser := butils.GetParser(InputTypeAuto)
 	bfile, err := parser(f.filePath, data)
 	if err != nil {
-		return errors.Wrap(err, "bparse")
+		return false, errors.Wrap(err, "bparse")
 	}
 	ndata := build.Format(bfile)
 
 	if bytes.Equal(data, ndata) {
-		return nil
+		return false, nil
 	}
 	if err := f.cw.WriteFile(f.filePath, ndata, 0600); err != nil {
-		return errors.Wrap(err, "failed to write file")
+		return false, errors.Wrap(err, "failed to write file")
 	}
-	if f.verbose {
-		fmt.Printf("Fixed %s\n", bfile.DisplayPath())
-	}
-	return nil
+	return true, nil
 }

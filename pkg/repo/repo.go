@@ -47,8 +47,8 @@ type Repo struct {
 	Wt   *git.Worktree
 	Fs   billy.Filesystem
 
-	User, Token    string
-	LoggingEnabled bool
+	User, Token                string
+	loggingEnabled, bufEnabled bool
 
 	fs.Provider
 	fs.ConfigWriter
@@ -75,7 +75,8 @@ func NewLocal(path string) (*Repo, error) {
 		Fs:             wt.Filesystem,
 		User:           secrets.GetGithubUser(),
 		Token:          secrets.GetGithubToken(),
-		LoggingEnabled: true,
+		loggingEnabled: true,
+		bufEnabled:     true,
 	}
 	return cr, nil
 }
@@ -304,7 +305,7 @@ func (r *Repo) getOwnerRepo() (string, string, error) {
 }
 
 func (r *Repo) Logf(format string, a ...any) {
-	if !r.LoggingEnabled {
+	if !r.loggingEnabled {
 		return
 	}
 	fmt.Printf(format, a...)
