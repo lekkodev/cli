@@ -81,7 +81,7 @@ func (r *Repo) GetDirContents(_ context.Context, path string) ([]fs.ProviderFile
 
 func (r *Repo) IsNotExist(err error) bool {
 	// both memfs and osfs return 'os' errors.
-	return os.IsNotExist(err)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 /* Implement fs.ConfigWriter */
@@ -111,16 +111,17 @@ func (r *Repo) RemoveIfExists(path string) (bool, error) {
 		if r.IsNotExist(err) {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "os.Stat")
+		return false, errors.Wrap(err, "fs.Stat")
 	}
 	if fi.IsDir() {
-		fis, err := r.Fs.ReadDir(fi.Name())
+		fis, err := r.Fs.ReadDir(path)
 		if err != nil {
 			return false, errors.Wrap(err, "read dir")
 		}
-		for _, fi := range fis {
-			if _, err := r.RemoveIfExists(fi.Name()); err != nil {
-				return false, fmt.Errorf("remove '%s' if exists: %w", fi.Name(), err)
+		for _, subFI := range fis {
+			subPath := filepath.Join(path, subFI.Name())
+			if _, err := r.RemoveIfExists(subPath); err != nil {
+				return false, fmt.Errorf("remove '%s' if exists: %w", subPath, err)
 			}
 		}
 	}

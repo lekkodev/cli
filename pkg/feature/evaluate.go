@@ -99,6 +99,16 @@ func (ff FeatureFile) RootPath(filename string) string {
 	return filepath.Join(ff.NamespaceName, filename)
 }
 
+func NewFeatureFile(nsName, featureName string) FeatureFile {
+	return FeatureFile{
+		Name:                     featureName,
+		NamespaceName:            nsName,
+		StarlarkFileName:         fmt.Sprintf("%s.star", featureName),
+		CompiledJSONFileName:     filepath.Join(metadata.GenFolderPathJSON, fmt.Sprintf("%s.json", featureName)),
+		CompiledProtoBinFileName: filepath.Join(metadata.GenFolderPathProto, fmt.Sprintf("%s.proto.bin", featureName)),
+	}
+}
+
 func walkNamespace(ctx context.Context, nsName, path, nsRelativePath string, featureToFile map[string]FeatureFile, fsProvider fs.Provider) error {
 	files, err := fsProvider.GetDirContents(ctx, path)
 	if err != nil {

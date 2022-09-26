@@ -27,8 +27,7 @@ import (
 
 // Parse reads the star file at the given path and performs
 // static parsing, converting the feature to our go-native model.
-func Parse(root, filename string, cw fs.ConfigWriter) error {
-	ctx := context.Background()
+func Parse(ctx context.Context, root, filename string, cw fs.ConfigWriter) error {
 	data, err := cw.GetFileContents(ctx, filename)
 	if err != nil {
 		return errors.Wrap(err, "read file")
@@ -39,11 +38,11 @@ func Parse(root, filename string, cw fs.ConfigWriter) error {
 		return err
 	}
 	f.Key = strings.Split(filepath.Base(filename), ".")[0]
-	rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, fs.LocalProvider())
+	rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(ctx, root, cw)
 	if err != nil {
 		return errors.Wrap(err, "parse root metadata")
 	}
-	registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory, cw)
+	registry, err := star.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, cw)
 	if err != nil {
 		return errors.Wrap(err, "build dynamic type registry")
 	}

@@ -29,7 +29,7 @@ const (
 )
 
 type Formatter interface {
-	Format() (bool, error)
+	Format(ctx context.Context) (bool, error)
 }
 
 type formatter struct {
@@ -46,8 +46,8 @@ func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter) Formatte
 	}
 }
 
-func (f *formatter) Format() (bool, error) {
-	data, err := f.cw.GetFileContents(context.Background(), f.filePath)
+func (f *formatter) Format(ctx context.Context) (bool, error) {
+	data, err := f.cw.GetFileContents(ctx, f.filePath)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}

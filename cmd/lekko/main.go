@@ -25,7 +25,6 @@ import (
 	"strconv"
 
 	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
@@ -173,10 +172,14 @@ func parseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
 			if file == "" {
 				return errors.New("no file given")
 			}
-			return static.Parse(wd, filepath.Join(wd, file), fs.LocalConfigWriter())
+			return static.Parse(cmd.Context(), wd, filepath.Join(wd, file), r)
 		},
 	}
 	cmd.Flags().StringVarP(&file, "file", "f", "", "starlark file to walk")
@@ -299,11 +302,12 @@ var evalCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
 			return err
 		}
-		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(cmd.Context(), wd, fs.LocalProvider())
+		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(cmd.Context(), wd, r)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse config repo metadata")
 		}
-		registry, err := star.BuildDynamicTypeRegistry(rootMD.ProtoDirectory, fs.LocalProvider())
+		ctx := cmd.Context()
+		registry, err := star.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, r)
 		if err != nil {
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}
@@ -312,7 +316,7 @@ var evalCmd = &cobra.Command{
 			return errors.Wrap(err, "parse feature path")
 		}
 
-		res, err := r.Eval(cmd.Context(), namespace, featureName, ctxMap)
+		res, err := r.Eval(ctx, namespace, featureName, ctxMap)
 		if err != nil {
 			return err
 		}
@@ -436,7 +440,7 @@ func applyCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
-			if err := kube.Apply(ctx, wd); err != nil {
+			if err := kube.Apply(ctx); err != nil {
 				return errors.Wrap(err, "apply")
 			}
 

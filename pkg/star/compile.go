@@ -34,7 +34,7 @@ import (
 )
 
 type Compiler interface {
-	Compile() (*feature.Feature, error)
+	Compile(context.Context) (*feature.Feature, error)
 	Persist(context.Context, *feature.Feature) error
 }
 
@@ -56,12 +56,12 @@ func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.C
 	}
 }
 
-func (c *compiler) Compile() (*feature.Feature, error) {
+func (c *compiler) Compile(ctx context.Context) (*feature.Feature, error) {
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
 	}
-	moduleSource, err := c.cw.GetFileContents(context.Background(), c.ff.RootPath(c.ff.StarlarkFileName))
+	moduleSource, err := c.cw.GetFileContents(ctx, c.ff.RootPath(c.ff.StarlarkFileName))
 	if err != nil {
 		return nil, errors.Wrap(err, "read starfile")
 	}

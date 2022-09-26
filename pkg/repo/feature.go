@@ -79,10 +79,7 @@ func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Typ
 }
 
 func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, persist bool) (*feature.Feature, error) {
-	fc, err := r.GetFeatureContents(ctx, namespace, featureName)
-	if err != nil {
-		return nil, errors.Wrap(err, "get feature contents")
-	}
+	ff := feature.NewFeatureFile(namespace, featureName)
 	if registry == nil {
 		rootMD, _, err := r.ParseMetadata(ctx)
 		if err != nil {
@@ -93,8 +90,8 @@ func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types
 			return nil, errors.Wrap(err, "build dynamic type registry")
 		}
 	}
-	compiler := star.NewCompiler(registry, fc.File, r)
-	f, err := compiler.Compile()
+	compiler := star.NewCompiler(registry, &ff, r)
+	f, err := compiler.Compile(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "compile")
 	}
@@ -110,7 +107,7 @@ func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types
 }
 
 func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
-	return star.BuildDynamicTypeRegistry(protoDirPath, r)
+	return star.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
 // Actually regenerates the buf image, and writes it to the file system.
@@ -118,7 +115,7 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
 func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
-	return star.ReBuildDynamicTypeRegistry(protoDirPath, r)
+	return star.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
 func (r *Repo) Verify(ctx context.Context) error {
@@ -202,7 +199,7 @@ func (r *Repo) Format(ctx context.Context) error {
 
 		for _, ff := range ffs {
 			formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r)
-			ok, err := formatter.Format()
+			ok, err := formatter.Format(ctx)
 			if err != nil {
 				return fmt.Errorf("star format %s/%s: %w", ns, ff.Name, err)
 			}
@@ -216,7 +213,7 @@ func (r *Repo) Format(ctx context.Context) error {
 
 func (r *Repo) Add(ctx context.Context, ns, featureName string, fType feature.FeatureType) error {
 	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
-	if err != nil && errors.Is(os.ErrNotExist, err) {
+	if err != nil && errors.Is(err, os.ErrNotExist) {
 		if err := metadata.CreateNamespaceMetadata(ctx, "", ns, r); err != nil {
 			return err
 		}

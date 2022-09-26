@@ -42,8 +42,8 @@ For other options, see the installation page here: https://docs.buf.build/instal
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
-func BuildDynamicTypeRegistry(protoDir string, provider fs.Provider) (*protoregistry.Types, error) {
-	image, err := provider.GetFileContents(context.Background(), bufImageFilepath(protoDir))
+func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.Provider) (*protoregistry.Types, error) {
+	image, err := provider.GetFileContents(ctx, bufImageFilepath(protoDir))
 	if err != nil {
 		return nil, errors.Wrap(err, "read buf image")
 	}
@@ -61,12 +61,12 @@ func BuildDynamicTypeRegistry(protoDir string, provider fs.Provider) (*protoregi
 }
 
 // Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
-func ReBuildDynamicTypeRegistry(protoDir string, cw fs.ConfigWriter) (*protoregistry.Types, error) {
+func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.ConfigWriter) (*protoregistry.Types, error) {
 	_, err := newBufImage(protoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
-	return BuildDynamicTypeRegistry(protoDir, cw)
+	return BuildDynamicTypeRegistry(ctx, protoDir, cw)
 }
 
 func bufImageFilepath(protoDir string) string {

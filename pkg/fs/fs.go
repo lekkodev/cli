@@ -15,10 +15,26 @@
 package fs
 
 import (
+	"context"
 	"os"
-
-	"github.com/pkg/errors"
 )
+
+// This file will contain both a filename and a filepath. The
+// filepath will be relative to the provider, so it can be passed in
+// to another call and be a valid file.
+type ProviderFile struct {
+	Name  string
+	Path  string
+	IsDir bool
+}
+
+// FileSystem abstraction so we can use the same parsing code
+// for both local and remote configuration repos.
+type Provider interface {
+	GetFileContents(ctx context.Context, path string) ([]byte, error)
+	GetDirContents(ctx context.Context, path string) ([]ProviderFile, error)
+	IsNotExist(err error) bool
+}
 
 // FileSystem abstraction so we can use the same writing code
 // for both local and ephemeral configuration repos.
@@ -29,43 +45,4 @@ type ConfigWriter interface {
 	RemoveIfExists(path string) (bool, error)
 
 	Provider
-}
-
-type localConfigWriter struct {
-	Provider
-}
-
-func (*localConfigWriter) WriteFile(name string, data []byte, perm os.FileMode) error {
-	return os.WriteFile(name, data, perm)
-}
-
-func (*localConfigWriter) MkdirAll(path string, perm os.FileMode) error {
-	return os.MkdirAll(path, perm)
-}
-
-func (*localConfigWriter) RemoveIfExists(path string) (bool, error) {
-	fi, err := os.Stat(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "os.Stat")
-	}
-	rmFn := os.Remove
-	if fi.IsDir() {
-		rmFn = os.RemoveAll
-	}
-	if err := rmFn(path); err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, errors.Wrap(err, "remove")
-	}
-	return true, nil
-}
-
-func LocalConfigWriter() ConfigWriter {
-	return &localConfigWriter{
-		Provider: LocalProvider(),
-	}
 }
