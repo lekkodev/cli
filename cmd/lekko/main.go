@@ -220,9 +220,9 @@ func reviewCmd() *cobra.Command {
 }
 
 var mergeCmd = &cobra.Command{
-	Use:   "merge pr-number",
+	Use:   "merge [pr-number]",
 	Short: "merges a pr for the current branch",
-	Args:  cobra.ExactArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -236,9 +236,13 @@ var mergeCmd = &cobra.Command{
 		if err := r.Verify(ctx); err != nil {
 			return errors.Wrap(err, "verification failed")
 		}
-		prNum, err := strconv.Atoi(args[0])
-		if err != nil {
-			return errors.Wrap(err, "pr-number arg")
+		var prNum *int
+		if len(args) > 0 {
+			num, err := strconv.Atoi(args[0])
+			if err != nil {
+				return errors.Wrap(err, "pr-number arg")
+			}
+			prNum = &num
 		}
 
 		secrets := metadata.NewSecretsOrFail()
@@ -530,8 +534,9 @@ func commitCmd() *cobra.Command {
 }
 
 var cleanupCmd = &cobra.Command{
-	Use:   "cleanup",
-	Short: "deletes the current local branch (and its remote counterpart)",
+	Use:   "cleanup [branchname]",
+	Short: "deletes the current local branch or the branch specified (and its remote counterpart)",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -541,8 +546,11 @@ var cleanupCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-
-		if err = r.Cleanup(cmd.Context()); err != nil {
+		var optionalBranchName *string
+		if len(args) > 0 {
+			optionalBranchName = &args[0]
+		}
+		if err = r.Cleanup(cmd.Context(), optionalBranchName); err != nil {
 			return err
 		}
 		return nil

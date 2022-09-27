@@ -61,7 +61,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", errors.Wrap(err, "push to remote")
 		}
 		if _, err := r.Commit(ctx, ""); err != nil {
-			return "", errors.Wrap(err, "add commit push")
+			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
 		branchName, err = r.BranchName()
@@ -71,7 +71,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 		// TODO: check if pr already exists on current branch, and if so, exit early
 		if !clean {
 			if _, err := r.Commit(ctx, ""); err != nil {
-				return "", errors.Wrap(err, "add commit push")
+				return "", errors.Wrap(err, "branch add commit push")
 			}
 		}
 	}
@@ -82,7 +82,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 	return url, nil
 }
 
-func (r *Repo) Merge(ctx context.Context, prNum int, ghCli *gh.GithubClient) error {
+func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) error {
 	if err := r.CheckUserAuthenticated(); err != nil {
 		return errors.Wrap(err, "check auth")
 	}
@@ -90,7 +90,19 @@ func (r *Repo) Merge(ctx context.Context, prNum int, ghCli *gh.GithubClient) err
 	if err != nil {
 		return errors.Wrap(err, "get owner repo")
 	}
-	result, resp, err := ghCli.PullRequests.Merge(ctx, owner, repo, prNum, "", &github.PullRequestOptions{
+	branchName, err := r.BranchName()
+	if err != nil {
+		return errors.Wrap(err, "branch name")
+	}
+	if prNum == nil {
+		num, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+		if err != nil {
+			return errors.Wrap(err, "get pr for branch")
+		}
+		prNum = &num
+	}
+	r.Logf("Merging PR #%d...\n", *prNum)
+	result, resp, err := ghCli.PullRequests.Merge(ctx, owner, repo, *prNum, "", &github.PullRequestOptions{
 		MergeMethod: "squash",
 	})
 	if err != nil {
@@ -101,7 +113,7 @@ func (r *Repo) Merge(ctx context.Context, prNum int, ghCli *gh.GithubClient) err
 	} else {
 		return errors.New("Failed to merge pull request.")
 	}
-	if err := r.Cleanup(ctx); err != nil {
+	if err := r.Cleanup(ctx, &branchName); err != nil {
 		return errors.Wrap(err, "cleanup")
 	}
 	return nil
@@ -192,4 +204,20 @@ func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh
 
 func strPtr(s string) *string {
 	return &s
+}
+
+func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (int, error) {
+	prs, resp, err := ghCli.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
+		Head: fmt.Sprintf("%s:%s", owner, branchName),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to list pull requests for branch '%s', resp %v: %w", branchName, resp.Status, err)
+	}
+	if len(prs) == 0 {
+		return 0, fmt.Errorf("no open prs found for branch %s", branchName)
+	}
+	if len(prs) > 1 {
+		return 0, fmt.Errorf("more that one open pr found for branch %s", branchName)
+	}
+	return *prs[0].Number, nil
 }
