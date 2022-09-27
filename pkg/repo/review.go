@@ -116,11 +116,14 @@ func (r *Repo) wdClean() (bool, error) {
 }
 
 func (r *Repo) genBranchName() (string, error) {
-	cfg, err := config.LoadConfig(config.GlobalScope)
-	if err != nil {
-		return "", errors.Wrap(err, "load global config")
+	user := r.User
+	if user == "" {
+		cfg, err := config.LoadConfig(config.GlobalScope)
+		if err != nil {
+			return "", errors.Wrap(err, "load global config")
+		}
+		user = strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
 	}
-	user := strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
 	if user == "" {
 		user = "anon"
 	}
