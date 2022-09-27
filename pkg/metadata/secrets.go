@@ -52,7 +52,7 @@ type secrets struct {
 // NOTE: always defer *Secrets.Close after calling this method.
 func NewSecrets(homeDir string) Secrets {
 	s := &secrets{homeDir: homeDir}
-	if err := s.Read(); err != nil {
+	if err := s.ReadOrCreate(); err != nil {
 		log.Printf("failed to read secrets: %v\n", err)
 	}
 	return s
@@ -72,18 +72,24 @@ func NewSecretsOrError() (Secrets, error) {
 		return nil, errors.Wrap(err, "user home directory")
 	}
 	s := &secrets{homeDir: hd}
-	if err := s.Read(); err != nil {
+	if err := s.ReadOrCreate(); err != nil {
 		return nil, errors.Wrap(err, "failed to read secrets")
 	}
 	return s, nil
 }
 
-func (s *secrets) Read() error {
+func (s *secrets) ReadOrCreate() error {
 	s.Lock()
 	defer s.Unlock()
 	bytes, err := os.ReadFile(s.filename())
 	if err != nil {
-		return errors.Wrap(err, "read file")
+		if os.IsNotExist(err) {
+			if err := s.create(); err != nil {
+				return errors.Wrap(err, "create")
+			}
+		} else {
+			return errors.Wrap(err, "read file")
+		}
 	}
 	if err := UnmarshalYAMLStrict(bytes, s); err != nil {
 		return fmt.Errorf("unmarshal secrets from file %s: %w", s.filename(), err)
@@ -97,6 +103,10 @@ func (s *secrets) Close() error {
 	if !s.changed {
 		return nil
 	}
+	return s.create()
+}
+
+func (s *secrets) create() error {
 	bytes, err := MarshalYAML(s)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal secrets")
