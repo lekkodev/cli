@@ -172,45 +172,9 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 // Cleans up all resources and references associated with the current working
 // branch on local and remote. Will switch the current branch back to main, and
 // pull from remote to ensure we are on the latest commit.
-func (r *Repo) Cleanup(ctx context.Context) error {
-	isMain, err := r.isMain()
-	if err != nil {
-		return errors.Wrap(err, "is main")
-	}
-	if !isMain { // delete local and remote branches, and switch back to main
-		head, err := r.Repo.Head()
-		if err != nil {
-			return errors.Wrap(err, "head")
-		}
-		localBranchRef := head.Name()
-
-		if err := r.Repo.Push(&git.PushOptions{
-			RemoteName: remoteName,
-			// Note: the fact that the source ref is empty means this is a delete. This is
-			// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
-			RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
-			Auth: &http.BasicAuth{
-				Username: r.User,
-				Password: r.Token,
-			},
-		}); err != nil {
-			return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
-		}
-		r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
-
-		if err := r.Wt.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(mainBranchName),
-		}); err != nil {
-			return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
-		}
-		r.Logf("Checked out local branch %s\n", mainBranchName)
-		if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
-			return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
-		}
-		if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
-			return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
-		}
-		r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
+func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
+	if err := r.CleanupBranch(ctx, branchName); err != nil {
+		return errors.Wrap(err, "cleanup branch")
 	}
 	if err := r.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
@@ -222,6 +186,61 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 		return errors.Wrap(err, "failed to pull main")
 	}
 	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	return nil
+}
+
+func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
+	currentBranch, err := r.BranchName()
+	if err != nil {
+		return errors.Wrap(err, "branch name")
+	}
+	branchToCleanup := currentBranch
+	if branchName != nil {
+		branchToCleanup = *branchName
+	}
+	if branchToCleanup == currentBranch {
+		clean, err := r.wdClean()
+		if err != nil {
+			return errors.Wrap(err, "wd clean")
+		}
+		if !clean {
+			return fmt.Errorf("cannot cleanup branch '%s' with local changes in the working directory", currentBranch)
+		}
+		if err := r.Wt.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(mainBranchName),
+		}); err != nil {
+			return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+		}
+		r.Logf("Checked out local branch %s\n", mainBranchName)
+	}
+	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
+	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
+	if err := r.Repo.Push(&git.PushOptions{
+		RemoteName: remoteName,
+		// Note: the fact that the source ref is empty means this is a delete. This is
+		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
+		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
+		Auth: &http.BasicAuth{
+			Username: r.User,
+			Password: r.Token,
+		},
+	}); err != nil {
+		if errors.Is(err, git.NoErrAlreadyUpToDate) {
+			r.Logf("Remote branch %s already up to date\n", localBranchRef)
+		} else {
+			return fmt.Errorf("delete remote branch name %s: %w", localBranchRef, err)
+		}
+	} else {
+		r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
+	}
+	// Next, delete local branch
+	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
+		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
+	}
+	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
+		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
+	}
+	r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
 	return nil
 }
 
