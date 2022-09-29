@@ -24,6 +24,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -329,4 +330,40 @@ func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string
 	}
 
 	return evalF.Evaluate(iCtx)
+}
+
+func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {
+	fc, err := r.GetFeatureContents(ctx, ns, featureName)
+	if err != nil {
+		return errors.Wrap(err, "get feature contents")
+	}
+	filename := fc.File.RootPath(fc.File.StarlarkFileName)
+	w := static.NewWalker(filename, fc.Star)
+	f, err := w.Build()
+	if err != nil {
+		return err
+	}
+	f.Key = fc.File.Name
+
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return errors.Wrap(err, "parse metadata")
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return errors.Wrap(err, "build dynamic type registry")
+	}
+	// Print json to stdout
+	f.PrintJSON(registry)
+	// Rewrite the bytes to the starfile path, based on the parse AST.
+	// This is just an illustration, but in the future we could modify
+	// the feature and use the following code to write it out.
+	bytes, err := w.Mutate(f)
+	if err != nil {
+		return errors.Wrap(err, "mutate")
+	}
+	if err := r.WriteFile(filename, bytes, 0600); err != nil {
+		return errors.Wrap(err, "failed to write file")
+	}
+	return nil
 }
