@@ -29,7 +29,6 @@ import (
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 
@@ -162,10 +161,10 @@ var compileCmd = &cobra.Command{
 }
 
 func parseCmd() *cobra.Command {
-	var file string
-	cmd := &cobra.Command{
-		Use:   "parse",
+	return &cobra.Command{
+		Use:   "parse namespace/feature",
 		Short: "parse a starlark file using static analysis, and rewrite it",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -175,14 +174,13 @@ func parseCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if file == "" {
-				return errors.New("no file given")
+			namespace, featureName, err := feature.ParseFeaturePath(args[0])
+			if err != nil {
+				return errors.Wrap(err, "parse feature path")
 			}
-			return static.Parse(cmd.Context(), wd, filepath.Join(wd, file), r)
+			return r.Parse(cmd.Context(), namespace, featureName)
 		},
 	}
-	cmd.Flags().StringVarP(&file, "file", "f", "", "starlark file to walk")
-	return cmd
 }
 
 func reviewCmd() *cobra.Command {
