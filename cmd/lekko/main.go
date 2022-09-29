@@ -29,7 +29,6 @@ import (
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
@@ -307,12 +306,13 @@ var evalCmd = &cobra.Command{
 		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
 			return err
 		}
-		rootMD, _, err := metadata.ParseFullConfigRepoMetadataStrict(cmd.Context(), wd, r)
+		ctx := cmd.Context()
+		rootMD, _, err := r.ParseMetadata(ctx)
 		if err != nil {
 			return errors.Wrap(err, "failed to parse config repo metadata")
 		}
-		ctx := cmd.Context()
-		registry, err := star.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, r)
+
+		registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
 		if err != nil {
 			return errors.Wrap(err, "failed to build dynamic type registry")
 		}

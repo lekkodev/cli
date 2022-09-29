@@ -23,6 +23,7 @@ import (
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/pkg/errors"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -35,7 +36,7 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrap(err, "get file contents")
 		}
 		if err := proto.Unmarshal(contents, &f); err != nil {
 			return nil, err
