@@ -67,7 +67,6 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 		if err != nil {
 			return "", err
 		}
-		// TODO: check if pr already exists on current branch, and if so, exit early
 		if !clean {
 			if _, err := r.Commit(ctx, ""); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
@@ -94,11 +93,11 @@ func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) er
 		return errors.Wrap(err, "branch name")
 	}
 	if prNum == nil {
-		num, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+		pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
 		if err != nil {
 			return errors.Wrap(err, "get pr for branch")
 		}
-		prNum = &num
+		prNum = pr.Number
 	}
 	r.Logf("Merging PR #%d...\n", *prNum)
 	result, resp, err := ghCli.PullRequests.Merge(ctx, owner, repo, *prNum, "", &github.PullRequestOptions{
@@ -186,6 +185,11 @@ func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh
 	if err != nil {
 		return "", errors.Wrap(err, "get owner repo")
 	}
+	pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+	if err == nil {
+		// pr already exists
+		return pr.GetHTMLURL(), nil
+	}
 	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
 		Head:  &branchName,
@@ -202,18 +206,18 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (int, error) {
+func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
 	prs, resp, err := ghCli.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Head: fmt.Sprintf("%s:%s", owner, branchName),
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to list pull requests for branch '%s', resp %v: %w", branchName, resp.Status, err)
+		return nil, fmt.Errorf("failed to list pull requests for branch '%s', resp %v: %w", branchName, resp.Status, err)
 	}
 	if len(prs) == 0 {
-		return 0, fmt.Errorf("no open prs found for branch %s", branchName)
+		return nil, fmt.Errorf("no open prs found for branch %s", branchName)
 	}
 	if len(prs) > 1 {
-		return 0, fmt.Errorf("more that one open pr found for branch %s", branchName)
+		return nil, fmt.Errorf("more that one open pr found for branch %s", branchName)
 	}
-	return *prs[0].Number, nil
+	return prs[0], nil
 }

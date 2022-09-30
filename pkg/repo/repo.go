@@ -174,6 +174,21 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 	if err := r.CredentialsExist(); err != nil {
 		return "", err
 	}
+	main, err := r.isMain()
+	if err != nil {
+		return "", errors.Wrap(err, "is main")
+	}
+	if main {
+		return "", errors.New("cannot commit while on main branch")
+	}
+	clean, err := r.wdClean()
+	if err != nil {
+		return "", errors.Wrap(err, "wd clean")
+	}
+	if clean {
+		return "", errors.New("working directory clean, nothing to commit")
+	}
+	
 	if message == "" {
 		message = "new config changes"
 	}
