@@ -23,7 +23,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/pkg/errors"
@@ -33,8 +32,8 @@ import (
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
 func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) (string, error) {
-	if err := r.CheckUserAuthenticated(); err != nil {
-		return "", errors.Wrap(err, "check auth")
+	if err := r.CredentialsExist(); err != nil {
+		return "", err
 	}
 	var main, clean bool
 	var err error
@@ -83,8 +82,8 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 }
 
 func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) error {
-	if err := r.CheckUserAuthenticated(); err != nil {
-		return errors.Wrap(err, "check auth")
+	if err := r.CredentialsExist(); err != nil {
+		return err
 	}
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
@@ -128,7 +127,7 @@ func (r *Repo) wdClean() (bool, error) {
 }
 
 func (r *Repo) genBranchName() (string, error) {
-	user := r.User
+	user := r.Auth.GetUsername()
 	if user == "" {
 		cfg, err := config.LoadConfig(config.GlobalScope)
 		if err != nil {
@@ -161,10 +160,7 @@ func (r *Repo) checkoutLocalBranch() (string, error) {
 func (r *Repo) pushToRemote(ctx context.Context, branchName string) error {
 	if err := r.Repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: remoteName,
-		Auth: &http.BasicAuth{
-			Username: r.User,
-			Password: r.Token,
-		},
+		Auth:       r.BasicAuth(),
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}

@@ -204,7 +204,7 @@ func reviewCmd() *cobra.Command {
 
 			secrets := metadata.NewSecretsOrFail()
 			ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
-			if _, err := ghCli.GetUserLogin(ctx); err != nil {
+			if _, err := ghCli.GetUser(ctx); err != nil {
 				return errors.Wrap(err, "github auth fail")
 			}
 
@@ -244,7 +244,7 @@ var mergeCmd = &cobra.Command{
 
 		secrets := metadata.NewSecretsOrFail()
 		ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
-		if _, err := ghCli.GetUserLogin(ctx); err != nil {
+		if _, err := ghCli.GetUser(ctx); err != nil {
 			return errors.Wrap(err, "github auth fail")
 		}
 		return r.Merge(ctx, prNum, ghCli)
