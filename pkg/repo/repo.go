@@ -126,6 +126,7 @@ func NewEphemeral(url string, auth AuthProvider) (*Repo, error) {
 		Repo: r,
 		Wt:   wt,
 		Fs:   wt.Filesystem,
+		Auth: auth,
 	}, nil
 }
 
@@ -188,7 +189,7 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 	if clean {
 		return "", errors.New("working directory clean, nothing to commit")
 	}
-	
+
 	if message == "" {
 		message = "new config changes"
 	}
