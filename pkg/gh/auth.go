@@ -116,6 +116,9 @@ func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, string, error)
 	if err != nil {
 		return "", "", errors.Wrap(err, "check auth")
 	}
+	// Note: user.Email is only set if the user has allowed their email
+	// address to be publically available on github. So it may not be populated.
+	// If it is there, we will use it as part of the commit message.
 	return user.GetLogin(), user.GetEmail(), nil
 }
 

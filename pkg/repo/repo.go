@@ -67,6 +67,10 @@ type Repo struct {
 	fs.ConfigWriter
 }
 
+// AuthProvider provides access to basic auth credentials. Depending on the
+// context (local vs ephemeral), credentials may be provided in different ways,
+// thus the interface. Note that email is only used for additional metadata
+// on commits, and is not strictly necessary.
 type AuthProvider interface {
 	GetUsername() string
 	GetEmail() string
