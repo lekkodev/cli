@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-git/go-billy/v5"
@@ -49,6 +50,13 @@ type Repo struct {
 
 	User, Token                string
 	loggingEnabled, bufEnabled bool
+
+	// Allows the user to lock this resource to ensure that
+	// only one process can write to the repo at a time.
+	// Locking is avoided for the local cli, as the primary
+	// use case is a single user on a single machine. It is
+	// however more useful for ephemeral repos in a service.
+	sync.RWMutex
 
 	fs.Provider
 	fs.ConfigWriter
@@ -215,6 +223,10 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 	}
 	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
+	if branchToCleanup == mainBranchName {
+		// no need to delete main branch
+		return nil
+	}
 	if err := r.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		// Note: the fact that the source ref is empty means this is a delete. This is
