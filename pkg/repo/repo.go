@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-git/go-billy/v5"
@@ -55,13 +54,6 @@ type Repo struct {
 
 	Auth                       AuthProvider
 	loggingEnabled, bufEnabled bool
-
-	// Allows the user to lock this resource to ensure that
-	// only one process can write to the repo at a time.
-	// Locking is avoided for the local cli, as the primary
-	// use case is a single user on a single machine. It is
-	// however more useful for ephemeral repos in a service.
-	sync.RWMutex
 
 	fs.Provider
 	fs.ConfigWriter
