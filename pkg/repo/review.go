@@ -190,6 +190,9 @@ func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh
 		// pr already exists
 		return pr.GetHTMLURL(), nil
 	}
+	if title == "" {
+		title = "new PR"
+	}
 	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
 		Head:  &branchName,
