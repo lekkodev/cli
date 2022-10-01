@@ -37,6 +37,7 @@ type FeatureType string
 const (
 	FeatureTypeBool   FeatureType = "bool"
 	FeatureTypeInt    FeatureType = "int"
+	FeatureTypeFloat  FeatureType = "float"
 	FeatureTypeString FeatureType = "string"
 	FeatureTypeProto  FeatureType = "proto"
 	FeatureTypeJSON   FeatureType = "json"
@@ -68,6 +69,27 @@ func NewBoolFeature(value bool) *Feature {
 	}
 }
 
+func NewStringFeature(value string) *Feature {
+	return &Feature{
+		Value:       value,
+		FeatureType: FeatureTypeString,
+	}
+}
+
+func NewIntFeature(value int64) *Feature {
+	return &Feature{
+		Value:       value,
+		FeatureType: FeatureTypeInt,
+	}
+}
+
+func NewFloatFeature(value float64) *Feature {
+	return &Feature{
+		Value:       value,
+		FeatureType: FeatureTypeFloat,
+	}
+}
+
 func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
 	return &Feature{
 		Value:       value,
@@ -92,6 +114,10 @@ func ValToAny(value interface{}) (*anypb.Any, error) {
 		return newAny(wrapperspb.Bool(typedVal))
 	case string:
 		return newAny(wrapperspb.String(typedVal))
+	case int64:
+		return newAny(wrapperspb.Int64(typedVal))
+	case float64:
+		return newAny(wrapperspb.Double(typedVal))
 	case protoreflect.ProtoMessage:
 		return newAny(typedVal)
 	default:
@@ -114,7 +140,15 @@ func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
 	}
 	s := wrapperspb.StringValue{}
 	if err := a.UnmarshalTo(&s); err == nil {
-		return b.Value, FeatureTypeString, nil // string type
+		return s.Value, FeatureTypeString, nil // string type
+	}
+	i := wrapperspb.Int64Value{}
+	if err := a.UnmarshalTo(&i); err == nil {
+		return i.Value, FeatureTypeInt, nil // int type
+	}
+	f := wrapperspb.DoubleValue{}
+	if err := a.UnmarshalTo(&f); err == nil {
+		return f.Value, FeatureTypeFloat, nil // float type
 	}
 	v := structpb.Value{}
 	if err := a.UnmarshalTo(&v); err == nil {
