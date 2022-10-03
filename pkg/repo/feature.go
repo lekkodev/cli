@@ -100,7 +100,7 @@ func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types
 		if err := compiler.Persist(ctx, f); err != nil {
 			return nil, errors.Wrap(err, "persist")
 		}
-		if err := r.Format(ctx); err != nil {
+		if err := r.FormatFeature(ctx, ff); err != nil {
 			return nil, errors.Wrap(err, "format")
 		}
 	}
@@ -199,15 +199,22 @@ func (r *Repo) Format(ctx context.Context) error {
 		}
 
 		for _, ff := range ffs {
-			formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r)
-			ok, err := formatter.Format(ctx)
-			if err != nil {
-				return fmt.Errorf("star format %s/%s: %w", ns, ff.Name, err)
-			}
-			if ok {
-				r.Logf("Formatted and rewrote %s/%s\n", ns, ff.Name)
+			if err := r.FormatFeature(ctx, ff); err != nil {
+				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
 		}
+	}
+	return nil
+}
+
+func (r *Repo) FormatFeature(ctx context.Context, ff feature.FeatureFile) error {
+	formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r)
+	ok, err := formatter.Format(ctx)
+	if err != nil {
+		return errors.Wrap(err, "star format")
+	}
+	if ok {
+		r.Logf("Formatted and rewrote %s/%s\n", ff.NamespaceName, ff.Name)
 	}
 	return nil
 }

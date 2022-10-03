@@ -160,6 +160,16 @@ func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feat
 	switch typedVal := defaultVal.(type) {
 	case starlark.Bool:
 		return feature.NewBoolFeature(bool(typedVal)), nil
+	case starlark.String:
+		return feature.NewStringFeature(typedVal.GoString()), nil
+	case starlark.Int:
+		intVal, ok := typedVal.Int64()
+		if !ok {
+			return nil, errors.Errorf("int value '%s' not representable as int64", typedVal.String())
+		}
+		return feature.NewIntFeature(intVal), nil
+	case starlark.Float:
+		return feature.NewFloatFeature(float64(typedVal)), nil
 	case *starlark.Dict:
 		encoded, err := fb.extractJSON(defaultVal)
 		if err != nil {
@@ -265,6 +275,37 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 				Condition: conditionStr.GoString(),
 				Value:     bool(typedRuleVal),
 			})
+		case feature.FeatureTypeString:
+			typedRuleVal, ok := ruleVal.(starlark.String)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
+			f.Rules = append(f.Rules, &feature.Rule{
+				Condition: conditionStr.GoString(),
+				Value:     typedRuleVal.GoString(),
+			})
+		case feature.FeatureTypeInt:
+			typedRuleVal, ok := ruleVal.(starlark.Int)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
+			intVal, ok := typedRuleVal.Int64()
+			if !ok {
+				return errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
+			}
+			f.Rules = append(f.Rules, &feature.Rule{
+				Condition: conditionStr.GoString(),
+				Value:     intVal,
+			})
+		case feature.FeatureTypeFloat:
+			typedRuleVal, ok := ruleVal.(starlark.Float)
+			if !ok {
+				return typeError(f.FeatureType, i, ruleVal)
+			}
+			f.Rules = append(f.Rules, &feature.Rule{
+				Condition: conditionStr.GoString(),
+				Value:     float64(typedRuleVal),
+			})
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(ruleVal)
 			if err != nil {
@@ -340,6 +381,37 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 				Context:       translatedContextMap,
 				ExpectedValue: bool(typedUnitTestVal),
 			})
+		case feature.FeatureTypeString:
+			typedUnitTestVal, ok := expectedVal.(starlark.String)
+			if !ok {
+				return typeError(f.FeatureType, i, expectedVal)
+			}
+			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
+				Context:       translatedContextMap,
+				ExpectedValue: typedUnitTestVal.GoString(),
+			})
+		case feature.FeatureTypeInt:
+			typedUnitTestVal, ok := expectedVal.(starlark.Int)
+			if !ok {
+				return typeError(f.FeatureType, i, expectedVal)
+			}
+			intVal, ok := typedUnitTestVal.Int64()
+			if !ok {
+				return errors.Wrapf(typeError(f.FeatureType, i, expectedVal), "%T not representable as int64", intVal)
+			}
+			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
+				Context:       translatedContextMap,
+				ExpectedValue: intVal,
+			})
+		case feature.FeatureTypeFloat:
+			typedUnitTestVal, ok := expectedVal.(starlark.Float)
+			if !ok {
+				return typeError(f.FeatureType, i, expectedVal)
+			}
+			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
+				Context:       translatedContextMap,
+				ExpectedValue: float64(typedUnitTestVal),
+			})
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(expectedVal)
 			if err != nil {
@@ -411,6 +483,12 @@ func starType(ft feature.FeatureType) string {
 		return "protoMessage"
 	case feature.FeatureTypeBool:
 		return fmt.Sprintf("%T", starlark.False)
+	case feature.FeatureTypeString:
+		return fmt.Sprintf("%T", starlark.String(""))
+	case feature.FeatureTypeInt:
+		return fmt.Sprintf("%T", starlark.MakeInt64(0))
+	case feature.FeatureTypeFloat:
+		return fmt.Sprintf("%T", starlark.Float(0))
 	default:
 		return "unknown"
 	}
