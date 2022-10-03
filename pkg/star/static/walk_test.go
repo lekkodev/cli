@@ -15,43 +15,58 @@
 package static
 
 import (
+	"fmt"
 	"testing"
 
-	"github.com/bazelbuild/buildtools/build"
-	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-const testStar = `result = feature(
+type testVal struct {
+	goVal    interface{}
+	starRepr string
+}
+
+func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVal testVal) {
+	switch ft {
+	case feature.FeatureTypeBool:
+		return testVal{true, "True"}, testVal{false, "False"}
+	case feature.FeatureTypeFloat:
+		return testVal{float64(23.98), "23.98"}, testVal{float64(22.01), "22.01"}
+	case feature.FeatureTypeInt:
+		return testVal{int64(23), "23"}, testVal{int64(42), "42"}
+	case feature.FeatureTypeString:
+		return testVal{"foo", "\"foo\""}, testVal{"bar", "\"bar\""}
+	}
+	t.Fatalf("unsupported feature type %s", ft)
+	return
+}
+
+func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
+	val, ruleVal := typedVals(t, ft)
+	return val, ruleVal, []byte(fmt.Sprintf(`result = feature(
     description = "this is a simple feature",
-    default = True,
+    default = %s,
     rules = [
-        ("age == 10", False),
-        ("city IN ['Rome', 'Milan']", False),
+        ("age == 10", %s),
+        ("city IN ['Rome', 'Milan']", %s),
     ],
 )
-`
+`, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
+}
 
-func testWalker() *walker {
+func testWalker(testStar []byte) *walker {
 	return &walker{
 		filename:  "test.star",
-		starBytes: []byte(testStar),
+		starBytes: testStar,
 	}
 }
 
-func testFile(t *testing.T) *build.File {
-	p := butils.GetParser(star.InputTypeAuto)
-	file, err := p("test.star", []byte(testStar))
-	require.NoError(t, err, "failed to parse test star file")
-	return file
-}
-
 func TestWalkerBuild(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -60,18 +75,20 @@ func TestWalkerBuild(t *testing.T) {
 }
 
 func TestWalkerMutateNoop(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
-	assert.EqualValues(t, []byte(testStar), bytes)
+	assert.EqualValues(t, string(starBytes), string(bytes))
 }
 
 func TestWalkerMutateDefault(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -82,11 +99,12 @@ func TestWalkerMutateDefault(t *testing.T) {
 	f.Value = false
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
-	assert.NotEqualValues(t, []byte(testStar), bytes)
+	assert.NotEqualValues(t, starBytes, bytes)
 }
 
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -99,7 +117,8 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 }
 
 func TestWalkerMutateAddRule(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -115,7 +134,8 @@ func TestWalkerMutateAddRule(t *testing.T) {
 }
 
 func TestWalkerMutateRemoveRule(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -128,7 +148,8 @@ func TestWalkerMutateRemoveRule(t *testing.T) {
 }
 
 func TestWalkerMutateDescription(t *testing.T) {
-	b := testWalker()
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -138,4 +159,65 @@ func TestWalkerMutateDescription(t *testing.T) {
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
 	assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+}
+
+func TestWalkerMutateTypeMismatch(t *testing.T) {
+	_, _, starBytes := testStar(t, feature.FeatureTypeFloat)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	f.Value = int64(29) // change from float to int
+	_, err = b.Mutate(f)
+	require.Error(t, err)
+}
+
+func TestWalkerMutateDefaultFloat(t *testing.T) {
+	val, _, starBytes := testStar(t, feature.FeatureTypeFloat)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	defaultVal, ok := f.Value.(float64)
+	require.True(t, ok)
+	require.EqualValues(t, defaultVal, val.goVal)
+
+	f.Value = float64(99.99)
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotEqualValues(t, starBytes, bytes)
+}
+
+func TestWalkerMutateDefaultInt(t *testing.T) {
+	val, _, starBytes := testStar(t, feature.FeatureTypeInt)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	defaultVal, ok := f.Value.(int64)
+	require.True(t, ok)
+	require.EqualValues(t, defaultVal, val.goVal)
+
+	f.Value = int64(99)
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotEqualValues(t, starBytes, bytes)
+}
+
+func TestWalkerMutateDefaultString(t *testing.T) {
+	val, _, starBytes := testStar(t, feature.FeatureTypeString)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	defaultVal, ok := f.Value.(string)
+	require.True(t, ok)
+	require.EqualValues(t, defaultVal, val.goVal)
+
+	f.Value = "hello"
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotEqualValues(t, starBytes, bytes)
+	assert.Contains(t, string(bytes), "hello")
 }

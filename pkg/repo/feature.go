@@ -348,7 +348,7 @@ func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {
 	w := static.NewWalker(filename, fc.Star)
 	f, err := w.Build()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "build")
 	}
 	f.Key = fc.File.Name
 

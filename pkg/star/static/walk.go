@@ -16,12 +16,16 @@ package static
 
 import (
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
+	"go.starlark.net/starlark"
 )
 
 // Walker provides methods to statically read and manipulate .star files
@@ -103,9 +107,20 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 		default:
 			return nil, "", fmt.Errorf("unsupported identifier name %s", t.Name)
 		}
-	default:
-		return nil, "", fmt.Errorf("unsupported type %T", v)
+	case *build.LiteralExpr:
+		if strings.Contains(t.Token, ".") {
+			if f, err := strconv.ParseFloat(t.Token, 64); err == nil {
+				return f, feature.FeatureTypeFloat, nil
+			}
+		} else {
+			if i, err := strconv.ParseInt(t.Token, 10, 64); err == nil {
+				return i, feature.FeatureTypeInt, nil
+			}
+		}
+	case *build.StringExpr:
+		return t.Value, feature.FeatureTypeString, nil
 	}
+	return nil, "", fmt.Errorf("unsupported type %T", v)
 }
 
 func (w *walker) buildDescriptionFn(f *feature.Feature) descriptionFn {
@@ -127,6 +142,12 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			}
 			switch featureType {
 			case feature.FeatureTypeBool:
+				rule.Value = goVal
+			case feature.FeatureTypeFloat:
+				rule.Value = goVal
+			case feature.FeatureTypeInt:
+				rule.Value = goVal
+			case feature.FeatureTypeString:
 				rule.Value = goVal
 			default:
 				return fmt.Errorf("rule #%d: unsupported feature type %s", i, featureType)
@@ -151,6 +172,27 @@ func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
 			}
 			boolFeature := feature.NewBoolFeature(boolVal)
 			*f = *boolFeature
+		case feature.FeatureTypeFloat:
+			floatVal, ok := goVal.(float64)
+			if !ok {
+				return fmt.Errorf("expected float64, got %T", goVal)
+			}
+			floatFeature := feature.NewFloatFeature(floatVal)
+			*f = *floatFeature
+		case feature.FeatureTypeInt:
+			intVal, ok := goVal.(int64)
+			if !ok {
+				return fmt.Errorf("expected int64, got %T", goVal)
+			}
+			intFeature := feature.NewIntFeature(intVal)
+			*f = *intFeature
+		case feature.FeatureTypeString:
+			stringVal, ok := goVal.(string)
+			if !ok {
+				return fmt.Errorf("expected string, got %T", goVal)
+			}
+			stringFeature := feature.NewStringFeature(stringVal)
+			*f = *stringFeature
 		default:
 			return fmt.Errorf("unsupported feature type %s", featureType)
 		}
@@ -169,6 +211,18 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 			identExpr.Name = "True"
 		}
 		return identExpr, nil
+	case float64:
+		return &build.LiteralExpr{
+			Token: starlark.Float(goValType).String(),
+		}, nil
+	case int64:
+		return &build.LiteralExpr{
+			Token: strconv.FormatInt(goValType, 10),
+		}, nil
+	case string:
+		return &build.StringExpr{
+			Value: goValType,
+		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported feature type %T", goValType)
 	}
@@ -185,12 +239,17 @@ func (w *walker) mutateValue(v *build.Expr, goVal interface{}) error {
 
 func (w *walker) mutateDefaultFn(f *feature.Feature) defaultFn {
 	return func(v *build.Expr) error {
-		_, featureType, err := w.extractValue(v)
+		goVal, featureType, err := w.extractValue(v)
 		if err != nil {
 			return errors.Wrap(err, "extract default value")
 		}
 		if featureType != f.FeatureType {
-			return errors.Wrapf(err, "cannot mutate star type %T with feature type %v", v, featureType)
+			return errors.Wrapf(err, "cannot mutate star type %T with feature type %v", goVal, featureType)
+		}
+		starValType := reflect.TypeOf(goVal)
+		featureValType := reflect.TypeOf(f.Value)
+		if starValType.Name() != featureValType.Name() {
+			return errors.Errorf("cannot mutate go star type %T with feature type %T", goVal, f.Value)
 		}
 		if err := w.mutateValue(v, f.Value); err != nil {
 			return errors.Wrap(err, "mutate default feature value")
