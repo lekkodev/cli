@@ -28,6 +28,10 @@ import (
 	"go.starlark.net/starlark"
 )
 
+var (
+	ErrUnsupportedStaticParsing = errors.New("unsupported static parsing")
+)
+
 // Walker provides methods to statically read and manipulate .star files
 // that hold lekko features.
 type Walker interface {
@@ -105,7 +109,7 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 		case "False":
 			return false, feature.FeatureTypeBool, nil
 		default:
-			return nil, "", fmt.Errorf("unsupported identifier name %s", t.Name)
+			return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown identifier %s", t.Name)
 		}
 	case *build.LiteralExpr:
 		if strings.Contains(t.Token, ".") {
@@ -120,7 +124,7 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 	case *build.StringExpr:
 		return t.Value, feature.FeatureTypeString, nil
 	}
-	return nil, "", fmt.Errorf("unsupported type %T", v)
+	return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
 }
 
 func (w *walker) buildDescriptionFn(f *feature.Feature) descriptionFn {
@@ -150,7 +154,7 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			case feature.FeatureTypeString:
 				rule.Value = goVal
 			default:
-				return fmt.Errorf("rule #%d: unsupported feature type %s", i, featureType)
+				return errors.Wrapf(ErrUnsupportedStaticParsing, "rule #%d: feature type %s", i, featureType)
 			}
 			f.Rules = append(f.Rules, rule)
 		}
@@ -194,7 +198,7 @@ func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
 			stringFeature := feature.NewStringFeature(stringVal)
 			*f = *stringFeature
 		default:
-			return fmt.Errorf("unsupported feature type %s", featureType)
+			return errors.Wrapf(ErrUnsupportedStaticParsing, "feature type %s", featureType)
 		}
 		return nil
 	}
@@ -224,7 +228,7 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 			Value: goValType,
 		}, nil
 	default:
-		return nil, fmt.Errorf("unsupported feature type %T", goValType)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "go val type %s", goValType)
 	}
 }
 
