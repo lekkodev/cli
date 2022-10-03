@@ -17,16 +17,29 @@ package static
 import (
 	"testing"
 
+	"github.com/bazelbuild/buildtools/build"
+	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/star"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+func testFile(t *testing.T) *build.File {
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	p := butils.GetParser(star.InputTypeAuto)
+	file, err := p("test.star", starBytes)
+	require.NoError(t, err, "failed to parse test star file")
+	return file
+}
+
 func TestTraverseNoop(t *testing.T) {
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
 	f := testFile(t)
 	tvs := newTraverser(f)
 	err := tvs.traverse()
 	require.NoError(t, err)
 
 	// after noop traversal, the round trip bytes should be the same.
-	assert.EqualValues(t, testStar, string(tvs.format()))
+	assert.EqualValues(t, string(starBytes), string(tvs.format()))
 }
