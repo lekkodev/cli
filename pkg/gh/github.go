@@ -43,10 +43,10 @@ func NewGithubClientFromToken(ctx context.Context, token string) *GithubClient {
 	}
 }
 
-func (gc *GithubClient) GetUserLogin(ctx context.Context) (string, error) {
+func (gc *GithubClient) GetUser(ctx context.Context) (*github.User, error) {
 	user, resp, err := gc.Users.Get(ctx, "")
 	if err != nil {
-		return "", fmt.Errorf("get user failed [%v]: %w", resp, err)
+		return nil, fmt.Errorf("get user failed [%v]: %w", resp, err)
 	}
-	return user.GetLogin(), nil
+	return user, nil
 }

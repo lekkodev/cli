@@ -26,6 +26,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
@@ -39,6 +40,10 @@ const (
 	remoteName     = "origin"
 )
 
+var (
+	ErrMissingCredentials = fmt.Errorf("missing credentials")
+)
+
 // Abstraction around git and github operations associated with the lekko configuration repo.
 // This class can be used either by the cli, or by any other system that intends to manage
 // operations around the lekko config repo.
@@ -47,11 +52,21 @@ type Repo struct {
 	Wt   *git.Worktree
 	Fs   billy.Filesystem
 
-	User, Token                string
+	Auth                       AuthProvider
 	loggingEnabled, bufEnabled bool
 
 	fs.Provider
 	fs.ConfigWriter
+}
+
+// AuthProvider provides access to basic auth credentials. Depending on the
+// context (local vs ephemeral), credentials may be provided in different ways,
+// thus the interface. Note that email is only used for additional metadata
+// on commits, and is not strictly necessary.
+type AuthProvider interface {
+	GetUsername() string
+	GetEmail() string
+	GetToken() string
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.
@@ -73,8 +88,7 @@ func NewLocal(path string) (*Repo, error) {
 		Repo:           repo,
 		Wt:             wt,
 		Fs:             wt.Filesystem,
-		User:           secrets.GetGithubUser(),
-		Token:          secrets.GetGithubToken(),
+		Auth:           secrets,
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
@@ -82,12 +96,12 @@ func NewLocal(path string) (*Repo, error) {
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
-func NewEphemeral(url, user, token string) (*Repo, error) {
+func NewEphemeral(url string, auth AuthProvider) (*Repo, error) {
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
-			Username: user,
-			Password: token,
+			Username: auth.GetUsername(),
+			Password: auth.GetToken(),
 		},
 	})
 	if err != nil {
@@ -101,11 +115,10 @@ func NewEphemeral(url, user, token string) (*Repo, error) {
 		return nil, errors.Wrap(err, "git clone")
 	}
 	return &Repo{
-		Repo:  r,
-		Wt:    wt,
-		Fs:    wt.Filesystem,
-		User:  user,
-		Token: token,
+		Repo: r,
+		Wt:   wt,
+		Fs:   wt.Filesystem,
+		Auth: auth,
 	}, nil
 }
 
@@ -134,12 +147,41 @@ func (r *Repo) Start() (string, error) {
 	return branchName, nil
 }
 
+func (r *Repo) BasicAuth() transport.AuthMethod {
+	return &http.BasicAuth{
+		Username: r.Auth.GetUsername(),
+		Password: r.Auth.GetToken(),
+	}
+}
+
+func (r *Repo) CredentialsExist() error {
+	if r.Auth.GetUsername() == "" || r.Auth.GetToken() == "" {
+		return ErrMissingCredentials
+	}
+	return nil
+}
+
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
 func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
-	if r.User == "" || r.Token == "" {
-		return "", fmt.Errorf("user unauthenticated")
+	if err := r.CredentialsExist(); err != nil {
+		return "", err
 	}
+	main, err := r.isMain()
+	if err != nil {
+		return "", errors.Wrap(err, "is main")
+	}
+	if main {
+		return "", errors.New("cannot commit while on main branch")
+	}
+	clean, err := r.wdClean()
+	if err != nil {
+		return "", errors.Wrap(err, "wd clean")
+	}
+	if clean {
+		return "", errors.New("working directory clean, nothing to commit")
+	}
+
 	if message == "" {
 		message = "new config changes"
 	}
@@ -150,9 +192,9 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 	hash, err := r.Wt.Commit(message, &git.CommitOptions{
 		All: true,
 		Author: &object.Signature{
-			Name: r.User,
-			// TODO: add author email here
-			When: time.Now(),
+			Name:  r.Auth.GetUsername(),
+			Email: r.Auth.GetEmail(),
+			When:  time.Now(),
 		},
 	})
 	if err != nil {
@@ -178,10 +220,7 @@ func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
 	}
 	if err := r.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
-		Auth: &http.BasicAuth{
-			Username: r.User,
-			Password: r.Token,
-		},
+		Auth:       r.BasicAuth(),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull main")
 	}
@@ -215,15 +254,16 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 	}
 	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
+	if branchToCleanup == mainBranchName {
+		// no need to delete main branch
+		return nil
+	}
 	if err := r.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		// Note: the fact that the source ref is empty means this is a delete. This is
 		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
 		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
-		Auth: &http.BasicAuth{
-			Username: r.User,
-			Password: r.Token,
-		},
+		Auth:     r.BasicAuth(),
 	}); err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
 			r.Logf("Remote branch %s already up to date\n", localBranchRef)
@@ -241,13 +281,6 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 		return fmt.Errorf("remove reference %s: %w", localBranchRef, err)
 	}
 	r.Logf("Successfully deleted local branch %s\n", localBranchRef.Short())
-	return nil
-}
-
-func (r *Repo) CheckUserAuthenticated() error {
-	if r.User == "" || r.Token == "" {
-		return fmt.Errorf("user unauthenticated")
-	}
 	return nil
 }
 

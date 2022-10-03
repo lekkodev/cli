@@ -34,7 +34,9 @@ type Secrets interface {
 	GetGithubToken() string
 	SetGithubToken(token string)
 	GetGithubUser() string
-	SetGithubUser(token string)
+	SetGithubUser(user string)
+	GetGithubEmail() string
+	SetGithubEmail(email string)
 	HasGithubToken() bool
 	Close() error
 }
@@ -42,6 +44,7 @@ type Secrets interface {
 type secrets struct {
 	GithubUser  string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
 	GithubToken string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
+	GithubEmail string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
 
 	homeDir      string
 	changed      bool
@@ -50,7 +53,7 @@ type secrets struct {
 
 // Instantiates new secrets, attempting to read from local disk if available.
 // NOTE: always defer *Secrets.Close after calling this method.
-func NewSecrets(homeDir string) Secrets {
+func NewSecrets(homeDir string) *secrets {
 	s := &secrets{homeDir: homeDir}
 	if err := s.ReadOrCreate(); err != nil {
 		log.Printf("failed to read secrets: %v\n", err)
@@ -58,7 +61,7 @@ func NewSecrets(homeDir string) Secrets {
 	return s
 }
 
-func NewSecretsOrFail() Secrets {
+func NewSecretsOrFail() *secrets {
 	hd, err := os.UserHomeDir()
 	if err != nil {
 		log.Fatalf("user home directory: %v", err)
@@ -66,7 +69,7 @@ func NewSecretsOrFail() Secrets {
 	return NewSecrets(hd)
 }
 
-func NewSecretsOrError() (Secrets, error) {
+func NewSecretsOrError() (*secrets, error) {
 	hd, err := os.UserHomeDir()
 	if err != nil {
 		return nil, errors.Wrap(err, "user home directory")
@@ -146,8 +149,38 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
+func (s *secrets) GetGithubEmail() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.GithubEmail
+}
+
+func (s *secrets) SetGithubEmail(email string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.GithubEmail = email
+}
+
 func (s *secrets) HasGithubToken() bool {
 	return s.GetGithubToken() != ""
+}
+
+/*
+	Methods that implement repo.AuthProvider. For now, we only
+	support Github, but in the future, we may support multiple
+	providers.
+*/
+
+func (s *secrets) GetToken() string {
+	return s.GetGithubToken()
+}
+
+func (s *secrets) GetUsername() string {
+	return s.GetGithubUser()
+}
+func (s *secrets) GetEmail() string {
+	return s.GetGithubEmail()
 }
 
 func (s *secrets) filename() string {

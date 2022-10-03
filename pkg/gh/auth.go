@@ -68,11 +68,12 @@ func (a *AuthFS) Login(ctx context.Context) error {
 		return errors.Wrap(err, "gh oauth flow")
 	}
 	a.Secrets.SetGithubToken(token.Token)
-	userLogin, err := a.GetGithubUserLogin(ctx)
+	login, email, err := a.GetGithubUserLogin(ctx)
 	if err != nil {
 		return err
 	}
-	a.Secrets.SetGithubUser(userLogin)
+	a.Secrets.SetGithubUser(login)
+	a.Secrets.SetGithubEmail(email)
 	return nil
 }
 
@@ -87,6 +88,7 @@ func maskToken(token string) string {
 func (a *AuthFS) Logout(ctx context.Context) error {
 	a.Secrets.SetGithubToken("")
 	a.Secrets.SetGithubUser("")
+	a.Secrets.SetGithubEmail("")
 	a.Status(ctx)
 	return nil
 }
@@ -100,24 +102,28 @@ func (a *AuthFS) Status(ctx context.Context) {
 		status = fmt.Sprintf("Auth Failed: %v", err)
 	}
 	fmt.Printf(
-		"Github Authentication Status: %s\n\tToken: %s\n\tUser: %s\n",
+		"Github Authentication Status: %s\n\tUser: %s\n\tEmail: %s\n\tToken: %s\n",
 		status,
-		maskToken(a.Secrets.GetGithubToken()),
 		a.Secrets.GetGithubUser(),
+		a.Secrets.GetGithubEmail(),
+		maskToken(a.Secrets.GetGithubToken()),
 	)
 }
 
-func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, error) {
+func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, string, error) {
 	ghCli := NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
-	userLogin, err := ghCli.GetUserLogin(ctx)
+	user, err := ghCli.GetUser(ctx)
 	if err != nil {
-		return "", errors.Wrap(err, "check auth")
+		return "", "", errors.Wrap(err, "check auth")
 	}
-	return userLogin, nil
+	// Note: user.Email is only set if the user has allowed their email
+	// address to be publically available on github. So it may not be populated.
+	// If it is there, we will use it as part of the commit message.
+	return user.GetLogin(), user.GetEmail(), nil
 }
 
 func (a *AuthFS) CheckGithubAuth(ctx context.Context) error {
-	if _, err := a.GetGithubUserLogin(ctx); err != nil {
+	if _, _, err := a.GetGithubUserLogin(ctx); err != nil {
 		return err
 	}
 	return nil

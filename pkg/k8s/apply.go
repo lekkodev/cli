@@ -81,8 +81,8 @@ func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
 func (k *kubeClient) Apply(ctx context.Context) error {
-	if err := k.r.CheckUserAuthenticated(); err != nil {
-		return errors.Wrap(err, "check auth")
+	if err := k.r.CredentialsExist(); err != nil {
+		return err
 	}
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
@@ -151,7 +151,7 @@ func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) erro
 	if err != nil {
 		return errors.Wrap(err, "wd hash")
 	}
-	user := k.r.User
+	user := k.r.Auth.GetUsername()
 	branch, err := k.r.BranchName()
 	if err != nil {
 		return errors.Wrap(err, "branch name")
