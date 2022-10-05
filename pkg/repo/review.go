@@ -217,7 +217,7 @@ func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName strin
 		return nil, fmt.Errorf("failed to list pull requests for branch '%s', resp %v: %w", branchName, resp.Status, err)
 	}
 	if len(prs) == 0 {
-		return nil, fmt.Errorf("no open prs found for branch %s", branchName)
+		return nil, errors.Wrapf(ErrNotFound, "no open prs found for branch %s", branchName)
 	}
 	if len(prs) > 1 {
 		return nil, fmt.Errorf("more that one open pr found for branch %s", branchName)

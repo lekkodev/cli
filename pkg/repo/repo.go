@@ -42,6 +42,7 @@ const (
 
 var (
 	ErrMissingCredentials = fmt.Errorf("missing credentials")
+	ErrNotFound           = fmt.Errorf("not found")
 )
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
