@@ -224,3 +224,11 @@ func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName strin
 	}
 	return prs[0], nil
 }
+
+func (r *Repo) GetPR(ctx context.Context, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
+	owner, repo, err := r.getOwnerRepo()
+	if err != nil {
+		return nil, errors.Wrap(err, "get owner repo")
+	}
+	return r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+}

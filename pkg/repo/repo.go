@@ -300,6 +300,14 @@ func (r *Repo) WorkingDirectoryHash() (string, error) {
 	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
 }
 
+func (r *Repo) MainBranchHash() (string, error) {
+	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.NewBranchReferenceName(mainBranchName)))
+	if err != nil {
+		return "", errors.Wrap(err, "resolve main branch revision")
+	}
+	return hash.String(), nil
+}
+
 func (r *Repo) ensureMainBranch() error {
 	h, err := r.Repo.Head()
 	if err != nil {
