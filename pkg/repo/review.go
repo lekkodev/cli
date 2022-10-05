@@ -217,10 +217,34 @@ func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName strin
 		return nil, fmt.Errorf("failed to list pull requests for branch '%s', resp %v: %w", branchName, resp.Status, err)
 	}
 	if len(prs) == 0 {
-		return nil, fmt.Errorf("no open prs found for branch %s", branchName)
+		return nil, errors.Wrapf(ErrNotFound, "no open prs found for branch %s", branchName)
 	}
 	if len(prs) > 1 {
 		return nil, fmt.Errorf("more that one open pr found for branch %s", branchName)
 	}
 	return prs[0], nil
+}
+
+func (r *Repo) GetPRInfo(ctx context.Context, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, []*github.PullRequestReview, []*github.CheckRun, error) {
+	owner, repo, err := r.getOwnerRepo()
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "get owner repo")
+	}
+	pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+	if err != nil {
+		return nil, nil, nil, errors.Wrap(err, "get pr for branch")
+	}
+	reviews, resp, err := ghCli.PullRequests.ListReviews(ctx, owner, repo, *pr.Number, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to list pull requests #%d reviews, resp %v: %w", *pr.Number, resp.Status, err)
+	}
+	checks, resp, err := ghCli.Checks.ListCheckRunsForRef(ctx, owner, repo, *pr.Head.Ref, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to list pull requests #%d checks, resp %v: %w", *pr.Number, resp.Status, err)
+	}
+	var checkRuns []*github.CheckRun
+	if checks != nil {
+		checkRuns = checks.CheckRuns
+	}
+	return pr, reviews, checkRuns, nil
 }
