@@ -225,10 +225,18 @@ func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName strin
 	return prs[0], nil
 }
 
-func (r *Repo) GetPR(ctx context.Context, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
+func (r *Repo) GetPRInfo(ctx context.Context, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, []*github.PullRequestReview, error) {
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
-		return nil, errors.Wrap(err, "get owner repo")
+		return nil, nil, errors.Wrap(err, "get owner repo")
 	}
-	return r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+	pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "get pr for branch")
+	}
+	reviews, resp, err := ghCli.PullRequests.ListReviews(ctx, owner, repo, *pr.Number, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to list pull requests #%d reviews, resp %v: %w", *pr.Number, resp.Status, err)
+	}
+	return pr, reviews, nil
 }
