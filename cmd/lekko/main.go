@@ -58,6 +58,7 @@ func main() {
 	// exp
 	experimentalCmd.AddCommand(parseCmd())
 	experimentalCmd.AddCommand(startCmd)
+	experimentalCmd.AddCommand(restoreCmd)
 	experimentalCmd.AddCommand(commitCmd())
 	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
@@ -495,8 +496,31 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
+		branch, err := r.GenBranchName()
+		if err != nil {
+			return errors.Wrap(err, "gen branch name")
+		}
+		if err = r.Create(branch); err != nil {
+			return err
+		}
+		return nil
+	},
+}
 
-		if _, err = r.Start(); err != nil {
+var restoreCmd = &cobra.Command{
+	Use:   "restore branch-name",
+	Short: "restores a remote branch for development",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		r, err := repo.NewLocal(wd)
+		if err != nil {
+			return errors.Wrap(err, "new repo")
+		}
+		if err = r.Restore(args[0]); err != nil {
 			return err
 		}
 		return nil

@@ -123,29 +123,113 @@ func NewEphemeral(url string, auth AuthProvider) (*Repo, error) {
 	}, nil
 }
 
-// Start is invoked right before one is about to start working on a config change.
-// It checks that we are on a clean master, checks out a local branch and syncs
-// it to the remote to ensure any future changes can be saved.
-func (r *Repo) Start() (string, error) {
+// Ensures wd is clean, checks out main branch and pulls from remote.
+func (r *Repo) Reset() error {
 	clean, err := r.wdClean()
 	if err != nil {
-		return "", errors.Wrap(err, "wdClean")
+		return errors.Wrap(err, "wdClean")
 	}
 	if !clean {
-		return "", fmt.Errorf("expecting clean working directory")
+		return fmt.Errorf("expecting clean working directory")
 	}
+	// checks out main, and pulls from remote
 	if err := r.ensureMainBranch(); err != nil {
-		return "", errors.Wrap(err, "is main")
+		return errors.Wrap(err, "is main")
 	}
-	branchName, err := r.checkoutLocalBranch()
+	return nil
+}
+
+// Creates a new branch and switches to it, ensuring it doesn't already exist
+// on local or remote.
+func (r *Repo) Create(branchName string) error {
+	if err := r.Reset(); err != nil {
+		return errors.Wrap(err, "reset")
+	}
+	hasRemote, err := r.HasReference(plumbing.NewRemoteReferenceName(remoteName, branchName))
 	if err != nil {
-		return "", errors.Wrap(err, "checkout new branch")
+		return errors.Wrap(err, "has remote")
 	}
+	if hasRemote {
+		return errors.Errorf("branch '%s' already exists on remote", branchName)
+	}
+	hasLocal, err := r.HasReference(plumbing.NewBranchReferenceName(branchName))
+	if err != nil {
+		return errors.Wrap(err, "has local")
+	}
+	if hasLocal {
+		return errors.Errorf("branch '%s' already exists locally", branchName)
+	}
+	// we're good, go ahead and create the branch
+	if err := r.Wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(branchName),
+		Create: true, // will fail if the branch name already exists.
+	}); err != nil {
+		return errors.Wrap(err, "checkout create")
+	}
+	r.Logf("Checked out local branch %s\n", branchName)
 	// set up remote branch tracking
 	if err := r.setTrackingConfig(branchName); err != nil {
-		return "", errors.Wrap(err, "push to remote")
+		return errors.Wrap(err, "push to remote")
 	}
-	return branchName, nil
+	return nil
+}
+
+// Restore will switch to the given branchName.
+// BranchName must exist either on remote or local.
+func (r *Repo) Restore(branchName string) error {
+	if err := r.Reset(); err != nil {
+		return errors.Wrap(err, "reset")
+	}
+	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(remoteName, branchName)
+	hasRemote, err := r.HasRemote(branchName)
+	if err != nil {
+		return errors.Wrap(err, "has remote")
+	}
+	hasLocal, err := r.HasReference(localRef)
+	if err != nil {
+		return errors.Wrap(err, "has local")
+	}
+	if !hasRemote && !hasLocal {
+		return errors.Errorf("expecting branch '%s' to exist on remote or local", branchName)
+	}
+	if hasRemote {
+		if err := r.Repo.Storer.SetReference(plumbing.NewSymbolicReference(localRef, remoteRef)); err != nil {
+			return errors.Wrap(err, "set ref")
+		}
+	}
+	if err := r.Wt.Checkout(&git.CheckoutOptions{
+		Branch: localRef,
+	}); err != nil {
+		return errors.Wrap(err, "checkout")
+	}
+	r.Logf("Checked out local branch %s\n", branchName)
+	// set up remote branch tracking
+	if err := r.setTrackingConfig(branchName); err != nil {
+		return errors.Wrap(err, "set tracking config")
+	}
+	return nil
+}
+
+func (r *Repo) HasRemote(branchName string) (bool, error) {
+	if err := r.Fetch(branchName); err != nil {
+		noRef := git.NoMatchingRefSpecError{}
+		if noRef.Is(err) {
+			return false, nil
+		}
+		return false, errors.Wrapf(err, "fetch branch %s", branchName)
+	}
+	return r.HasReference(plumbing.NewRemoteReferenceName(remoteName, branchName))
+}
+
+func (r *Repo) HasReference(refName plumbing.ReferenceName) (bool, error) {
+	_, err := r.Repo.Storer.Reference(refName)
+	if err != nil {
+		if errors.Is(err, plumbing.ErrReferenceNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *Repo) BasicAuth() transport.AuthMethod {
@@ -219,13 +303,31 @@ func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
 	if err := r.CleanupBranch(ctx, branchName); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
+	if err := r.Pull(); err != nil {
+		return errors.Wrap(err, "pull main")
+	}
+	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	return nil
+}
+
+func (r *Repo) Pull() error {
 	if err := r.Wt.Pull(&git.PullOptions{
 		RemoteName: remoteName,
 		Auth:       r.BasicAuth(),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return errors.Wrap(err, "failed to pull main")
+		return errors.Wrap(err, "failed to pull")
 	}
-	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	return nil
+}
+
+func (r *Repo) Fetch(branchName string) error {
+	if err := r.Repo.Fetch(&git.FetchOptions{
+		RemoteName: remoteName,
+		Auth:       r.BasicAuth(),
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("+%s:%s", plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(remoteName, branchName)))},
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
 	return nil
 }
 
@@ -328,6 +430,9 @@ func (r *Repo) ensureMainBranch() error {
 			return errors.Wrap(err, "checkout main")
 		}
 		return nil
+	}
+	if err := r.Pull(); err != nil {
+		return errors.Wrap(err, "pull main")
 	}
 	return nil
 }

@@ -125,7 +125,7 @@ func (r *Repo) wdClean() (bool, error) {
 	return st.IsClean(), nil
 }
 
-func (r *Repo) genBranchName() (string, error) {
+func (r *Repo) GenBranchName() (string, error) {
 	user := r.Auth.GetUsername()
 	if user == "" {
 		cfg, err := config.LoadConfig(config.GlobalScope)
@@ -141,7 +141,7 @@ func (r *Repo) genBranchName() (string, error) {
 }
 
 func (r *Repo) checkoutLocalBranch() (string, error) {
-	branchName, err := r.genBranchName()
+	branchName, err := r.GenBranchName()
 	if err != nil {
 		return "", errors.Wrap(err, "gen branch name")
 	}
@@ -172,7 +172,7 @@ func (r *Repo) setTrackingConfig(branchName string) error {
 		Name:   branchName,
 		Remote: remoteName,
 		Merge:  plumbing.NewBranchReferenceName(branchName),
-	}); err != nil {
+	}); err != nil && !errors.Is(err, git.ErrBranchExists) {
 		return errors.Wrap(err, "create branch tracking configuration")
 	}
 	r.Logf("Local branch %s has been set up to track changes from %s\n",
