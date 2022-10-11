@@ -58,7 +58,6 @@ func main() {
 	// exp
 	experimentalCmd.AddCommand(parseCmd())
 	experimentalCmd.AddCommand(startCmd)
-	experimentalCmd.AddCommand(restoreCmd)
 	experimentalCmd.AddCommand(commitCmd())
 	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
@@ -487,6 +486,7 @@ var experimentalCmd = &cobra.Command{
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "sets up the local config repo for making changes",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -496,31 +496,16 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-		branch, err := r.GenBranchName()
-		if err != nil {
-			return errors.Wrap(err, "gen branch name")
+		var branch string
+		if len(args) == 0 {
+			branch, err = r.GenBranchName()
+			if err != nil {
+				return errors.Wrap(err, "gen branch name")
+			}
+		} else {
+			branch = args[0]
 		}
-		if err = r.Create(branch); err != nil {
-			return err
-		}
-		return nil
-	},
-}
-
-var restoreCmd = &cobra.Command{
-	Use:   "restore branch-name",
-	Short: "restores a remote branch for development",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		r, err := repo.NewLocal(wd)
-		if err != nil {
-			return errors.Wrap(err, "new repo")
-		}
-		if err = r.Restore(args[0]); err != nil {
+		if err = r.CreateOrRestore(branch); err != nil {
 			return err
 		}
 		return nil

@@ -139,45 +139,11 @@ func (r *Repo) Reset() error {
 	return nil
 }
 
-// Creates a new branch and switches to it, ensuring it doesn't already exist
-// on local or remote.
-func (r *Repo) Create(branchName string) error {
-	if err := r.Reset(); err != nil {
-		return errors.Wrap(err, "reset")
-	}
-	hasRemote, err := r.HasRemote(branchName)
-	if err != nil {
-		return errors.Wrap(err, "has remote")
-	}
-	if hasRemote {
-		return errors.Errorf("branch '%s' already exists on remote", branchName)
-	}
-	localRef := plumbing.NewBranchReferenceName(branchName)
-	hasLocal, err := r.HasReference(localRef)
-	if err != nil {
-		return errors.Wrap(err, "has local")
-	}
-	if hasLocal {
-		return errors.Errorf("branch '%s' already exists locally", branchName)
-	}
-	// we're good, go ahead and create the branch
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
-		Branch: localRef,
-		Create: true, // will fail if the branch name already exists.
-	}); err != nil {
-		return errors.Wrap(err, "checkout create")
-	}
-	r.Logf("Checked out local branch %s\n", branchName)
-	// set up remote branch tracking
-	if err := r.setTrackingConfig(branchName); err != nil {
-		return errors.Wrap(err, "push to remote")
-	}
-	return nil
-}
-
-// Restore will switch to the given branchName.
-// BranchName must exist either on remote or local.
-func (r *Repo) Restore(branchName string) error {
+// If branchName already exists on remote, pull it down and switch to it.
+// If branchName already exists on local, switch to it.
+// If branchName doesn't exist, create it off of the main branch.
+// This method is idempotent.
+func (r *Repo) CreateOrRestore(branchName string) error {
 	if err := r.Reset(); err != nil {
 		return errors.Wrap(err, "reset")
 	}
@@ -190,25 +156,29 @@ func (r *Repo) Restore(branchName string) error {
 	if err != nil {
 		return errors.Wrap(err, "has local")
 	}
-	if !hasRemote && !hasLocal {
-		return errors.Errorf("expecting branch '%s' to exist on remote or local", branchName)
-	}
+	var create bool
 	if hasRemote {
 		// set a symbolic git ref, so that the local branch we checkout to next
 		// goes off of the remote ref
 		if err := r.Repo.Storer.SetReference(plumbing.NewSymbolicReference(localRef, remoteRef)); err != nil {
 			return errors.Wrap(err, "set ref")
 		}
+		create = false
 	}
+	if !hasRemote && !hasLocal {
+		create = true
+	}
+	// we're good, go ahead and create the branch
 	if err := r.Wt.Checkout(&git.CheckoutOptions{
 		Branch: localRef,
+		Create: create,
 	}); err != nil {
-		return errors.Wrap(err, "checkout")
+		return errors.Wrap(err, "checkout create")
 	}
 	r.Logf("Checked out local branch %s\n", branchName)
 	// set up remote branch tracking
 	if err := r.setTrackingConfig(branchName); err != nil {
-		return errors.Wrap(err, "set tracking config")
+		return errors.Wrap(err, "push to remote")
 	}
 	return nil
 }
