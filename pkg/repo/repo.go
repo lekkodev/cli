@@ -270,8 +270,9 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 	return hash.String(), nil
 }
 
-// Cleans up all resources and references associated with the current working
-// branch on local and remote. Will switch the current branch back to main, and
+// Cleans up all resources and references associated with the given branch on
+// local and remote, if they exist. If branchName is nil, uses the current
+// (non-master) branch. Will switch the current branch back to main, and
 // pull from remote to ensure we are on the latest commit.
 func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
 	if err := r.CleanupBranch(ctx, branchName); err != nil {
@@ -329,12 +330,12 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 		}
 		r.Logf("Checked out local branch %s\n", mainBranchName)
 	}
-	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
-	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
 	if branchToCleanup == mainBranchName {
 		// no need to delete main branch
 		return nil
 	}
+	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
+	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
 	if err := r.Repo.Push(&git.PushOptions{
 		RemoteName: remoteName,
 		// Note: the fact that the source ref is empty means this is a delete. This is
@@ -351,7 +352,7 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 		r.Logf("Successfully deleted remote branch %s\n", localBranchRef)
 	}
 	// Next, delete local branch
-	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil {
+	if err := r.Repo.DeleteBranch(localBranchRef.Short()); err != nil && !errors.Is(err, git.ErrBranchNotFound) {
 		return fmt.Errorf("delete local branch name %s: %w", localBranchRef.Short(), err)
 	}
 	if err := r.Repo.Storer.RemoveReference(localBranchRef); err != nil {
