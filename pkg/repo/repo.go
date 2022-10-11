@@ -145,14 +145,15 @@ func (r *Repo) Create(branchName string) error {
 	if err := r.Reset(); err != nil {
 		return errors.Wrap(err, "reset")
 	}
-	hasRemote, err := r.HasReference(plumbing.NewRemoteReferenceName(remoteName, branchName))
+	hasRemote, err := r.HasRemote(branchName)
 	if err != nil {
 		return errors.Wrap(err, "has remote")
 	}
 	if hasRemote {
 		return errors.Errorf("branch '%s' already exists on remote", branchName)
 	}
-	hasLocal, err := r.HasReference(plumbing.NewBranchReferenceName(branchName))
+	localRef := plumbing.NewBranchReferenceName(branchName)
+	hasLocal, err := r.HasReference(localRef)
 	if err != nil {
 		return errors.Wrap(err, "has local")
 	}
@@ -161,7 +162,7 @@ func (r *Repo) Create(branchName string) error {
 	}
 	// we're good, go ahead and create the branch
 	if err := r.Wt.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(branchName),
+		Branch: localRef,
 		Create: true, // will fail if the branch name already exists.
 	}); err != nil {
 		return errors.Wrap(err, "checkout create")
@@ -193,6 +194,8 @@ func (r *Repo) Restore(branchName string) error {
 		return errors.Errorf("expecting branch '%s' to exist on remote or local", branchName)
 	}
 	if hasRemote {
+		// set a symbolic git ref, so that the local branch we checkout to next
+		// goes off of the remote ref
 		if err := r.Repo.Storer.SetReference(plumbing.NewSymbolicReference(localRef, remoteRef)); err != nil {
 			return errors.Wrap(err, "set ref")
 		}
@@ -211,6 +214,7 @@ func (r *Repo) Restore(branchName string) error {
 }
 
 func (r *Repo) HasRemote(branchName string) (bool, error) {
+	// Attempt to fetch the remote ref name
 	if err := r.Fetch(branchName); err != nil {
 		noRef := git.NoMatchingRefSpecError{}
 		if noRef.Is(err) {
