@@ -36,8 +36,8 @@ import (
 )
 
 const (
-	mainBranchName = "main"
-	remoteName     = "origin"
+	MainBranchName = "main"
+	RemoteName     = "origin"
 )
 
 var (
@@ -147,7 +147,7 @@ func (r *Repo) CreateOrRestore(branchName string) error {
 	if err := r.Reset(); err != nil {
 		return errors.Wrap(err, "reset")
 	}
-	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(remoteName, branchName)
+	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)
 	hasRemote, err := r.HasRemote(branchName)
 	if err != nil {
 		return errors.Wrap(err, "has remote")
@@ -192,7 +192,7 @@ func (r *Repo) HasRemote(branchName string) (bool, error) {
 		}
 		return false, errors.Wrapf(err, "fetch branch %s", branchName)
 	}
-	return r.HasReference(plumbing.NewRemoteReferenceName(remoteName, branchName))
+	return r.HasReference(plumbing.NewRemoteReferenceName(RemoteName, branchName))
 }
 
 func (r *Repo) HasReference(refName plumbing.ReferenceName) (bool, error) {
@@ -281,13 +281,13 @@ func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
 	if err := r.Pull(); err != nil {
 		return errors.Wrap(err, "pull main")
 	}
-	r.Logf("Pulled from remote. Local branch %s is up to date.\n", mainBranchName)
+	r.Logf("Pulled from remote. Local branch %s is up to date.\n", MainBranchName)
 	return nil
 }
 
 func (r *Repo) Pull() error {
 	if err := r.Wt.Pull(&git.PullOptions{
-		RemoteName: remoteName,
+		RemoteName: RemoteName,
 		Auth:       r.BasicAuth(),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
@@ -297,9 +297,9 @@ func (r *Repo) Pull() error {
 
 func (r *Repo) Fetch(branchName string) error {
 	if err := r.Repo.Fetch(&git.FetchOptions{
-		RemoteName: remoteName,
+		RemoteName: RemoteName,
 		Auth:       r.BasicAuth(),
-		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("+%s:%s", plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(remoteName, branchName)))},
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("+%s:%s", plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)))},
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return err
 	}
@@ -324,20 +324,20 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 			return fmt.Errorf("cannot cleanup branch '%s' with local changes in the working directory", currentBranch)
 		}
 		if err := r.Wt.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(mainBranchName),
+			Branch: plumbing.NewBranchReferenceName(MainBranchName),
 		}); err != nil {
-			return fmt.Errorf("failed to checkout main branch '%s': %w", mainBranchName, err)
+			return fmt.Errorf("failed to checkout main branch '%s': %w", MainBranchName, err)
 		}
-		r.Logf("Checked out local branch %s\n", mainBranchName)
+		r.Logf("Checked out local branch %s\n", MainBranchName)
 	}
-	if branchToCleanup == mainBranchName {
+	if branchToCleanup == MainBranchName {
 		// no need to delete main branch
 		return nil
 	}
 	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
 	if err := r.Repo.Push(&git.PushOptions{
-		RemoteName: remoteName,
+		RemoteName: RemoteName,
 		// Note: the fact that the source ref is empty means this is a delete. This is
 		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
 		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
@@ -379,7 +379,7 @@ func (r *Repo) WorkingDirectoryHash() (string, error) {
 }
 
 func (r *Repo) MainBranchHash() (string, error) {
-	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.NewBranchReferenceName(mainBranchName)))
+	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.NewBranchReferenceName(MainBranchName)))
 	if err != nil {
 		return "", errors.Wrap(err, "resolve main branch revision")
 	}
@@ -400,7 +400,7 @@ func (r *Repo) ensureMainBranch() error {
 	}
 	if !isMain {
 		if err := r.Wt.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(mainBranchName),
+			Branch: plumbing.NewBranchReferenceName(MainBranchName),
 		}); err != nil {
 			return errors.Wrap(err, "checkout main")
 		}
@@ -420,7 +420,7 @@ func (r *Repo) isMain() (bool, error) {
 	if !h.Name().IsBranch() {
 		return false, fmt.Errorf("expecting branch, got %s", h.Name().String())
 	}
-	return h.Name().Short() == mainBranchName, nil
+	return h.Name().Short() == MainBranchName, nil
 }
 
 func (r *Repo) BranchName() (string, error) {
@@ -432,7 +432,7 @@ func (r *Repo) BranchName() (string, error) {
 }
 
 func (r *Repo) getOwnerRepo() (string, string, error) {
-	rm, err := r.Repo.Remote(remoteName)
+	rm, err := r.Repo.Remote(RemoteName)
 	if err != nil {
 		return "", "", errors.Wrap(err, "remote")
 	}

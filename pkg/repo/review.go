@@ -158,25 +158,25 @@ func (r *Repo) checkoutLocalBranch() (string, error) {
 
 func (r *Repo) pushToRemote(ctx context.Context, branchName string) error {
 	if err := r.Repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: remoteName,
+		RemoteName: RemoteName,
 		Auth:       r.BasicAuth(),
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}
-	r.Logf("Pushed local branch %q to remote %q\n", branchName, remoteName)
+	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
 	return nil
 }
 
 func (r *Repo) setTrackingConfig(branchName string) error {
 	if err := r.Repo.CreateBranch(&config.Branch{
 		Name:   branchName,
-		Remote: remoteName,
+		Remote: RemoteName,
 		Merge:  plumbing.NewBranchReferenceName(branchName),
 	}); err != nil && !errors.Is(err, git.ErrBranchExists) {
 		return errors.Wrap(err, "create branch tracking configuration")
 	}
 	r.Logf("Local branch %s has been set up to track changes from %s\n",
-		branchName, plumbing.NewRemoteReferenceName(remoteName, branchName))
+		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
 	return nil
 }
 
@@ -196,7 +196,7 @@ func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh
 	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
 		Head:  &branchName,
-		Base:  strPtr(mainBranchName),
+		Base:  strPtr(MainBranchName),
 	})
 	if err != nil {
 		return "", fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
