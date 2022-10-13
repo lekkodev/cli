@@ -486,6 +486,7 @@ var experimentalCmd = &cobra.Command{
 var startCmd = &cobra.Command{
 	Use:   "start",
 	Short: "sets up the local config repo for making changes",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -495,8 +496,16 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
-
-		if _, err = r.Start(); err != nil {
+		var branch string
+		if len(args) == 0 {
+			branch, err = r.GenBranchName()
+			if err != nil {
+				return errors.Wrap(err, "gen branch name")
+			}
+		} else {
+			branch = args[0]
+		}
+		if err = r.CreateOrRestore(branch); err != nil {
 			return err
 		}
 		return nil
