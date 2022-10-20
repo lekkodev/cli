@@ -16,6 +16,7 @@ package static
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 var (
@@ -123,6 +125,21 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 		}
 	case *build.StringExpr:
 		return t.Value, feature.FeatureTypeString, nil
+	case *build.ListExpr:
+		var elemVals []interface{}
+		for _, expr := range t.List {
+			expr := expr
+			elemVal, _, err := w.extractValue(&expr)
+			if err != nil {
+				return nil, "", errors.Wrap(err, "extract list elem value")
+			}
+			elemVals = append(elemVals, elemVal)
+		}
+		val, err := structpb.NewValue(elemVals)
+		if err != nil {
+			return nil, "", errors.Errorf("failed to create list value from elems '%v'", elemVals)
+		}
+		return val, feature.FeatureTypeJSON, nil
 	}
 	return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
 }
@@ -152,6 +169,8 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			case feature.FeatureTypeInt:
 				rule.Value = goVal
 			case feature.FeatureTypeString:
+				rule.Value = goVal
+			case feature.FeatureTypeJSON:
 				rule.Value = goVal
 			default:
 				return errors.Wrapf(ErrUnsupportedStaticParsing, "rule #%d: feature type %s", i, featureType)
@@ -197,6 +216,16 @@ func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
 			}
 			stringFeature := feature.NewStringFeature(stringVal)
 			*f = *stringFeature
+		case feature.FeatureTypeJSON:
+			structVal, ok := goVal.(*structpb.Value)
+			if !ok {
+				return fmt.Errorf("expected bytes, got %T", goVal)
+			}
+			jsonFeature := feature.NewJSONFeature(structVal)
+			if err != nil {
+				return errors.Wrap(err, "new json feature")
+			}
+			*f = *jsonFeature
 		default:
 			return errors.Wrapf(ErrUnsupportedStaticParsing, "feature type %s", featureType)
 		}
@@ -227,8 +256,29 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 		return &build.StringExpr{
 			Value: goValType,
 		}, nil
+	case *structpb.Value:
+		return w.genValue(goValType.GetKind())
+	case *structpb.Value_ListValue:
+		listExpr := &build.ListExpr{}
+		for _, listElem := range goValType.ListValue.GetValues() {
+			expr, err := w.genValue(listElem)
+			if err != nil {
+				return nil, errors.Wrap(err, "gen value list elem")
+			}
+			listExpr.List = append(listExpr.List, expr)
+		}
+		return listExpr, nil
+	case *structpb.Value_BoolValue:
+		return w.genValue(goValType.BoolValue)
+	case *structpb.Value_StringValue:
+		return w.genValue(goValType.StringValue)
+	case *structpb.Value_NumberValue:
+		if goValType.NumberValue == math.Trunc(goValType.NumberValue) {
+			return w.genValue(int64(goValType.NumberValue))
+		}
+		return w.genValue(goValType.NumberValue)
 	default:
-		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "go val type %s", goValType)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "go val type %T", goVal)
 	}
 }
 

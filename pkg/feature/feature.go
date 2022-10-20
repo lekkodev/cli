@@ -97,15 +97,19 @@ func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
 	}
 }
 
-func NewJSONFeature(encodedJSON []byte) (*Feature, error) {
+func NewEncodedJSONFeature(encodedJSON []byte) (*Feature, error) {
 	s, err := valFromJSON(encodedJSON)
 	if err != nil {
 		return nil, errors.Wrap(err, "val from json")
 	}
+	return NewJSONFeature(s), nil
+}
+
+func NewJSONFeature(value *structpb.Value) *Feature {
 	return &Feature{
-		Value:       s,
+		Value:       value,
 		FeatureType: FeatureTypeJSON,
-	}, nil
+	}
 }
 
 func ValToAny(value interface{}) (*anypb.Any, error) {
@@ -161,7 +165,7 @@ func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
 	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 }
 
-func valFromJSON(encoded []byte) (interface{}, error) {
+func valFromJSON(encoded []byte) (*structpb.Value, error) {
 	val := &structpb.Value{}
 	if err := val.UnmarshalJSON(encoded); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal json into struct")
