@@ -252,6 +252,5 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	defaultVal.GetListValue().Values = append(defaultVal.GetListValue().Values, structpb.NewBoolValue(false))
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
-	t.Log(string(bytes))
 	assert.NotEqualValues(t, starBytes, bytes)
 }
