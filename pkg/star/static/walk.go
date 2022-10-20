@@ -135,11 +135,27 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 			}
 			elemVals = append(elemVals, elemVal)
 		}
-		val, err := structpb.NewValue(elemVals)
-		if err != nil {
-			return nil, "", errors.Errorf("failed to create list value from elems '%v'", elemVals)
+		return elemVals, feature.FeatureTypeJSON, nil
+	case *build.DictExpr:
+		keyVals := make(map[string]interface{})
+		for _, kvExpr := range t.List {
+			kvExpr := kvExpr
+			keyExpr, ok := kvExpr.Key.(*build.StringExpr)
+			if !ok {
+				return nil, "", errors.Errorf("json structs must have keys of type string, not %T", kvExpr.Key)
+			}
+			key := keyExpr.Value
+			vVar, _, err := w.extractValue(&kvExpr.Value)
+			if err != nil {
+				return nil, "", errors.Wrap(err, "extract struct elem value")
+			}
+			// structValueVar, ok := vVar.(structpb.Value)
+			// if ok {
+			// 	vVar = structValueVar.Kind
+			// }
+			keyVals[key] = vVar
 		}
-		return val, feature.FeatureTypeJSON, nil
+		return keyVals, feature.FeatureTypeJSON, nil
 	}
 	return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
 }
@@ -171,7 +187,11 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			case feature.FeatureTypeString:
 				rule.Value = goVal
 			case feature.FeatureTypeJSON:
-				rule.Value = goVal
+				structVal, err := structpb.NewValue(goVal)
+				if err != nil {
+					return errors.Wrapf(err, "rule #%d: structpb new value with type %T", i, goVal)
+				}
+				rule.Value = structVal
 			default:
 				return errors.Wrapf(ErrUnsupportedStaticParsing, "rule #%d: feature type %s", i, featureType)
 			}
@@ -217,9 +237,9 @@ func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
 			stringFeature := feature.NewStringFeature(stringVal)
 			*f = *stringFeature
 		case feature.FeatureTypeJSON:
-			structVal, ok := goVal.(*structpb.Value)
-			if !ok {
-				return fmt.Errorf("expected bytes, got %T", goVal)
+			structVal, err := structpb.NewValue(goVal)
+			if err != nil {
+				return errors.Wrap(err, "structpb new value")
 			}
 			jsonFeature := feature.NewJSONFeature(structVal)
 			if err != nil {
@@ -268,6 +288,19 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 			listExpr.List = append(listExpr.List, expr)
 		}
 		return listExpr, nil
+	case *structpb.Value_StructValue:
+		dictExpr := &build.DictExpr{}
+		for key, value := range goValType.StructValue.Fields {
+			valExpr, err := w.genValue(value)
+			if err != nil {
+				return nil, errors.Wrap(err, "gen value dict elem")
+			}
+			dictExpr.List = append(dictExpr.List, &build.KeyValueExpr{
+				Key:   &build.StringExpr{Value: key},
+				Value: valExpr,
+			})
+		}
+		return dictExpr, nil
 	case *structpb.Value_BoolValue:
 		return w.genValue(goValType.BoolValue)
 	case *structpb.Value_StringValue:
@@ -300,10 +333,12 @@ func (w *walker) mutateDefaultFn(f *feature.Feature) defaultFn {
 		if featureType != f.FeatureType {
 			return errors.Wrapf(err, "cannot mutate star type %T with feature type %v", goVal, featureType)
 		}
-		starValType := reflect.TypeOf(goVal)
-		featureValType := reflect.TypeOf(f.Value)
-		if starValType.Name() != featureValType.Name() {
-			return errors.Errorf("cannot mutate go star type %T with feature type %T", goVal, f.Value)
+		if featureType != feature.FeatureTypeJSON {
+			starValType := reflect.TypeOf(goVal)
+			featureValType := reflect.TypeOf(f.Value)
+			if starValType.Name() != featureValType.Name() {
+				return errors.Errorf("cannot mutate go star type %T with feature type %T", goVal, f.Value)
+			}
 		}
 		if err := w.mutateValue(v, f.Value); err != nil {
 			return errors.Wrap(err, "mutate default feature value")

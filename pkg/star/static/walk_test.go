@@ -41,11 +41,11 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 	case feature.FeatureTypeString:
 		return testVal{"foo", "\"foo\""}, testVal{"bar", "\"bar\""}
 	case feature.FeatureTypeJSON:
-		goVal, err := structpb.NewValue([]interface{}{1, 2, 3})
+		goVal, err := structpb.NewValue([]interface{}{1, 2, 4.2, "foo"})
 		require.NoError(t, err)
-		ruleVal, err := structpb.NewValue([]interface{}{1, 2, 4.2, "foo"})
+		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
 		require.NoError(t, err)
-		return testVal{goVal, "[1, 2, 3]"}, testVal{ruleVal, "[1, 2, 4.2, \"foo\"]"}
+		return testVal{goVal, "[1, 2, 4.2, \"foo\"]"}, testVal{ruleVal, "{\"a\": 1, \"b\": False, \"c\": [99, \"bar\"]}"}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
 	return
@@ -252,5 +252,6 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	defaultVal.GetListValue().Values = append(defaultVal.GetListValue().Values, structpb.NewBoolValue(false))
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
+	t.Log(string(bytes))
 	assert.NotEqualValues(t, starBytes, bytes)
 }
