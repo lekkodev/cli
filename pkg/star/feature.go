@@ -175,13 +175,13 @@ func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feat
 		if err != nil {
 			return nil, errors.Wrap(err, "extract json dict")
 		}
-		return feature.NewJSONFeature(encoded)
+		return feature.NewEncodedJSONFeature(encoded)
 	case *starlark.List:
 		encoded, err := fb.extractJSON(defaultVal)
 		if err != nil {
 			return nil, errors.Wrap(err, "extract json list")
 		}
-		return feature.NewJSONFeature(encoded)
+		return feature.NewEncodedJSONFeature(encoded)
 	default:
 		return nil, fmt.Errorf("received default value with unsupported type %T", typedVal)
 	}

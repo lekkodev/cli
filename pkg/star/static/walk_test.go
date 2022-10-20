@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type testVal struct {
@@ -39,6 +40,12 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 		return testVal{int64(23), "23"}, testVal{int64(42), "42"}
 	case feature.FeatureTypeString:
 		return testVal{"foo", "\"foo\""}, testVal{"bar", "\"bar\""}
+	case feature.FeatureTypeJSON:
+		goVal, err := structpb.NewValue([]interface{}{1, 2, 4.2, "foo"})
+		require.NoError(t, err)
+		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
+		require.NoError(t, err)
+		return testVal{goVal, "[1, 2, 4.2, \"foo\"]"}, testVal{ruleVal, "{\"a\": 1, \"b\": False, \"c\": [99, \"bar\"]}"}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
 	return
@@ -66,6 +73,16 @@ func testWalker(testStar []byte) *walker {
 
 func TestWalkerBuild(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	_, err = f.ToJSON(protoregistry.GlobalTypes)
+	require.NoError(t, err)
+}
+
+func TestWalkerBuildJSON(t *testing.T) {
+	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
 	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -220,4 +237,21 @@ func TestWalkerMutateDefaultString(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
 	assert.Contains(t, string(bytes), "hello")
+}
+
+func TestWalkerMutateDefaultJSON(t *testing.T) {
+	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	defaultVal, ok := f.Value.(*structpb.Value)
+	require.True(t, ok)
+	require.NotEmpty(t, defaultVal.GetListValue().Values)
+
+	defaultVal.GetListValue().Values = append(defaultVal.GetListValue().Values, structpb.NewBoolValue(false))
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	t.Log(string(bytes))
+	assert.NotEqualValues(t, starBytes, bytes)
 }
