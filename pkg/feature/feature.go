@@ -43,6 +43,8 @@ const (
 	FeatureTypeJSON   FeatureType = "json"
 )
 
+var ErrTypeMismatch = fmt.Errorf("type mismatch")
+
 type Rule struct {
 	Condition string
 	Value     interface{}
@@ -122,6 +124,8 @@ func ValToAny(value interface{}) (*anypb.Any, error) {
 		return newAny(wrapperspb.Int64(typedVal))
 	case float64:
 		return newAny(wrapperspb.Double(typedVal))
+	case *structpb.Value:
+		return newAny(typedVal)
 	case protoreflect.ProtoMessage:
 		return newAny(typedVal)
 	default:
@@ -156,11 +160,11 @@ func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
 	}
 	v := structpb.Value{}
 	if err := a.UnmarshalTo(&v); err == nil {
-		return b.Value, FeatureTypeJSON, nil // json type
+		return &v, FeatureTypeJSON, nil // json type
 	}
 	p := dynamicpb.Message{}
 	if err := a.UnmarshalTo(&p); err == nil {
-		return b.Value, FeatureTypeProto, nil // proto type. TODO: check that this works
+		return &p, FeatureTypeProto, nil // proto type. TODO: check that this works
 	}
 	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 }
@@ -173,10 +177,9 @@ func valFromJSON(encoded []byte) (*structpb.Value, error) {
 	return val, nil
 }
 
-func (f *Feature) AddJSONRule(condition string, encoded []byte) error {
-	val, err := valFromJSON(encoded)
-	if err != nil {
-		return errors.Wrap(err, "val from json")
+func (f *Feature) AddBoolRule(condition string, val bool) error {
+	if f.FeatureType != FeatureTypeBool {
+		return newTypeMismatchErr(FeatureTypeBool, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition: condition,
@@ -185,10 +188,53 @@ func (f *Feature) AddJSONRule(condition string, encoded []byte) error {
 	return nil
 }
 
-func (f *Feature) AddJSONUnitTest(context map[string]interface{}, encoded []byte) error {
-	val, err := valFromJSON(encoded)
-	if err != nil {
-		return errors.Wrap(err, "val from json")
+func (f *Feature) AddStringRule(condition string, val string) error {
+	if f.FeatureType != FeatureTypeString {
+		return newTypeMismatchErr(FeatureTypeString, f.FeatureType)
+	}
+	f.Rules = append(f.Rules, &Rule{
+		Condition: condition,
+		Value:     val,
+	})
+	return nil
+}
+
+func (f *Feature) AddIntRule(condition string, val int64) error {
+	if f.FeatureType != FeatureTypeInt {
+		return newTypeMismatchErr(FeatureTypeInt, f.FeatureType)
+	}
+	f.Rules = append(f.Rules, &Rule{
+		Condition: condition,
+		Value:     val,
+	})
+	return nil
+}
+
+func (f *Feature) AddFloatRule(condition string, val float64) error {
+	if f.FeatureType != FeatureTypeFloat {
+		return newTypeMismatchErr(FeatureTypeFloat, f.FeatureType)
+	}
+	f.Rules = append(f.Rules, &Rule{
+		Condition: condition,
+		Value:     val,
+	})
+	return nil
+}
+
+func (f *Feature) AddJSONRule(condition string, val *structpb.Value) error {
+	if f.FeatureType != FeatureTypeJSON {
+		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
+	}
+	f.Rules = append(f.Rules, &Rule{
+		Condition: condition,
+		Value:     val,
+	})
+	return nil
+}
+
+func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value) error {
+	if f.FeatureType != FeatureTypeJSON {
+		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
 	}
 	f.UnitTests = append(f.UnitTests, &UnitTest{
 		Context:       context,
@@ -309,4 +355,8 @@ func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
 		}
 	}
 	return nil
+}
+
+func newTypeMismatchErr(expected, got FeatureType) error {
+	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
 }

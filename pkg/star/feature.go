@@ -24,6 +24,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const (
@@ -271,19 +272,17 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			f.Rules = append(f.Rules, &feature.Rule{
-				Condition: conditionStr.GoString(),
-				Value:     bool(typedRuleVal),
-			})
+			if err := f.AddBoolRule(conditionStr.GoString(), bool(typedRuleVal)); err != nil {
+				return err
+			}
 		case feature.FeatureTypeString:
 			typedRuleVal, ok := ruleVal.(starlark.String)
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			f.Rules = append(f.Rules, &feature.Rule{
-				Condition: conditionStr.GoString(),
-				Value:     typedRuleVal.GoString(),
-			})
+			if err := f.AddStringRule(conditionStr.GoString(), typedRuleVal.GoString()); err != nil {
+				return err
+			}
 		case feature.FeatureTypeInt:
 			typedRuleVal, ok := ruleVal.(starlark.Int)
 			if !ok {
@@ -293,25 +292,27 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if !ok {
 				return errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
 			}
-			f.Rules = append(f.Rules, &feature.Rule{
-				Condition: conditionStr.GoString(),
-				Value:     intVal,
-			})
+			if err := f.AddIntRule(conditionStr.GoString(), intVal); err != nil {
+				return err
+			}
 		case feature.FeatureTypeFloat:
 			typedRuleVal, ok := ruleVal.(starlark.Float)
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			f.Rules = append(f.Rules, &feature.Rule{
-				Condition: conditionStr.GoString(),
-				Value:     float64(typedRuleVal),
-			})
+			if err := f.AddFloatRule(conditionStr.GoString(), float64(typedRuleVal)); err != nil {
+				return err
+			}
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(ruleVal)
 			if err != nil {
 				return errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
 			}
-			if err := f.AddJSONRule(conditionStr.GoString(), encoded); err != nil {
+			structVal := &structpb.Value{}
+			if err := structVal.UnmarshalJSON(encoded); err != nil {
+				return errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
+			}
+			if err := f.AddJSONRule(conditionStr.GoString(), structVal); err != nil {
 				return errors.Wrap(err, "failed to add json rule")
 			}
 		default:
@@ -417,7 +418,11 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if err != nil {
 				return errors.Wrap(err, typeError(f.FeatureType, i, expectedVal).Error())
 			}
-			if err := f.AddJSONUnitTest(translatedContextMap, encoded); err != nil {
+			structVal := &structpb.Value{}
+			if err := structVal.UnmarshalJSON(encoded); err != nil {
+				return errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
+			}
+			if err := f.AddJSONUnitTest(translatedContextMap, structVal); err != nil {
 				return errors.Wrap(err, "failed to add json unit test")
 			}
 		default:
