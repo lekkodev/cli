@@ -121,7 +121,7 @@ func initCmd() *cobra.Command {
 		Use:   "init",
 		Short: "initialize new empty config repo and sync with github",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if owner == "" || repoName == "" {
+			if repoName == "" {
 				return errors.Errorf("must provide owner and repo name in order to push the repo to github")
 			}
 			secrets := metadata.NewSecretsOrFail()
@@ -159,7 +159,7 @@ func initCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner")
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner. if empty, defaults to the authorized user's personal account.")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repo name")
 	cmd.Flags().BoolVarP(&public, "public", "p", false, "create a public repo")
 	return cmd
