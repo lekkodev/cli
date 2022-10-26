@@ -17,6 +17,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -90,6 +91,32 @@ func NewLocal(path string) (*Repo, error) {
 		Wt:             wt,
 		Fs:             wt.Filesystem,
 		Auth:           secrets,
+		loggingEnabled: true,
+		bufEnabled:     true,
+	}
+	return cr, nil
+}
+
+func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
+	repo, err := git.PlainClone(path, false, &git.CloneOptions{
+		URL: url,
+		Auth: &http.BasicAuth{
+			Username: auth.GetUsername(),
+			Password: auth.GetToken(),
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "plain clone url '%s'", url)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get work tree")
+	}
+	cr := &Repo{
+		Repo:           repo,
+		Wt:             wt,
+		Fs:             wt.Filesystem,
+		Auth:           auth,
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
@@ -431,17 +458,25 @@ func (r *Repo) BranchName() (string, error) {
 	return h.Name().Short(), nil
 }
 
-func (r *Repo) getOwnerRepo() (string, string, error) {
+func (r *Repo) GetURL() (*url.URL, error) {
 	rm, err := r.Repo.Remote(RemoteName)
 	if err != nil {
-		return "", "", errors.Wrap(err, "remote")
+		return nil, errors.Wrap(err, "remote")
 	}
 	if len(rm.Config().URLs) == 0 {
-		return "", "", errors.Wrap(err, "remote has no URLs")
+		return nil, errors.Wrap(err, "remote has no URLs")
 	}
 	u, err := giturls.Parse(rm.Config().URLs[0])
 	if err != nil {
-		return "", "", errors.Wrap(err, "url parse")
+		return nil, errors.Wrap(err, "url parse")
+	}
+	return u, nil
+}
+
+func (r *Repo) getOwnerRepo() (string, string, error) {
+	u, err := r.GetURL()
+	if err != nil {
+		return "", "", errors.Wrap(err, "get url")
 	}
 	parts := strings.SplitN(strings.Trim(u.Path, "/"), "/", 3)
 	if len(parts) != 2 {

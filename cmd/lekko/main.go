@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
@@ -46,6 +47,7 @@ func main() {
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
+	rootCmd.AddCommand(initCmd())
 	// auth
 	authCmd.AddCommand(loginCmd)
 	authCmd.AddCommand(logoutCmd)
@@ -109,6 +111,57 @@ func formatCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	return cmd
+}
+
+func initCmd() *cobra.Command {
+	var owner, repoName string
+	var public bool
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "initialize new empty config repo and sync with github",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if owner == "" || repoName == "" {
+				return errors.Errorf("must provide owner and repo name in order to push the repo to github")
+			}
+			secrets := metadata.NewSecretsOrFail()
+			if !secrets.HasGithubToken() {
+				return errors.Errorf("no github token found. Run 'lekko auth login' first")
+			}
+
+			fmt.Printf("mkdir %s\n", repoName)
+			if err := os.Mkdir(repoName, 0755); err != nil {
+				return errors.Wrap(err, "mkdir")
+			}
+			if err := os.Chdir(repoName); err != nil {
+				return errors.Wrap(err, "cd")
+			}
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+
+			ghCli := gh.NewGithubClientFromToken(cmd.Context(), secrets.GetGithubToken())
+			url, err := ghCli.Init(cmd.Context(), owner, repoName, !public)
+			if errors.Is(err, git.ErrRepositoryAlreadyExists) {
+				fmt.Printf("Repository already exists at %s\n", url)
+			} else if err != nil {
+				return errors.Wrap(err, "init")
+			} else {
+				fmt.Printf("Initialized config repo at %s\n", url)
+			}
+
+			fmt.Printf("Cloning into '%s'...\n", repoName)
+			_, err = repo.NewLocalClone(wd, url, secrets)
+			if err != nil {
+				return errors.Wrap(err, "new local clone")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repo name")
+	cmd.Flags().BoolVarP(&public, "public", "p", false, "create a public repo")
 	return cmd
 }
 

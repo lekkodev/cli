@@ -62,6 +62,7 @@ func (a *AuthFS) Login(ctx context.Context) error {
 	flow := &ghauth.Flow{
 		Host:     ghauth.GitHubHost("https://github.com"),
 		ClientID: lekkoGHAppClientID,
+		Scopes:   []string{"user", "repo"},
 	}
 	token, err := flow.DetectFlow()
 	if err != nil {
