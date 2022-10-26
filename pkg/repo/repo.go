@@ -97,6 +97,8 @@ func NewLocal(path string) (*Repo, error) {
 	return cr, nil
 }
 
+// Creates a local clone of a remote github config repository based on the
+// given url at the provided path.
 func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
 	repo, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: url,
