@@ -80,5 +80,6 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 		body, _ := ioutil.ReadAll(resp.Body)
 		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
 	}
+	// Now, install Lekko App on the newly created gh repository. First, find out what the installation id .... CONTINUE FROM HERE
 	return repo.GetCloneURL(), nil
 }

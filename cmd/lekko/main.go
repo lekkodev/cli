@@ -162,6 +162,9 @@ func initCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner. if empty, defaults to the authorized user's personal account.")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repo name")
 	cmd.Flags().BoolVarP(&public, "public", "p", false, "create a public repo")
+	if err := cmd.MarkFlagRequired("repo"); err != nil {
+		log.Fatal(err)
+	}
 	return cmd
 }
 
