@@ -17,10 +17,19 @@ package gh
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/google/go-github/v47/github"
+	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
+)
+
+const (
+	templateOwner      = "lekkodev"
+	templateRepo       = "template"
+	defaultDescription = "A home for dynamic configuration"
 )
 
 // A simple wrapper around the github client, exposing additional functionality
@@ -49,4 +58,28 @@ func (gc *GithubClient) GetUser(ctx context.Context) (*github.User, error) {
 		return nil, fmt.Errorf("get user failed [%v]: %w", resp, err)
 	}
 	return user, nil
+}
+
+// Init will create a new github repo based off of lekko's config repo template.
+func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, private bool) (string, error) {
+	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
+	if err == nil {
+		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
+	}
+	if err != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
+		return "", err
+	}
+	description := defaultDescription
+	repo, resp, err = gc.Repositories.CreateFromTemplate(ctx, templateOwner, templateRepo, &github.TemplateRepoRequest{
+		Name:        &repoName,
+		Owner:       &owner,
+		Description: &description,
+		Private:     &private,
+	})
+	if err != nil {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
+	}
+	// Now, install Lekko App on the newly created gh repository. First, find out what the installation id .... CONTINUE FROM HERE
+	return repo.GetCloneURL(), nil
 }
