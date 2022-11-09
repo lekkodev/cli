@@ -48,6 +48,7 @@ func main() {
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
 	rootCmd.AddCommand(initCmd())
+	rootCmd.AddCommand(restoreCmd())
 	// auth
 	authCmd.AddCommand(loginCmd)
 	authCmd.AddCommand(logoutCmd)
@@ -618,4 +619,42 @@ var cleanupCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func restoreCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "restore [hash]",
+		Short: "restores repo to a particular hash",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			if err := r.RestoreWorkingDirectory(args[0]); err != nil {
+				return errors.Wrap(err, "restore wd")
+			}
+			ctx := cmd.Context()
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "parse metadata")
+			}
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			fmt.Printf("Successfully rebuilt dynamic type registry.\n")
+			if err := r.Compile(ctx, registry); err != nil {
+				return errors.Wrap(err, "compile")
+			}
+			fmt.Printf("Successfully compiled.\n")
+			fmt.Printf("Restored hash %s to your working directory. \nRun `lekko review` to create a PR with these changes.\n", args[0])
+			return nil
+		},
+	}
+	return cmd
 }
