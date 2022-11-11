@@ -180,6 +180,14 @@ func NewAnyTrue() *anypb.Any {
 	return a
 }
 
+func NewAnyInt(i int64) *anypb.Any {
+	a, err := anypb.New(&wrapperspb.Int64Value{Value: i})
+	if err != nil {
+		panic(err)
+	}
+	return a
+}
+
 func NewRuleLangEqualUserID() string {
 	return "user_id == 1"
 }
@@ -190,4 +198,22 @@ func NewRuleLangContainsUserID() string {
 
 func NewRuleLangInvalid() string {
 	return "user_id IN (1, 2)"
+}
+
+func NewComplexTreeFeature() *featurev1beta1.Feature {
+	return &featurev1beta1.Feature{
+		Key: "complex-tree",
+		Tree: &featurev1beta1.Tree{
+			Default: NewAnyInt(12),
+			Constraints: []*featurev1beta1.Constraint{
+				{Rule: "a == 1", Value: NewAnyInt(38), Constraints: []*featurev1beta1.Constraint{
+					{Rule: "x IN [\"a\", \"b\"]", Value: NewAnyInt(108)},
+				}},
+				{Rule: "a > 10", Value: nil, Constraints: []*featurev1beta1.Constraint{
+					{Rule: "x == \"c\"", Value: NewAnyInt(21)},
+				}},
+				{Rule: "a > 5", Value: NewAnyInt(23)},
+			},
+		},
+	}
 }

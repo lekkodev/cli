@@ -22,49 +22,63 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func EvaluateFeatureV1Beta3(feature *featurev1beta1.Tree, context map[string]interface{}) (*anypb.Any, error) {
-	for _, constraint := range feature.Constraints {
-		retVal, err := traverseConstraint(constraint, context)
+func EvaluateFeatureV1Beta3(feature *featurev1beta1.Tree, context map[string]interface{}) (*anypb.Any, []int, error) {
+	for i, constraint := range feature.Constraints {
+		childVal, childPasses, childPath, err := traverseConstraint(constraint, context)
 		if err != nil {
-			return nil, err
+			return nil, []int{}, err
 		}
-		if retVal != nil {
-			return retVal, nil
+		if childPasses {
+			if childVal != nil {
+				return childVal, append([]int{i}, childPath...), nil
+			}
+			break
 		}
 	}
-	return feature.Default, nil
+	return feature.Default, []int{}, nil
 }
 
-func traverseConstraint(constraint *featurev1beta1.Constraint, context map[string]interface{}) (*anypb.Any, error) {
-	if len(constraint.Rule) == 0 {
-		// if the rule is empty, then this is true
-		return constraint.Value, nil
-	}
-	evaluator, err := parser.NewEvaluator(constraint.Rule)
+func traverseConstraint(constraint *featurev1beta1.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
+	passes, err := evaluate(constraint.GetRule(), context)
 	if err != nil {
-		return nil, errors.Wrap(err, "creating evaluator")
+		return nil, false, []int{}, errors.Wrap(err, "processing")
 	}
+	if !passes {
+		// If the rule fails, we avoid further traversal
+		return nil, passes, []int{}, nil
+	}
+	// rule passed
+	retVal := constraint.Value // may be null
+	for i, child := range constraint.GetConstraints() {
+		childVal, childPasses, childPath, err := traverseConstraint(child, context)
+		if err != nil {
+			return nil, false, []int{}, errors.Wrapf(err, "traverse %d", i)
+		}
+		if childPasses {
+			// We may stop iterating. But first, remember the traversed
+			// value if it exists
+			if childVal != nil {
+				return childVal, passes, append([]int{i}, childPath...), nil
+			}
+			break
+		}
+		// Child evaluation did not pass, continue iterating
+	}
+	return retVal, passes, []int{}, nil
+}
 
+func evaluate(rule string, context map[string]interface{}) (bool, error) {
+	if len(rule) == 0 {
+		// empty rule evaluates to 'true'
+		return true, nil
+	}
+	evaluator, err := parser.NewEvaluator(rule)
+	if err != nil {
+		return false, errors.Wrap(err, "creating evaluator")
+	}
 	passes, err := evaluator.Process(context)
 	if err != nil {
-		return nil, errors.Wrap(err, "processing")
+		return false, errors.Wrap(err, "processing")
 	}
-
-	if passes {
-		if constraint.Value != nil {
-			return constraint.Value, nil
-		} else {
-			// Traverse constraints
-			for _, constraint := range constraint.Constraints {
-				retVal, err := traverseConstraint(constraint, context)
-				if err != nil {
-					return nil, err
-				}
-				if retVal != nil {
-					return retVal, nil
-				}
-			}
-		}
-	}
-	return nil, nil
+	return passes, nil
 }
