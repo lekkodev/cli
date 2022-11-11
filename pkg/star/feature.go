@@ -18,6 +18,8 @@ import (
 	"fmt"
 
 	"github.com/lekkodev/cli/pkg/feature"
+
+	"github.com/lekkodev/rules/parser"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/lib/json"
@@ -252,6 +254,9 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		}
 		if conditionStr.GoString() == "" {
 			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
+		}
+		if err := validateRulesLang(conditionStr.GoString()); err != nil {
+			return fmt.Errorf("error expecting rules language string: %s, error while parsing: %v", conditionStr.GoString(), err)
 		}
 		ruleVal := tuple.Index(1)
 		if err := fb.validate(ruleVal); err != nil {
@@ -518,4 +523,27 @@ func (vr *validatorReporter) toErr() error {
 		return nil
 	}
 	return fmt.Errorf("%v", vr.args...)
+}
+
+// Validates that a rules lang string is valid by parsing and traversing it.
+//
+// For now, this validates the string as a rule created in the lekkodev/rules fork
+// of nikunjy/rules lib. This will be our own custom rules in the future,
+// and we will need to add versioning somehow.
+//
+// Returns raw errors from the rules library.
+// TODO: cleanup error representation.
+func validateRulesLang(rulesStr string) error {
+	evaluator, err := parser.NewEvaluator(rulesStr)
+	if err != nil {
+		return err
+	}
+
+	// Process with an empty context to make sure we can traverse the
+	// tree properly.
+	if _, err := evaluator.Process(map[string]interface{}{}); err != nil {
+		return err
+	}
+
+	return nil
 }
