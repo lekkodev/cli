@@ -26,67 +26,76 @@ import (
 	"github.com/lekkodev/cli/pkg/rules"
 )
 
-func TestEvaluateFeatureBoolBeta2(t *testing.T) {
+func TestEvaluateFeatureBoolBeta3(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
-		feature *featurev1beta1.Feature
-		context map[string]interface{}
-		testErr error
-		testVal bool
+		feature  *featurev1beta1.Feature
+		context  map[string]interface{}
+		testErr  error
+		testVal  bool
+		testPath []int
 	}{
 		{
 			fixtures.NewBasicFeatureOnBeta2(),
 			nil,
 			nil,
 			true,
+			[]int{},
 		},
 		{
 			fixtures.NewBasicFeatureOffBeta2(),
 			nil,
 			nil,
 			false,
+			[]int{},
 		},
 		{
 			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(1)},
 			nil,
 			true,
+			[]int{0},
 		},
 		{
 			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(2)},
 			nil,
 			false,
+			[]int{},
 		},
 		{
 			fixtures.NewFeatureOnForUserIDsBeta2(),
 			map[string]interface{}{"user_id": interface{}(2)},
 			nil,
 			true,
+			[]int{0},
 		},
 		{
 			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(3)},
 			nil,
 			false,
+			[]int{},
 		},
 		{
 			fixtures.NewFeatureInvalidBeta2(),
 			map[string]interface{}{"user_id": interface{}(3)},
 			fmt.Errorf(""),
 			false,
+			[]int{},
 		},
 		{
 			fixtures.NewFeatureInvalidBeta2(),
 			nil,
 			fmt.Errorf(""),
 			false,
+			[]int{},
 		},
 	}
 
-	for _, tc := range tcs {
-		val, err := rules.EvaluateFeatureV1Beta3(tc.feature.Tree, tc.context)
+	for i, tc := range tcs {
+		val, path, err := rules.EvaluateFeatureV1Beta3(tc.feature.Tree, tc.context)
 		if tc.testErr != nil {
 			require.Error(t, err)
 		} else {
@@ -94,7 +103,49 @@ func TestEvaluateFeatureBoolBeta2(t *testing.T) {
 			var res wrapperspb.BoolValue
 			err := val.UnmarshalTo(&res)
 			require.NoError(t, err)
-			require.Equal(t, tc.testVal, res.Value, "failed on test for %s", tc.feature.Key)
+			require.Equal(t, tc.testVal, res.Value, "failed on test %d for %s", i, tc.feature.Key)
+			require.EqualValues(t, tc.testPath, path, "expected equal paths")
 		}
+	}
+}
+
+// The following tests mimic the ones described in ./pkg/feature/README.md
+func TestEvaluateFeatureIntBeta3(t *testing.T) {
+	t.Parallel()
+	complexFeature := fixtures.NewComplexTreeFeature()
+	tcs := []struct {
+		context  map[string]interface{}
+		testVal  int64
+		testPath []int
+	}{
+		{
+			nil,
+			12, []int{},
+		},
+		{
+			map[string]interface{}{"a": 1},
+			38, []int{0},
+		},
+		{
+			map[string]interface{}{"a": 11},
+			12, []int{},
+		},
+		{
+			map[string]interface{}{"a": 11, "x": "c"},
+			21, []int{1, 0},
+		},
+		{
+			map[string]interface{}{"a": 8},
+			23, []int{2},
+		},
+	}
+
+	for i, tc := range tcs {
+		val, path, err := rules.EvaluateFeatureV1Beta3(complexFeature.Tree, tc.context)
+		require.NoError(t, err)
+		var res wrapperspb.Int64Value
+		require.NoError(t, val.UnmarshalTo(&res))
+		require.Equal(t, tc.testVal, res.Value, "failed on test %d for %s", i, complexFeature.Key)
+		require.EqualValues(t, tc.testPath, path, "expected equal paths")
 	}
 }

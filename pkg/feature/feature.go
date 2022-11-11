@@ -342,7 +342,7 @@ func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
 		return err
 	}
 	for idx, test := range f.UnitTests {
-		a, err := eval.Evaluate(test.Context)
+		a, _, err := eval.Evaluate(test.Context)
 		if err != nil {
 			return err
 		}

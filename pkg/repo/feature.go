@@ -336,7 +336,8 @@ func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string
 		return nil, err
 	}
 
-	return evalF.Evaluate(iCtx)
+	ret, _, err := evalF.Evaluate(iCtx)
+	return ret, err
 }
 
 func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {

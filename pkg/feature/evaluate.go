@@ -36,8 +36,12 @@ type EvaluableFeature interface {
 	// For user defined protos, we shouldn't attempt to Unmarshal
 	// this unless we know the type. For primitive types, we can
 	// safely unmarshal into BoolValue, StringValue, etc.
-	Evaluate(evalContext map[string]interface{}) (*anypb.Any, error)
+	Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error)
 }
+
+// Stores the path of the tree node that returned the final value
+// after successful evaluation. See the readme for an illustration.
+type ResultPath []int
 
 type v1beta3 struct {
 	*featurev1beta1.Feature
@@ -50,7 +54,7 @@ func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
 // TODO: pre-compute the ruleslang tree so that we:
 // 1) error on verify time if things aren't valid.
 // 2) pre-compute antlr trees.
-func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, error) {
+func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
 	return rules.EvaluateFeatureV1Beta3(v1b3.Tree, evalContext)
 }
 
