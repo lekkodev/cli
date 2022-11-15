@@ -391,7 +391,7 @@ func (r *Repo) CleanupBranch(ctx context.Context, branchName *string) error {
 	return nil
 }
 
-func (r *Repo) WorkingDirectoryHash() (string, error) {
+func (r *Repo) HumanReadableHash() (string, error) {
 	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
 	if err != nil {
 		return "", errors.Wrap(err, "resolve revision")
@@ -405,6 +405,14 @@ func (r *Repo) WorkingDirectoryHash() (string, error) {
 		suffix = "-dirty"
 	}
 	return fmt.Sprintf("%s%s", hash.String(), suffix), nil
+}
+
+func (r *Repo) WorkingDirectoryHash() (*plumbing.Hash, error) {
+	hash, err := r.Repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+	if err != nil {
+		return &plumbing.Hash{}, errors.Wrap(err, "resolve revision")
+	}
+	return hash, nil
 }
 
 func (r *Repo) MainBranchHash() (string, error) {

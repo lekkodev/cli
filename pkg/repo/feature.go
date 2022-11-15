@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
@@ -436,12 +437,38 @@ func (r *Repo) GetFeatureContents(ctx context.Context, namespace, featureName st
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to read proto bytes")
 	}
+	computedHash := plumbing.ComputeHash(plumbing.BlobObject, proto)
 	return &feature.FeatureContents{
 		File:  ff,
 		Star:  star,
 		JSON:  json,
 		Proto: proto,
+		SHA:   computedHash.String(),
 	}, nil
+}
+
+// Returns the hash of the proto bin file as indexed by the git tree. If there are
+// uncommitted changes those won't be accounted for in the hash.
+// The method is a reference, so I don't forget how to do this in the future (shubhit)
+func (r *Repo) GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error) {
+	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
+	if err != nil {
+		return nil, errors.Wrap(err, "get feature file")
+	}
+	hash, err := r.WorkingDirectoryHash()
+	if err != nil {
+		return nil, errors.Wrap(err, "working directory hash")
+	}
+	co, err := r.Repo.CommitObject(*hash)
+	if err != nil {
+		return nil, errors.Wrapf(err, "commit object of hash %s", hash.String())
+	}
+	protoPath := filepath.Join(namespace, ff.CompiledProtoBinFileName)
+	fi, err := co.File(protoPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "commit object file '%s'", protoPath)
+	}
+	return &fi.Hash, nil
 }
 
 func (r *Repo) ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error) {
