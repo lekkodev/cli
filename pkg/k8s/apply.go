@@ -147,7 +147,7 @@ func (k *kubeClient) annotationKey(key string) string {
 }
 
 func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) error {
-	hash, err := k.r.WorkingDirectoryHash()
+	hash, err := k.r.HumanReadableHash()
 	if err != nil {
 		return errors.Wrap(err, "wd hash")
 	}

@@ -81,6 +81,7 @@ type FeatureContents struct {
 	Star  []byte
 	JSON  []byte
 	Proto []byte
+	SHA   string
 }
 
 func (ff FeatureFile) Verify() error {
