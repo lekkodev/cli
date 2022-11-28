@@ -19,19 +19,21 @@ package lekko.rules.v1beta2;
 import "google/protobuf/struct.proto";
 
 // A Rule is a top level object that recursively defines an AST represented
-// by ruleslang. A rule is always one of 3 things:
+// by ruleslang. A rule is always one of 4 things:
 // 1. Atom -> This is a leaf node in the tree that returns true or false
 // 2. Not -> This negates the result of the underlying Rule.
 // 3. LogicalExpression -> This rule links two rules through an "and" or an "or".
+// 4. BoolConst -> true or false. This will be used for higher level short-circuits.
 // Parenthases and other logical constructs can all be represented by the correct
 // construction of this rule tree.
 //
-// !(A && B && C) || D can be represented by: TODO: some ascii art for some basic cases.
+// !(A && B && C) || D can be represented by LogExp ( Not ( LogExp ( LogExp ( Atom(A) && Atom(B) ) && Atom (C))) || Atom(D))
 message Rule {
   oneof rule {
     Atom atom = 1;
     Rule not = 2;
     LogicalExpression logical_expression = 3;
+    bool bool_const = 4;
   }
 }
 
@@ -65,14 +67,14 @@ enum ComparisonOperator {
   // Contained within  only applies to list values.
   COMPARISON_OPERATOR_CONTAINED_WITHIN = 6;
   // Starts with and ends with only apply to string values.
-  COMPARISON_OPERATOR_STARTS_WITH = 8;
-  COMPARISON_OPERATOR_ENDS_WITH = 9;
+  COMPARISON_OPERATOR_STARTS_WITH = 7;
+  COMPARISON_OPERATOR_ENDS_WITH = 8;
   // Contains only applies to string values, and for now is strict equality.
   // If we support things like regex or case insensitive matches, they will
   // be separate operators.
-  COMPARISON_OPERATOR_CONTAINS = 10;
+  COMPARISON_OPERATOR_CONTAINS = 9;
   // Present is the only operator that doesn't require a comparison value.
-  COMPARISON_OPERATOR_PRESENT = 11;
+  COMPARISON_OPERATOR_PRESENT = 10;
 }
 
 enum LogicalOperator {
