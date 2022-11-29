@@ -16,16 +16,11 @@ package rules
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/structpb"
-)
-
-const (
-	float64EqualityThreshold = 1e-9
 )
 
 var (
@@ -131,7 +126,7 @@ func (v1b2 *v1beta2) evaluateEquals(ruleVal *structpb.Value, contextVal interfac
 		if err != nil {
 			return false, err
 		}
-		return almostEqual(typed.NumberValue, numVal), nil
+		return typed.NumberValue == numVal, nil
 	case *structpb.Value_StringValue:
 		stringVal, ok := contextVal.(string)
 		if !ok {
@@ -157,11 +152,11 @@ func (v1b2 *v1beta2) evaluateNumberComparator(co rulesv1beta2.ComparisonOperator
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 		return numVal < ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
-		return numVal < ruleNumVal || almostEqual(numVal, ruleNumVal), nil
+		return numVal < ruleNumVal || numVal == ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
 		return numVal > ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
-		return numVal > ruleNumVal || almostEqual(numVal, ruleNumVal), nil
+		return numVal > ruleNumVal || numVal == ruleNumVal, nil
 	default:
 		return false, errors.Errorf("expected numerical comparison operator, got %v", co)
 	}
@@ -237,10 +232,6 @@ func getNumber(val interface{}) (float64, error) {
 
 func errMismatchedType(actual interface{}, expected ...string) error {
 	return errors.Wrapf(ErrMismatchedType, "expected %v, got %T", strings.Join(expected, ","), actual)
-}
-
-func almostEqual(a, b float64) bool {
-	return math.Abs(a-b) <= float64EqualityThreshold
 }
 
 func errUnsupportedType(co rulesv1beta2.ComparisonOperator, actual *structpb.Value) error {

@@ -93,10 +93,13 @@ func TestEquals(t *testing.T) {
 			expected: false,
 		},
 		{
-			atom:    AgeEquals(12),
-			context: CtxBuilder().Age(12 + 1e-10).B(),
-			// NOTE: this is a shortcoming of structpb.Number, as it has no way to
-			// differentiate between ints and floats.
+			atom:     AgeEquals(12),
+			context:  CtxBuilder().Age(12 + 1e-10).B(),
+			expected: false,
+		},
+		{
+			atom:     AgeEquals(12.001),
+			context:  CtxBuilder().Age(12.001).B(),
 			expected: true,
 		},
 		{

@@ -58,13 +58,15 @@ message Atom {
 
 enum ComparisonOperator {
   COMPARISON_OPERATOR_UNSPECIFIED = 0;
+  // == only applies to number, string and bool values.
   COMPARISON_OPERATOR_EQUALS = 1;
   // > < >= <= only applies to number values.
   COMPARISON_OPERATOR_LESS_THAN = 2;
   COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS = 3;
   COMPARISON_OPERATOR_GREATER_THAN = 4;
   COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS = 5;
-  // Contained within  only applies to list values.
+  // Contained within only applies to list values. Elements
+  // of the list must be primitive (i.e. number, string or bool)
   COMPARISON_OPERATOR_CONTAINED_WITHIN = 6;
   // Starts with and ends with only apply to string values.
   COMPARISON_OPERATOR_STARTS_WITH = 7;
