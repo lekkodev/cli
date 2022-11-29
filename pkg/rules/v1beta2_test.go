@@ -64,7 +64,7 @@ type AtomTest struct {
 }
 
 func testAtom(t *testing.T, idx int, tc AtomTest) {
-	t.Run(fmt.Sprintf("test %d", idx), func(t *testing.T) {
+	t.Run(fmt.Sprintf("test atom %d", idx), func(t *testing.T) {
 		rule := NewV1Beta2(&rulesv1beta2.Rule{
 			Rule: &rulesv1beta2.Rule_Atom{
 				Atom: tc.atom,
@@ -73,10 +73,30 @@ func testAtom(t *testing.T, idx int, tc AtomTest) {
 		result, err := rule.EvaluateRule(tc.context)
 		if tc.hasError {
 			require.Error(t, err)
+			return
 		} else {
 			require.NoError(t, err)
 		}
 		assert.Equal(t, tc.expected, result)
+	})
+	t.Run(fmt.Sprintf("test not %d", idx), func(t *testing.T) {
+		rule := NewV1Beta2(&rulesv1beta2.Rule{
+			Rule: &rulesv1beta2.Rule_Not{
+				Not: &rulesv1beta2.Rule{
+					Rule: &rulesv1beta2.Rule_Atom{
+						Atom: tc.atom,
+					},
+				},
+			},
+		})
+		result, err := rule.EvaluateRule(tc.context)
+		if tc.hasError {
+			require.Error(t, err)
+			return
+		} else {
+			require.NoError(t, err)
+		}
+		assert.Equal(t, !tc.expected /* not */, result)
 	})
 }
 
@@ -254,5 +274,88 @@ func TestStringComparisonOperators(t *testing.T) {
 		},
 	} {
 		testAtom(t, i, tc)
+	}
+}
+
+type LogicalExpressionTest struct {
+	first    *rulesv1beta2.Atom
+	lo       rulesv1beta2.LogicalOperator
+	second   *rulesv1beta2.Atom
+	context  map[string]interface{}
+	expected bool
+	hasError bool
+}
+
+func TestLogicalExpression(t *testing.T) {
+	for i, tc := range []LogicalExpressionTest{
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_OR,
+			second:   Age(">", 10),
+			context:  CtxBuilder().Age(8).B(),
+			expected: false,
+		},
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_OR,
+			second:   Age(">", 10),
+			context:  CtxBuilder().Age(12).B(),
+			expected: true,
+		},
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_AND,
+			second:   CityEquals("Rome"),
+			context:  CtxBuilder().Age(8).City("Rome").B(),
+			expected: false,
+		},
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_AND,
+			second:   CityEquals("Rome"),
+			context:  CtxBuilder().Age(3).City("Rome").B(),
+			expected: true,
+		},
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_AND,
+			second:   CityEquals("Rome"),
+			context:  CtxBuilder().Age(3).B(),
+			expected: false,
+		},
+		{
+			first:    Age("<", 5),
+			lo:       rulesv1beta2.LogicalOperator_LOGICAL_OPERATOR_UNSPECIFIED,
+			second:   CityEquals("Rome"),
+			context:  CtxBuilder().Age(3).B(),
+			hasError: true,
+		},
+	} {
+		t.Run(fmt.Sprintf("test logical expression %d", i), func(t *testing.T) {
+			rule := NewV1Beta2(&rulesv1beta2.Rule{
+				Rule: &rulesv1beta2.Rule_LogicalExpression{
+					LogicalExpression: &rulesv1beta2.LogicalExpression{
+						FirstRule: &rulesv1beta2.Rule{
+							Rule: &rulesv1beta2.Rule_Atom{
+								Atom: tc.first,
+							},
+						},
+						SecondRule: &rulesv1beta2.Rule{
+							Rule: &rulesv1beta2.Rule_Atom{
+								Atom: tc.second,
+							},
+						},
+						LogicalOperator: tc.lo,
+					},
+				},
+			})
+			result, err := rule.EvaluateRule(tc.context)
+			if tc.hasError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.expected, result)
+		})
 	}
 }
