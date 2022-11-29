@@ -1,0 +1,84 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package lekko.backend.v1beta1;
+
+import "lekko/backend/v1beta1/configuration_service.proto";
+import "lekko/feature/v1beta4/feature.proto";
+
+// Initial implementation of a config distribution service.
+service DistributionService {
+  // Returns the latest commit sha of the repository. The client is expected to poll this
+  // rpc to become aware of updates.
+  rpc GetRepositoryVersion(GetRepositoryVersionRequest) returns (GetRepositoryVersionResponse) {}
+  // Returns the entire state of the repository, including all feature flags.
+  rpc GetRepositoryContents(GetRepositoryContentsRequest) returns (GetRepositoryContentsResponse) {}
+  // Sends metrics to the backend related to flag evaluation. This rpc can be used
+  // to batch metrics to lekko servers.
+  rpc SendFlagEvaluationMetrics(SendFlagEvaluationMetricsRequest) returns (SendFlagEvaluationMetricsResponse) {}
+}
+
+message GetRepositoryVersionRequest {
+  lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+}
+
+message GetRepositoryVersionResponse {
+  string commit_sha = 1;
+}
+
+message GetRepositoryContentsRequest {
+  lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+}
+
+message GetRepositoryContentsResponse {
+  string commit_sha = 1;
+  repeated Namespace namespaces = 2;
+}
+
+message Namespace {
+  string name = 1;
+  repeated Feature features = 2;
+}
+
+message Feature {
+  string name = 1;
+  // The sha of the protobuf binary according to git.
+  string sha = 2;
+  lekko.feature.v1beta4.Feature feature = 3;
+}
+
+message ContextKey {
+  string key = 1;
+  string type = 2;
+}
+
+message FlagEvaluationEvent {
+  lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+  string commit_sha = 2;
+  string feature_sha = 3;
+  string namespace_name = 4;
+  string feature_name = 5;
+  // A list of context keys (not values) that were provided at runtime.
+  repeated ContextKey context_keys = 6;
+  // The node in the tree that contained the final return value of the feature.
+  repeated int32 result_path = 7;
+}
+
+message SendFlagEvaluationMetricsRequest {
+  repeated FlagEvaluationEvent events = 1;
+}
+
+message SendFlagEvaluationMetricsResponse {}
