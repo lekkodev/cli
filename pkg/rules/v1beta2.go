@@ -153,11 +153,11 @@ func (v1b2 *v1beta2) evaluateNumberComparator(co rulesv1beta2.ComparisonOperator
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 		return numVal < ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
-		return numVal < ruleNumVal || numVal == ruleNumVal, nil
+		return numVal <= ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
 		return numVal > ruleNumVal, nil
 	case rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
-		return numVal > ruleNumVal || numVal == ruleNumVal, nil
+		return numVal >= ruleNumVal, nil
 	default:
 		return false, errors.Errorf("expected numerical comparison operator, got %v", co)
 	}
