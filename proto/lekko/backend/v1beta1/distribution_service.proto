@@ -16,7 +16,6 @@ syntax = "proto3";
 
 package lekko.backend.v1beta1;
 
-import "google/protobuf/struct.proto";
 import "lekko/backend/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta4/feature.proto";
 
