@@ -60,6 +60,7 @@ func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, R
 	return rules.EvaluateFeatureV1Beta3(v1b3.Tree, evalContext)
 }
 
+// v1beta4 refers to the version of the feature protobuf type in lekko.feature.v1beta4.feature.proto
 type v1beta4 struct {
 	feature *featurev1beta4.Feature
 }

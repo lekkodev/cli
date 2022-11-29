@@ -31,6 +31,7 @@ var (
 	ErrUnsupportedType          error = fmt.Errorf("unsupported type")
 )
 
+// v1beta2 refers to the version of the rules protobuf type in lekko.rules.v1beta2.rules.proto
 type v1beta2 struct {
 	rule *rulesv1beta2.Rule
 }
