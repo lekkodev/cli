@@ -26,7 +26,7 @@ DOCKERMAKETARGET ?= all
 
 .PHONY: dockerbuildworkspace
 dockerbuildworkspace:
-	docker build \
+	docker buildx build \
 		$(DOCKER_BUILD_EXTRA_FLAGS) \
 		--build-arg PROJECT=$(PROJECT) \
 		--build-arg GO_MODULE=$(GO_MODULE) \
@@ -38,6 +38,11 @@ dockerbuildworkspace:
 dockermakeworkspace: dockerbuildworkspace
 	docker run -v "$(CURDIR):$(DOCKER_WORKSPACE_DIR)" $(DOCKER_WORKSPACE_IMAGE) make -j 8 $(DOCKERMAKETARGET)
 
+# To build for amd64 machines (in prod): `make dockerbuild amd64`
+ifneq (,$(findstring amd64,$(MAKECMDGOALS)))
+    DOCKER_BUILD_EXTRA_FLAGS=--platform=linux/amd64
+endif
+
 .PHONY: dockerbuild
 dockerbuild:: govendor
 
@@ -47,7 +52,7 @@ dockerbuilddeps$(1)::
 
 .PHONY: dockerbuild$(1)
 dockerbuild$(1): dockerbuilddeps$(1)
-	docker build $(DOCKER_BUILD_EXTRA_FLAGS) -t $(DOCKER_ORG)/$(1):latest -f Dockerfile.$(1) .
+	docker buildx build $(DOCKER_BUILD_EXTRA_FLAGS) -t $(DOCKER_ORG)/$(1):latest -f Dockerfile.$(1) .
 ifdef EXTRA_DOCKER_ORG
 	docker tag $(DOCKER_ORG)/$(1):latest $(EXTRA_DOCKER_ORG)/$(1):latest
 endif
