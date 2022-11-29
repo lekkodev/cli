@@ -39,13 +39,15 @@ type ComparisonOperator int32
 
 const (
 	ComparisonOperator_COMPARISON_OPERATOR_UNSPECIFIED ComparisonOperator = 0
-	ComparisonOperator_COMPARISON_OPERATOR_EQUALS      ComparisonOperator = 1
+	// == only applies to number, string and bool values.
+	ComparisonOperator_COMPARISON_OPERATOR_EQUALS ComparisonOperator = 1
 	// > < >= <= only applies to number values.
 	ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN              ComparisonOperator = 2
 	ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS    ComparisonOperator = 3
 	ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN           ComparisonOperator = 4
 	ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS ComparisonOperator = 5
-	// Contained within  only applies to list values.
+	// Contained within only applies to list values. Elements
+	// of the list must be primitive (i.e. number, string or bool)
 	ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN ComparisonOperator = 6
 	// Starts with and ends with only apply to string values.
 	ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH ComparisonOperator = 7

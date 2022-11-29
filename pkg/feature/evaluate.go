@@ -26,6 +26,8 @@ import (
 
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
+	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/rules"
 	"github.com/pkg/errors"
@@ -56,6 +58,76 @@ func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
 // 2) pre-compute antlr trees.
 func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
 	return rules.EvaluateFeatureV1Beta3(v1b3.Tree, evalContext)
+}
+
+// v1beta4 refers to the version of the feature protobuf type in lekko.feature.v1beta4.feature.proto
+type v1beta4 struct {
+	feature *featurev1beta4.Feature
+}
+
+func NewV1Beta4(f *featurev1beta4.Feature) EvaluableFeature {
+	return &v1beta4{f}
+}
+
+func (v1b4 *v1beta4) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
+	return v1b4.evaluate(evalContext)
+}
+
+func (v1b4 *v1beta4) evaluate(context map[string]interface{}) (*anypb.Any, []int, error) {
+	for i, constraint := range v1b4.feature.GetTree().GetConstraints() {
+		childVal, childPasses, childPath, err := v1b4.traverse(constraint, context)
+		if err != nil {
+			return nil, []int{}, err
+		}
+		if childPasses {
+			if childVal != nil {
+				return childVal, append([]int{i}, childPath...), nil
+			}
+			break
+		}
+	}
+	return v1b4.feature.GetTree().Default, []int{}, nil
+}
+
+func (v1b4 *v1beta4) traverse(constraint *featurev1beta4.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
+	passes, err := v1b4.evaluateRule(constraint.GetRule(), context)
+	if err != nil {
+		return nil, false, []int{}, errors.Wrap(err, "processing")
+	}
+	if !passes {
+		// If the rule fails, we avoid further traversal
+		return nil, passes, []int{}, nil
+	}
+	// rule passed
+	retVal := constraint.Value // may be null
+	for i, child := range constraint.GetConstraints() {
+		childVal, childPasses, childPath, err := v1b4.traverse(child, context)
+		if err != nil {
+			return nil, false, []int{}, errors.Wrapf(err, "traverse %d", i)
+		}
+		if childPasses {
+			// We may stop iterating. But first, remember the traversed
+			// value if it exists
+			if childVal != nil {
+				return childVal, passes, append([]int{i}, childPath...), nil
+			}
+			break
+		}
+		// Child evaluation did not pass, continue iterating
+	}
+	return retVal, passes, []int{}, nil
+}
+
+func (v1b4 *v1beta4) evaluateRule(rule *rulesv1beta2.Rule, context map[string]interface{}) (bool, error) {
+	if rule == nil {
+		// empty rule evaluates to 'true'
+		return true, nil
+	}
+	passes, err := rules.NewV1Beta2(rule).EvaluateRule(context)
+	if err != nil {
+		return false, errors.Wrap(err, "evaluating rule")
+	}
+	return passes, nil
 }
 
 // FeatureFile is a parsed feature from an on desk representation.
