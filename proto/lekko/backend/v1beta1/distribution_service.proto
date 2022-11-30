@@ -17,7 +17,7 @@ syntax = "proto3";
 package lekko.backend.v1beta1;
 
 import "lekko/backend/v1beta1/configuration_service.proto";
-import "lekko/feature/v1beta4/feature.proto";
+import "lekko/feature/v1beta1/feature.proto";
 
 // Initial implementation of a config distribution service.
 service DistributionService {
@@ -57,7 +57,7 @@ message Feature {
   string name = 1;
   // The sha of the protobuf binary according to git.
   string sha = 2;
-  lekko.feature.v1beta4.Feature feature = 3;
+  lekko.feature.v1beta1.Feature feature = 3;
 }
 
 message ContextKey {

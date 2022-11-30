@@ -26,7 +26,6 @@ import (
 
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
 	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/rules"
@@ -53,29 +52,13 @@ func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
 	return &v1beta3{f}
 }
 
-// TODO: pre-compute the ruleslang tree so that we:
-// 1) error on verify time if things aren't valid.
-// 2) pre-compute antlr trees.
 func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
-	return rules.EvaluateFeatureV1Beta3(v1b3.Tree, evalContext)
+	return v1b3.evaluate(evalContext)
 }
 
-// v1beta4 refers to the version of the feature protobuf type in lekko.feature.v1beta4.feature.proto
-type v1beta4 struct {
-	feature *featurev1beta4.Feature
-}
-
-func NewV1Beta4(f *featurev1beta4.Feature) EvaluableFeature {
-	return &v1beta4{f}
-}
-
-func (v1b4 *v1beta4) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
-	return v1b4.evaluate(evalContext)
-}
-
-func (v1b4 *v1beta4) evaluate(context map[string]interface{}) (*anypb.Any, []int, error) {
-	for i, constraint := range v1b4.feature.GetTree().GetConstraints() {
-		childVal, childPasses, childPath, err := v1b4.traverse(constraint, context)
+func (v1b3 *v1beta3) evaluate(context map[string]interface{}) (*anypb.Any, []int, error) {
+	for i, constraint := range v1b3.GetTree().GetConstraints() {
+		childVal, childPasses, childPath, err := v1b3.traverse(constraint, context)
 		if err != nil {
 			return nil, []int{}, err
 		}
@@ -86,11 +69,11 @@ func (v1b4 *v1beta4) evaluate(context map[string]interface{}) (*anypb.Any, []int
 			break
 		}
 	}
-	return v1b4.feature.GetTree().Default, []int{}, nil
+	return v1b3.GetTree().Default, []int{}, nil
 }
 
-func (v1b4 *v1beta4) traverse(constraint *featurev1beta4.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
-	passes, err := v1b4.evaluateRule(constraint.GetRule(), context)
+func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
+	passes, err := v1b3.evaluateRule(constraint.GetRuleAst(), context)
 	if err != nil {
 		return nil, false, []int{}, errors.Wrap(err, "processing")
 	}
@@ -101,7 +84,7 @@ func (v1b4 *v1beta4) traverse(constraint *featurev1beta4.Constraint, context map
 	// rule passed
 	retVal := constraint.Value // may be null
 	for i, child := range constraint.GetConstraints() {
-		childVal, childPasses, childPath, err := v1b4.traverse(child, context)
+		childVal, childPasses, childPath, err := v1b3.traverse(child, context)
 		if err != nil {
 			return nil, false, []int{}, errors.Wrapf(err, "traverse %d", i)
 		}
@@ -118,7 +101,7 @@ func (v1b4 *v1beta4) traverse(constraint *featurev1beta4.Constraint, context map
 	return retVal, passes, []int{}, nil
 }
 
-func (v1b4 *v1beta4) evaluateRule(rule *rulesv1beta2.Rule, context map[string]interface{}) (bool, error) {
+func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta2.Rule, context map[string]interface{}) (bool, error) {
 	if rule == nil {
 		// empty rule evaluates to 'true'
 		return true, nil
@@ -260,6 +243,8 @@ func GroupFeatureFiles(
 
 func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
+	case "v1beta4":
+		fallthrough
 	case "v1beta3":
 		if len(f.CompiledJSONFileName) == 0 {
 			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)

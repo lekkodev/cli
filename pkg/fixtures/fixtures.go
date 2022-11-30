@@ -15,12 +15,15 @@
 package fixtures
 
 import (
+	"log"
+
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
+	"github.com/lekkodev/rules/pkg/parser"
 )
 
 func NewBasicFeatureOn() *rulesv1beta1.Feature {
@@ -118,7 +121,7 @@ func NewFeatureOnForUserIDBeta2() *featurev1beta1.Feature {
 		Key: "feature_on_for_user_id",
 		Tree: &featurev1beta1.Tree{
 			Default:     NewAnyFalse(),
-			Constraints: []*featurev1beta1.Constraint{NewConstraintOnForUserIDBeta2()},
+			Constraints: []*featurev1beta1.Constraint{genConstraint("user_id == 1", NewAnyTrue())},
 		},
 	}
 }
@@ -128,17 +131,7 @@ func NewFeatureOnForUserIDsBeta2() *featurev1beta1.Feature {
 		Key: "feature_on_for_user_ids",
 		Tree: &featurev1beta1.Tree{
 			Default:     NewAnyFalse(),
-			Constraints: []*featurev1beta1.Constraint{NewConstraintOnForUserIDsBeta2()},
-		},
-	}
-}
-
-func NewFeatureInvalidBeta2() *featurev1beta1.Feature {
-	return &featurev1beta1.Feature{
-		Key: "feature_on_for_user_ids",
-		Tree: &featurev1beta1.Tree{
-			Default:     NewAnyFalse(),
-			Constraints: []*featurev1beta1.Constraint{NewConstraintInvalidBeta2()},
+			Constraints: []*featurev1beta1.Constraint{genConstraint("user_id IN [1, 2]", NewAnyTrue())},
 		},
 	}
 }
@@ -153,13 +146,6 @@ func NewConstraintOnForUserIDBeta2() *featurev1beta1.Constraint {
 func NewConstraintOnForUserIDsBeta2() *featurev1beta1.Constraint {
 	return &featurev1beta1.Constraint{
 		Rule:  NewRuleLangContainsUserID(),
-		Value: NewAnyTrue(),
-	}
-}
-
-func NewConstraintInvalidBeta2() *featurev1beta1.Constraint {
-	return &featurev1beta1.Constraint{
-		Rule:  NewRuleLangInvalid(),
 		Value: NewAnyTrue(),
 	}
 }
@@ -206,14 +192,23 @@ func NewComplexTreeFeature() *featurev1beta1.Feature {
 		Tree: &featurev1beta1.Tree{
 			Default: NewAnyInt(12),
 			Constraints: []*featurev1beta1.Constraint{
-				{Rule: "a == 1", Value: NewAnyInt(38), Constraints: []*featurev1beta1.Constraint{
-					{Rule: "x IN [\"a\", \"b\"]", Value: NewAnyInt(108)},
-				}},
-				{Rule: "a > 10", Value: nil, Constraints: []*featurev1beta1.Constraint{
-					{Rule: "x == \"c\"", Value: NewAnyInt(21)},
-				}},
-				{Rule: "a > 5", Value: NewAnyInt(23)},
+				genConstraint("a == 1", NewAnyInt(38), genConstraint("x IN [\"a\", \"b\"]", NewAnyInt(108))),
+				genConstraint("a > 10", nil, genConstraint("x == \"c\"", NewAnyInt(21))),
+				genConstraint("a > 5", NewAnyInt(23)),
 			},
 		},
+	}
+}
+
+func genConstraint(ruleStr string, value *anypb.Any, constraints ...*featurev1beta1.Constraint) *featurev1beta1.Constraint {
+	ruleAST, err := parser.BuildAST(ruleStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &featurev1beta1.Constraint{
+		Rule:        ruleStr,
+		RuleAst:     ruleAST,
+		Value:       value,
+		Constraints: constraints,
 	}
 }

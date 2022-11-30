@@ -12,20 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rules_test
+package feature
 
 import (
 	"testing"
 
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/wrapperspb"
-
 	"github.com/lekkodev/cli/pkg/fixtures"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	"github.com/lekkodev/cli/pkg/rules"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func TestEvaluateFeatureBoolBeta3(t *testing.T) {
+func TestEvaluateFeatureBoolV1Beta3(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
@@ -80,7 +78,7 @@ func TestEvaluateFeatureBoolBeta3(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := rules.EvaluateFeatureV1Beta3(tc.feature.Tree, tc.context)
+		val, path, err := NewV1Beta3(tc.feature).Evaluate(tc.context)
 		if tc.testErr != nil {
 			require.Error(t, err)
 		} else {
@@ -95,7 +93,7 @@ func TestEvaluateFeatureBoolBeta3(t *testing.T) {
 }
 
 // The following tests mimic the ones described in ./pkg/feature/README.md
-func TestEvaluateFeatureIntBeta3(t *testing.T) {
+func TestEvaluateFeatureComplexV1Beta3(t *testing.T) {
 	t.Parallel()
 	complexFeature := fixtures.NewComplexTreeFeature()
 	tcs := []struct {
@@ -126,7 +124,7 @@ func TestEvaluateFeatureIntBeta3(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := rules.EvaluateFeatureV1Beta3(complexFeature.Tree, tc.context)
+		val, path, err := NewV1Beta3(complexFeature).Evaluate(tc.context)
 		require.NoError(t, err)
 		var res wrapperspb.Int64Value
 		require.NoError(t, val.UnmarshalTo(&res))

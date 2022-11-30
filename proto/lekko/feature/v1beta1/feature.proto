@@ -17,6 +17,7 @@ syntax = "proto3";
 package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
+import "lekko/rules/v1beta2/rules.proto";
 
 // A prototype of the wrapper type that will be used to house all feature flags for
 // the 'homegrown' feature flagging solution:
@@ -40,7 +41,8 @@ message Tree {
 }
 
 message Constraint {
-  // RulesLang boolean expression
+  // RulesLang string. All edits to ruleslang will be made to
+  // this string for now, and the ast will be derived from it.
   string rule = 1;
 
   // This can be empty. If non-empty, and the above rule evaluated to true,
@@ -50,4 +52,8 @@ message Constraint {
   // If this list is empty, or none of the rules pass,
   // return the most recent concrete value we traversed.
   repeated Constraint constraints = 3;
+
+  // Rules AST used for rules evaluation. It is a strict derivative of the
+  // string rule above.
+  lekko.rules.v1beta2.Rule rule_ast = 4;
 }

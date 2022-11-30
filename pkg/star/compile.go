@@ -35,7 +35,7 @@ import (
 
 type Compiler interface {
 	Compile(context.Context) (*feature.Feature, error)
-	Persist(context.Context, *feature.Feature) error
+	Persist(context.Context, *feature.Feature, bool) error
 }
 
 type compiler struct {
@@ -86,7 +86,7 @@ func (c *compiler) Compile(ctx context.Context) (*feature.Feature, error) {
 	return f, nil
 }
 
-func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) error {
 	fProto, err := f.ToProto()
 	if err != nil {
 		return errors.Wrap(err, "feature to proto")
@@ -94,13 +94,15 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
 	protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", c.ff.Name))
-	diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
-	if err != nil {
-		return errors.Wrap(err, "comparing with existing proto")
-	}
-	if !diffExists {
-		// skipping i/o as no diff exists
-		return nil
+	if !force { // check for backwards compatibility
+		diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
+		if err != nil {
+			return errors.Wrap(err, "comparing with existing proto")
+		}
+		if !diffExists {
+			// skipping i/o as no diff exists
+			return nil
+		}
 	}
 
 	// Create the json file
