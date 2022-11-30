@@ -15,7 +15,6 @@
 package rules_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,20 +74,6 @@ func TestEvaluateFeatureBoolBeta3(t *testing.T) {
 			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(3)},
 			nil,
-			false,
-			[]int{},
-		},
-		{
-			fixtures.NewFeatureInvalidBeta2(),
-			map[string]interface{}{"user_id": interface{}(3)},
-			fmt.Errorf(""),
-			false,
-			[]int{},
-		},
-		{
-			fixtures.NewFeatureInvalidBeta2(),
-			nil,
-			fmt.Errorf(""),
 			false,
 			[]int{},
 		},

@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	lekkov1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
+	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -250,8 +250,8 @@ func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.
 	return nil
 }
 
-func (f *Feature) ToProto() (*lekkov1beta4.Feature, error) {
-	ret := &lekkov1beta4.Feature{
+func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
+	ret := &lekkov1beta1.Feature{
 		Key:         f.Key,
 		Description: f.Description,
 	}
@@ -259,7 +259,7 @@ func (f *Feature) ToProto() (*lekkov1beta4.Feature, error) {
 	if err != nil {
 		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
-	tree := &lekkov1beta4.Tree{
+	tree := &lekkov1beta1.Tree{
 		Default: defaultAny,
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
@@ -268,9 +268,9 @@ func (f *Feature) ToProto() (*lekkov1beta4.Feature, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
-		tree.Constraints = append(tree.Constraints, &lekkov1beta4.Constraint{
-			Rule:    rule.ConditionAST,
-			RuleStr: rule.Condition,
+		tree.Constraints = append(tree.Constraints, &lekkov1beta1.Constraint{
+			Rule:    rule.Condition,
+			RuleAst: rule.ConditionAST,
 			Value:   ruleAny,
 		})
 	}
@@ -278,7 +278,7 @@ func (f *Feature) ToProto() (*lekkov1beta4.Feature, error) {
 	return ret, nil
 }
 
-func FromProto(fProto *lekkov1beta4.Feature) (*Feature, error) {
+func FromProto(fProto *lekkov1beta1.Feature) (*Feature, error) {
 	ret := &Feature{
 		Key:         fProto.Key,
 		Description: fProto.Description,
@@ -297,15 +297,15 @@ func FromProto(fProto *lekkov1beta4.Feature) (*Feature, error) {
 			return nil, fmt.Errorf("expecting rule feature type %s, got %s", ret.FeatureType, fType)
 		}
 		ret.Rules = append(ret.Rules, &Rule{
-			Condition:    constraint.RuleStr,
-			ConditionAST: constraint.Rule,
+			Condition:    constraint.Rule,
+			ConditionAST: constraint.RuleAst,
 			Value:        ruleVal,
 		})
 	}
 	return ret, nil
 }
 
-func ProtoToJSON(fProto *lekkov1beta4.Feature, registry *protoregistry.Types) ([]byte, error) {
+func ProtoToJSON(fProto *lekkov1beta1.Feature, registry *protoregistry.Types) ([]byte, error) {
 	jBytes, err := protojson.MarshalOptions{
 		Resolver: registry,
 	}.Marshal(fProto)
@@ -342,7 +342,7 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &v1beta4{res}, nil
+	return &v1beta3{res}, nil
 }
 
 func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {

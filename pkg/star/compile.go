@@ -22,7 +22,7 @@ import (
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
-	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
@@ -134,7 +134,7 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) 
 
 // returns true if there is an actual semantic difference between the existing compiled proto,
 // and the new proto we have on hand.
-func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta4.Feature, provider fs.Provider) (bool, error) {
+func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta1.Feature, provider fs.Provider) (bool, error) {
 	bytes, err := provider.GetFileContents(ctx, existingProtoFilePath)
 	if err != nil {
 		if provider.IsNotExist(err) {
@@ -142,7 +142,7 @@ func compareExistingProto(ctx context.Context, existingProtoFilePath string, new
 		}
 		return false, errors.Wrap(err, "read existing proto file")
 	}
-	existingProto := &featurev1beta4.Feature{}
+	existingProto := &featurev1beta1.Feature{}
 	if err := proto.Unmarshal(bytes, existingProto); err != nil {
 		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
 	}

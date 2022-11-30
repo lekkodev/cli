@@ -18,58 +18,58 @@ import (
 	"testing"
 
 	"github.com/lekkodev/cli/pkg/fixtures"
-	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func TestEvaluateFeatureBoolV1Beta4(t *testing.T) {
+func TestEvaluateFeatureBoolV1Beta3(t *testing.T) {
 	t.Parallel()
 
 	tcs := []struct {
-		feature  *featurev1beta4.Feature
+		feature  *featurev1beta1.Feature
 		context  map[string]interface{}
 		testErr  error
 		testVal  bool
 		testPath []int
 	}{
 		{
-			fixtures.NewBasicFeatureOnV1Beta4(),
+			fixtures.NewBasicFeatureOnBeta2(),
 			nil,
 			nil,
 			true,
 			[]int{},
 		},
 		{
-			fixtures.NewBasicFeatureOffV1Beta4(),
+			fixtures.NewBasicFeatureOffBeta2(),
 			nil,
 			nil,
 			false,
 			[]int{},
 		},
 		{
-			fixtures.NewFeatureOnForUserIDV1Beta4(),
+			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(1)},
 			nil,
 			true,
 			[]int{0},
 		},
 		{
-			fixtures.NewFeatureOnForUserIDV1Beta4(),
+			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(2)},
 			nil,
 			false,
 			[]int{},
 		},
 		{
-			fixtures.NewFeatureOnForUserIDsV1Beta4(),
+			fixtures.NewFeatureOnForUserIDsBeta2(),
 			map[string]interface{}{"user_id": interface{}(2)},
 			nil,
 			true,
 			[]int{0},
 		},
 		{
-			fixtures.NewFeatureOnForUserIDV1Beta4(),
+			fixtures.NewFeatureOnForUserIDBeta2(),
 			map[string]interface{}{"user_id": interface{}(3)},
 			nil,
 			false,
@@ -78,7 +78,7 @@ func TestEvaluateFeatureBoolV1Beta4(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := NewV1Beta4(tc.feature).Evaluate(tc.context)
+		val, path, err := NewV1Beta3(tc.feature).Evaluate(tc.context)
 		if tc.testErr != nil {
 			require.Error(t, err)
 		} else {
@@ -93,9 +93,9 @@ func TestEvaluateFeatureBoolV1Beta4(t *testing.T) {
 }
 
 // The following tests mimic the ones described in ./pkg/feature/README.md
-func TestEvaluateFeatureComplexV1Beta4(t *testing.T) {
+func TestEvaluateFeatureComplexV1Beta3(t *testing.T) {
 	t.Parallel()
-	complexFeature := fixtures.NewComplexTreeFeatureV1Beta4()
+	complexFeature := fixtures.NewComplexTreeFeature()
 	tcs := []struct {
 		context  map[string]interface{}
 		testVal  int64
@@ -124,7 +124,7 @@ func TestEvaluateFeatureComplexV1Beta4(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := NewV1Beta4(complexFeature).Evaluate(tc.context)
+		val, path, err := NewV1Beta3(complexFeature).Evaluate(tc.context)
 		require.NoError(t, err)
 		var res wrapperspb.Int64Value
 		require.NoError(t, val.UnmarshalTo(&res))
