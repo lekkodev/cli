@@ -260,6 +260,8 @@ func GroupFeatureFiles(
 
 func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
+	case "v1beta4":
+		fallthrough
 	case "v1beta3":
 		if len(f.CompiledJSONFileName) == 0 {
 			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)

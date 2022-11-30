@@ -31,7 +31,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types) error {
+func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types, force bool) error {
 	var err error
 	if registry == nil {
 		rootMD, _, err := r.ParseMetadata(ctx)
@@ -49,7 +49,7 @@ func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types) error
 	}
 	for nsMD, ffs := range contents {
 		for _, ff := range ffs {
-			if _, err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name, true); err != nil {
+			if _, err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name, true, force); err != nil {
 				return errors.Wrap(err, "compile feature")
 			}
 		}
@@ -57,7 +57,7 @@ func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types) error
 	return nil
 }
 
-func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string) error {
+func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string, force bool) error {
 	ffs, err := r.GetFeatureFiles(ctx, namespace)
 	if err != nil {
 		return errors.Wrap(err, "get feature files")
@@ -73,14 +73,14 @@ func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Typ
 		}
 	}
 	for _, ff := range ffs {
-		if _, err := r.CompileFeature(ctx, registry, namespace, ff.Name, true); err != nil {
+		if _, err := r.CompileFeature(ctx, registry, namespace, ff.Name, true, force); err != nil {
 			return errors.Wrap(err, "compile feature")
 		}
 	}
 	return nil
 }
 
-func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, persist bool) (*feature.Feature, error) {
+func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, persist, force bool) (*feature.Feature, error) {
 	ff := feature.NewFeatureFile(namespace, featureName)
 	if registry == nil {
 		rootMD, _, err := r.ParseMetadata(ctx)
@@ -98,7 +98,7 @@ func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types
 		return nil, errors.Wrap(err, "compile")
 	}
 	if persist {
-		if err := compiler.Persist(ctx, f); err != nil {
+		if err := compiler.Persist(ctx, f, force); err != nil {
 			return nil, errors.Wrap(err, "persist")
 		}
 		if err := r.FormatFeature(ctx, ff); err != nil {
@@ -167,7 +167,7 @@ func (r *Repo) verifyFeature(
 		return errors.Wrap(err, "parse feature")
 	}
 	if nsMD.Version == metadata.LatestNamespaceVersion {
-		f, err := r.CompileFeature(ctx, registry, ns, ff.Name, false)
+		f, err := r.CompileFeature(ctx, registry, ns, ff.Name, false, false)
 		if err != nil {
 			return errors.Wrap(err, "compile feature")
 		}

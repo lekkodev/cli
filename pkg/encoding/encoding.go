@@ -22,6 +22,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 
@@ -32,6 +33,16 @@ import (
 // type.
 func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
 	switch nsMD.Version {
+	case "v1beta4":
+		var f featurev1beta4.Feature
+		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
+		if err != nil {
+			return nil, errors.Wrap(err, "get file contents")
+		}
+		if err := proto.Unmarshal(contents, &f); err != nil {
+			return nil, err
+		}
+		return feature.NewV1Beta4(&f), nil
 	case "v1beta3":
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))

@@ -18,8 +18,9 @@ import (
 	"fmt"
 
 	"github.com/lekkodev/cli/pkg/feature"
+	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 
-	"github.com/lekkodev/rules/parser"
+	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/lib/json"
@@ -255,8 +256,9 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		if conditionStr.GoString() == "" {
 			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
-		if err := validateRulesLang(conditionStr.GoString()); err != nil {
-			return fmt.Errorf("error expecting rules language string: %s, error while parsing: %v", conditionStr.GoString(), err)
+		ruleAST, err := parseRulesLang(conditionStr.GoString())
+		if err != nil {
+			return fmt.Errorf("error expecting rules language string: %s, error while parsing: %q", conditionStr.GoString(), err)
 		}
 		ruleVal := tuple.Index(1)
 		if err := fb.validate(ruleVal); err != nil {
@@ -269,15 +271,16 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 				return typeError(f.FeatureType, i, ruleVal)
 			}
 			f.Rules = append(f.Rules, &feature.Rule{
-				Condition: conditionStr.GoString(),
-				Value:     message,
+				Condition:    conditionStr.GoString(),
+				ConditionAST: ruleAST,
+				Value:        message,
 			})
 		case feature.FeatureTypeBool:
 			typedRuleVal, ok := ruleVal.(starlark.Bool)
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			if err := f.AddBoolRule(conditionStr.GoString(), bool(typedRuleVal)); err != nil {
+			if err := f.AddBoolRule(conditionStr.GoString(), ruleAST, bool(typedRuleVal)); err != nil {
 				return err
 			}
 		case feature.FeatureTypeString:
@@ -285,7 +288,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			if err := f.AddStringRule(conditionStr.GoString(), typedRuleVal.GoString()); err != nil {
+			if err := f.AddStringRule(conditionStr.GoString(), ruleAST, typedRuleVal.GoString()); err != nil {
 				return err
 			}
 		case feature.FeatureTypeInt:
@@ -297,7 +300,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if !ok {
 				return errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
 			}
-			if err := f.AddIntRule(conditionStr.GoString(), intVal); err != nil {
+			if err := f.AddIntRule(conditionStr.GoString(), ruleAST, intVal); err != nil {
 				return err
 			}
 		case feature.FeatureTypeFloat:
@@ -305,7 +308,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if !ok {
 				return typeError(f.FeatureType, i, ruleVal)
 			}
-			if err := f.AddFloatRule(conditionStr.GoString(), float64(typedRuleVal)); err != nil {
+			if err := f.AddFloatRule(conditionStr.GoString(), ruleAST, float64(typedRuleVal)); err != nil {
 				return err
 			}
 		case feature.FeatureTypeJSON:
@@ -317,7 +320,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if err := structVal.UnmarshalJSON(encoded); err != nil {
 				return errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
 			}
-			if err := f.AddJSONRule(conditionStr.GoString(), structVal); err != nil {
+			if err := f.AddJSONRule(conditionStr.GoString(), ruleAST, structVal); err != nil {
 				return errors.Wrap(err, "failed to add json rule")
 			}
 		default:
@@ -546,4 +549,12 @@ func validateRulesLang(rulesStr string) error {
 	}
 
 	return nil
+}
+
+func parseRulesLang(ruleslang string) (*rulesv1beta2.Rule, error) {
+	ret, err := parser.BuildAST(ruleslang)
+	if err != nil {
+		return nil, errors.Wrapf(err, "build rules ast with ruleslang '%s'", ruleslang)
+	}
+	return ret, nil
 }

@@ -40,7 +40,7 @@ import (
 
 func main() {
 	rootCmd.AddCommand(verifyCmd)
-	rootCmd.AddCommand(compileCmd)
+	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
@@ -168,53 +168,56 @@ func initCmd() *cobra.Command {
 	}
 	return cmd
 }
-
-var compileCmd = &cobra.Command{
-	Use:   "compile [namespace[/feature]]",
-	Short: "compiles features based on individual definitions",
-	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		r, err := repo.NewLocal(wd)
-		if err != nil {
-			return err
-		}
-		ctx := cmd.Context()
-		rootMD, _, err := r.ParseMetadata(ctx)
-		if err != nil {
-			return errors.Wrap(err, "parse metadata")
-		}
-		registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-		if err != nil {
-			return errors.Wrap(err, "rebuild type registry")
-		}
-		var ns, f string
-		if len(args) > 0 {
-			ns, f, err = feature.ParseFeaturePath(args[0])
+func compileCmd() *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
+		Use:   "compile [namespace[/feature]]",
+		Short: "compiles features based on individual definitions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-		}
-
-		compile := func() error {
-			if ns != "" {
-				if f != "" {
-					_, err = r.CompileFeature(ctx, registry, ns, f, true)
+			r, err := repo.NewLocal(wd)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "parse metadata")
+			}
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			var ns, f string
+			if len(args) > 0 {
+				ns, f, err = feature.ParseFeaturePath(args[0])
+				if err != nil {
 					return err
 				}
-				return r.CompileNamespace(ctx, registry, ns)
 			}
-			return r.Compile(ctx, registry)
-		}
 
-		if err := compile(); err != nil {
-			return errors.Wrap(err, "compile")
-		}
-		return r.Verify(ctx)
-	},
+			compile := func() error {
+				if ns != "" {
+					if f != "" {
+						_, err = r.CompileFeature(ctx, registry, ns, f, true, force)
+						return err
+					}
+					return r.CompileNamespace(ctx, registry, ns, force)
+				}
+				return r.Compile(ctx, registry, force)
+			}
+
+			if err := compile(); err != nil {
+				return errors.Wrap(err, "compile")
+			}
+			return r.Verify(ctx)
+		},
+	}
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
+	return cmd
 }
 
 func parseCmd() *cobra.Command {
@@ -622,6 +625,7 @@ var cleanupCmd = &cobra.Command{
 }
 
 func restoreCmd() *cobra.Command {
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "restore [hash]",
 		Short: "restores repo to a particular hash",
@@ -648,7 +652,7 @@ func restoreCmd() *cobra.Command {
 				return errors.Wrap(err, "rebuild type registry")
 			}
 			fmt.Printf("Successfully rebuilt dynamic type registry.\n")
-			if err := r.Compile(ctx, registry); err != nil {
+			if err := r.Compile(ctx, registry, force); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 			fmt.Printf("Successfully compiled.\n")
@@ -656,5 +660,6 @@ func restoreCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
 	return cmd
 }

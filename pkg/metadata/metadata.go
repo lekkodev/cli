@@ -54,7 +54,7 @@ type NamespaceConfigRepoMetadata struct {
 
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
 const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
-const LatestNamespaceVersion = "v1beta3"
+const LatestNamespaceVersion = "v1beta4"
 const GenFolderPathJSON = "gen/json"
 const GenFolderPathProto = "gen/proto"
 

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/lekkodev/cli/pkg/feature"
+	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -58,7 +59,7 @@ func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
     default = %s,
     rules = [
         ("age == 10", %s),
-        ("city IN ['Rome', 'Milan']", %s),
+        ("city IN [\"Rome\", \"Milan\"]", %s),
     ],
 )
 `, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
@@ -142,7 +143,16 @@ func TestWalkerMutateAddRule(t *testing.T) {
 
 	f.Rules = append(f.Rules, &feature.Rule{
 		Condition: "age == 12",
-		Value:     false,
+		ConditionAST: &rulesv1beta2.Rule{
+			Rule: &rulesv1beta2.Rule_Atom{
+				Atom: &rulesv1beta2.Atom{
+					ContextKey:         "age",
+					ComparisonValue:    structpb.NewNumberValue(12),
+					ComparisonOperator: rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+				},
+			},
+		},
+		Value: false,
 	})
 
 	bytes, err := b.Mutate(f)

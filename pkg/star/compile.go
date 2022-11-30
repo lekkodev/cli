@@ -22,7 +22,7 @@ import (
 
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
-	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
@@ -35,7 +35,7 @@ import (
 
 type Compiler interface {
 	Compile(context.Context) (*feature.Feature, error)
-	Persist(context.Context, *feature.Feature) error
+	Persist(context.Context, *feature.Feature, bool) error
 }
 
 type compiler struct {
@@ -86,7 +86,7 @@ func (c *compiler) Compile(ctx context.Context) (*feature.Feature, error) {
 	return f, nil
 }
 
-func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) error {
 	fProto, err := f.ToProto()
 	if err != nil {
 		return errors.Wrap(err, "feature to proto")
@@ -94,13 +94,15 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
 	protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", c.ff.Name))
-	diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
-	if err != nil {
-		return errors.Wrap(err, "comparing with existing proto")
-	}
-	if !diffExists {
-		// skipping i/o as no diff exists
-		return nil
+	if !force { // check for backwards compatibility
+		diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
+		if err != nil {
+			return errors.Wrap(err, "comparing with existing proto")
+		}
+		if !diffExists {
+			// skipping i/o as no diff exists
+			return nil
+		}
 	}
 
 	// Create the json file
@@ -132,7 +134,7 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature) error {
 
 // returns true if there is an actual semantic difference between the existing compiled proto,
 // and the new proto we have on hand.
-func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta1.Feature, provider fs.Provider) (bool, error) {
+func compareExistingProto(ctx context.Context, existingProtoFilePath string, newProto *featurev1beta4.Feature, provider fs.Provider) (bool, error) {
 	bytes, err := provider.GetFileContents(ctx, existingProtoFilePath)
 	if err != nil {
 		if provider.IsNotExist(err) {
@@ -140,7 +142,7 @@ func compareExistingProto(ctx context.Context, existingProtoFilePath string, new
 		}
 		return false, errors.Wrap(err, "read existing proto file")
 	}
-	existingProto := &featurev1beta1.Feature{}
+	existingProto := &featurev1beta4.Feature{}
 	if err := proto.Unmarshal(bytes, existingProto); err != nil {
 		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
 	}
