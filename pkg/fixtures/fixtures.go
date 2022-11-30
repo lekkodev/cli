@@ -15,12 +15,16 @@
 package fixtures
 
 import (
+	"log"
+
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	featurev1beta4 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta4"
 	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
+	"github.com/lekkodev/rules/pkg/parser"
 )
 
 func NewBasicFeatureOn() *rulesv1beta1.Feature {
@@ -102,11 +106,30 @@ func NewBasicFeatureOnBeta2() *featurev1beta1.Feature {
 		},
 	}
 }
+func NewBasicFeatureOnV1Beta4() *featurev1beta4.Feature {
+	return &featurev1beta4.Feature{
+		Key: "basic_feature_on",
+		Tree: &featurev1beta4.Tree{
+			Default:     NewAnyTrue(),
+			Constraints: nil,
+		},
+	}
+}
 
 func NewBasicFeatureOffBeta2() *featurev1beta1.Feature {
 	return &featurev1beta1.Feature{
 		Key: "basic_feature_off",
 		Tree: &featurev1beta1.Tree{
+			Default:     NewAnyFalse(),
+			Constraints: nil,
+		},
+	}
+}
+
+func NewBasicFeatureOffV1Beta4() *featurev1beta4.Feature {
+	return &featurev1beta4.Feature{
+		Key: "basic_feature_off",
+		Tree: &featurev1beta4.Tree{
 			Default:     NewAnyFalse(),
 			Constraints: nil,
 		},
@@ -123,12 +146,36 @@ func NewFeatureOnForUserIDBeta2() *featurev1beta1.Feature {
 	}
 }
 
+func NewFeatureOnForUserIDV1Beta4() *featurev1beta4.Feature {
+	return &featurev1beta4.Feature{
+		Key: "feature_on_for_user_id",
+		Tree: &featurev1beta4.Tree{
+			Default: NewAnyFalse(),
+			Constraints: []*featurev1beta4.Constraint{
+				genConstraint("user_id == 1", NewAnyTrue()),
+			},
+		},
+	}
+}
+
 func NewFeatureOnForUserIDsBeta2() *featurev1beta1.Feature {
 	return &featurev1beta1.Feature{
 		Key: "feature_on_for_user_ids",
 		Tree: &featurev1beta1.Tree{
 			Default:     NewAnyFalse(),
 			Constraints: []*featurev1beta1.Constraint{NewConstraintOnForUserIDsBeta2()},
+		},
+	}
+}
+
+func NewFeatureOnForUserIDsV1Beta4() *featurev1beta4.Feature {
+	return &featurev1beta4.Feature{
+		Key: "feature_on_for_user_ids",
+		Tree: &featurev1beta4.Tree{
+			Default: NewAnyFalse(),
+			Constraints: []*featurev1beta4.Constraint{
+				genConstraint("user_id IN [1, 2]", NewAnyTrue()),
+			},
 		},
 	}
 }
@@ -215,5 +262,32 @@ func NewComplexTreeFeature() *featurev1beta1.Feature {
 				{Rule: "a > 5", Value: NewAnyInt(23)},
 			},
 		},
+	}
+}
+
+func NewComplexTreeFeatureV1Beta4() *featurev1beta4.Feature {
+	return &featurev1beta4.Feature{
+		Key: "complex-tree",
+		Tree: &featurev1beta4.Tree{
+			Default: NewAnyInt(12),
+			Constraints: []*featurev1beta4.Constraint{
+				genConstraint("a == 1", NewAnyInt(38), genConstraint("x IN [\"a\", \"b\"]", NewAnyInt(108))),
+				genConstraint("a > 10", nil, genConstraint("x == \"c\"", NewAnyInt(21))),
+				genConstraint("a > 5", NewAnyInt(23)),
+			},
+		},
+	}
+}
+
+func genConstraint(ruleStr string, value *anypb.Any, constraints ...*featurev1beta4.Constraint) *featurev1beta4.Constraint {
+	ruleAST, err := parser.BuildAST(ruleStr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return &featurev1beta4.Constraint{
+		Rule:        ruleAST,
+		RuleStr:     ruleStr,
+		Value:       value,
+		Constraints: constraints,
 	}
 }
