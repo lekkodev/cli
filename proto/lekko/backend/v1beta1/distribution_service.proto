@@ -41,6 +41,10 @@ message GetRepositoryVersionResponse {
 
 message GetRepositoryContentsRequest {
   lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+  // optional namespace_name to filter responses by
+  string namespace_name = 2;
+  // optional feature_name to filter responses by
+  string feature_name = 3;
 }
 
 message GetRepositoryContentsResponse {
