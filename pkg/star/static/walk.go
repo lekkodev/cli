@@ -25,6 +25,7 @@ import (
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -170,8 +171,14 @@ func (w *walker) buildDescriptionFn(f *feature.Feature) descriptionFn {
 func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 	return func(rulesW *rulesWrapper) error {
 		for i, r := range rulesW.rules {
+			rulesLang := r.conditionV.Value
+			ast, err := parser.BuildAST(rulesLang)
+			if err != nil {
+				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
+			}
 			rule := &feature.Rule{
-				Condition: r.conditionV.Value,
+				Condition:    rulesLang,
+				ConditionAST: ast,
 			}
 			goVal, featureType, err := w.extractValue(&r.v)
 			if err != nil {
