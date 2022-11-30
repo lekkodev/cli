@@ -7,7 +7,7 @@ require (
 	github.com/bufbuild/connect-go v0.3.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/lekkodev/rules v1.3.1-0.20221130044815-69ee3cbc4074
+	github.com/lekkodev/rules v1.4.0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.7.0
