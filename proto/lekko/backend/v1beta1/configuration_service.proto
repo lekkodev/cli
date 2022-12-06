@@ -23,6 +23,9 @@ service ConfigurationService {
   rpc GetBoolValue(GetBoolValueRequest) returns (GetBoolValueResponse) {}
   rpc GetProtoValue(GetProtoValueRequest) returns (GetProtoValueResponse) {}
   rpc GetJSONValue(GetJSONValueRequest) returns (GetJSONValueResponse) {}
+  // Register is used to denote a RepositoryKey and namespaces within it
+  // that a client is interested in so the server can cache and keep up to date.
+  rpc Register(RegisterRequest) returns (RegisterResponse) {}
 }
 
 message RepositoryKey {
@@ -71,3 +74,12 @@ message Value {
     string string_value = 4;
   }
 }
+
+message RegisterRequest {
+  RepositoryKey repo_key = 1;
+  // The namespaces to register within the repo. If empty,
+  // all namespaces will be registered.
+  repeated string namespace_list = 2;
+}
+
+message RegisterResponse {}
