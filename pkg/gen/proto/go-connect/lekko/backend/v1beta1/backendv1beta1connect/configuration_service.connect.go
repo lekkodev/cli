@@ -45,6 +45,9 @@ type ConfigurationServiceClient interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
 	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
+	// Register is used to denote a RepositoryKey and namespaces within it
+	// that a client is interested in so the server can cache and keep up to date.
+	Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error)
 }
 
 // NewConfigurationServiceClient constructs a client for the
@@ -72,6 +75,11 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetJSONValue",
 			opts...,
 		),
+		register: connect_go.NewClient[v1beta1.RegisterRequest, v1beta1.RegisterResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/Register",
+			opts...,
+		),
 	}
 }
 
@@ -80,6 +88,7 @@ type configurationServiceClient struct {
 	getBoolValue  *connect_go.Client[v1beta1.GetBoolValueRequest, v1beta1.GetBoolValueResponse]
 	getProtoValue *connect_go.Client[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse]
 	getJSONValue  *connect_go.Client[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse]
+	register      *connect_go.Client[v1beta1.RegisterRequest, v1beta1.RegisterResponse]
 }
 
 // GetBoolValue calls lekko.backend.v1beta1.ConfigurationService.GetBoolValue.
@@ -97,12 +106,20 @@ func (c *configurationServiceClient) GetJSONValue(ctx context.Context, req *conn
 	return c.getJSONValue.CallUnary(ctx, req)
 }
 
+// Register calls lekko.backend.v1beta1.ConfigurationService.Register.
+func (c *configurationServiceClient) Register(ctx context.Context, req *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error) {
+	return c.register.CallUnary(ctx, req)
+}
+
 // ConfigurationServiceHandler is an implementation of the
 // lekko.backend.v1beta1.ConfigurationService service.
 type ConfigurationServiceHandler interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
 	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
+	// Register is used to denote a RepositoryKey and namespaces within it
+	// that a client is interested in so the server can cache and keep up to date.
+	Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error)
 }
 
 // NewConfigurationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -127,6 +144,11 @@ func NewConfigurationServiceHandler(svc ConfigurationServiceHandler, opts ...con
 		svc.GetJSONValue,
 		opts...,
 	))
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/Register", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/Register",
+		svc.Register,
+		opts...,
+	))
 	return "/lekko.backend.v1beta1.ConfigurationService/", mux
 }
 
@@ -143,4 +165,8 @@ func (UnimplementedConfigurationServiceHandler) GetProtoValue(context.Context, *
 
 func (UnimplementedConfigurationServiceHandler) GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetJSONValue is not implemented"))
+}
+
+func (UnimplementedConfigurationServiceHandler) Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.Register is not implemented"))
 }
