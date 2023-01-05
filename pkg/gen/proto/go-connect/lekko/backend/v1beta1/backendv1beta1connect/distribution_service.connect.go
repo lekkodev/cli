@@ -49,6 +49,8 @@ type DistributionServiceClient interface {
 	// Sends metrics to the backend related to flag evaluation. This rpc can be used
 	// to batch metrics to lekko servers.
 	SendFlagEvaluationMetrics(context.Context, *connect_go.Request[v1beta1.SendFlagEvaluationMetricsRequest]) (*connect_go.Response[v1beta1.SendFlagEvaluationMetricsResponse], error)
+	// Registers a client and returns a session key.
+	RegisterClient(context.Context, *connect_go.Request[v1beta1.RegisterClientRequest]) (*connect_go.Response[v1beta1.RegisterClientResponse], error)
 }
 
 // NewDistributionServiceClient constructs a client for the
@@ -76,6 +78,11 @@ func NewDistributionServiceClient(httpClient connect_go.HTTPClient, baseURL stri
 			baseURL+"/lekko.backend.v1beta1.DistributionService/SendFlagEvaluationMetrics",
 			opts...,
 		),
+		registerClient: connect_go.NewClient[v1beta1.RegisterClientRequest, v1beta1.RegisterClientResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.DistributionService/RegisterClient",
+			opts...,
+		),
 	}
 }
 
@@ -84,6 +91,7 @@ type distributionServiceClient struct {
 	getRepositoryVersion      *connect_go.Client[v1beta1.GetRepositoryVersionRequest, v1beta1.GetRepositoryVersionResponse]
 	getRepositoryContents     *connect_go.Client[v1beta1.GetRepositoryContentsRequest, v1beta1.GetRepositoryContentsResponse]
 	sendFlagEvaluationMetrics *connect_go.Client[v1beta1.SendFlagEvaluationMetricsRequest, v1beta1.SendFlagEvaluationMetricsResponse]
+	registerClient            *connect_go.Client[v1beta1.RegisterClientRequest, v1beta1.RegisterClientResponse]
 }
 
 // GetRepositoryVersion calls lekko.backend.v1beta1.DistributionService.GetRepositoryVersion.
@@ -102,6 +110,11 @@ func (c *distributionServiceClient) SendFlagEvaluationMetrics(ctx context.Contex
 	return c.sendFlagEvaluationMetrics.CallUnary(ctx, req)
 }
 
+// RegisterClient calls lekko.backend.v1beta1.DistributionService.RegisterClient.
+func (c *distributionServiceClient) RegisterClient(ctx context.Context, req *connect_go.Request[v1beta1.RegisterClientRequest]) (*connect_go.Response[v1beta1.RegisterClientResponse], error) {
+	return c.registerClient.CallUnary(ctx, req)
+}
+
 // DistributionServiceHandler is an implementation of the lekko.backend.v1beta1.DistributionService
 // service.
 type DistributionServiceHandler interface {
@@ -113,6 +126,8 @@ type DistributionServiceHandler interface {
 	// Sends metrics to the backend related to flag evaluation. This rpc can be used
 	// to batch metrics to lekko servers.
 	SendFlagEvaluationMetrics(context.Context, *connect_go.Request[v1beta1.SendFlagEvaluationMetricsRequest]) (*connect_go.Response[v1beta1.SendFlagEvaluationMetricsResponse], error)
+	// Registers a client and returns a session key.
+	RegisterClient(context.Context, *connect_go.Request[v1beta1.RegisterClientRequest]) (*connect_go.Response[v1beta1.RegisterClientResponse], error)
 }
 
 // NewDistributionServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -137,6 +152,11 @@ func NewDistributionServiceHandler(svc DistributionServiceHandler, opts ...conne
 		svc.SendFlagEvaluationMetrics,
 		opts...,
 	))
+	mux.Handle("/lekko.backend.v1beta1.DistributionService/RegisterClient", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.DistributionService/RegisterClient",
+		svc.RegisterClient,
+		opts...,
+	))
 	return "/lekko.backend.v1beta1.DistributionService/", mux
 }
 
@@ -153,4 +173,8 @@ func (UnimplementedDistributionServiceHandler) GetRepositoryContents(context.Con
 
 func (UnimplementedDistributionServiceHandler) SendFlagEvaluationMetrics(context.Context, *connect_go.Request[v1beta1.SendFlagEvaluationMetricsRequest]) (*connect_go.Response[v1beta1.SendFlagEvaluationMetricsResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.DistributionService.SendFlagEvaluationMetrics is not implemented"))
+}
+
+func (UnimplementedDistributionServiceHandler) RegisterClient(context.Context, *connect_go.Request[v1beta1.RegisterClientRequest]) (*connect_go.Response[v1beta1.RegisterClientResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.DistributionService.RegisterClient is not implemented"))
 }

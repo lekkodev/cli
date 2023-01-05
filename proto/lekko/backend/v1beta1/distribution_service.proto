@@ -19,7 +19,8 @@ package lekko.backend.v1beta1;
 import "lekko/backend/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
 
-// Initial implementation of a config distribution service.
+// Initial implementation of a config distribution service. Clients should begin by
+// calling the register RPC which returns a session key, which is used in all other RPCs.
 service DistributionService {
   // Returns the latest commit sha of the repository. The client is expected to poll this
   // rpc to become aware of updates.
@@ -29,10 +30,13 @@ service DistributionService {
   // Sends metrics to the backend related to flag evaluation. This rpc can be used
   // to batch metrics to lekko servers.
   rpc SendFlagEvaluationMetrics(SendFlagEvaluationMetricsRequest) returns (SendFlagEvaluationMetricsResponse) {}
+  // Registers a client and returns a session key.
+  rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse) {}
 }
 
 message GetRepositoryVersionRequest {
   lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+  string session_key = 2;
 }
 
 message GetRepositoryVersionResponse {
@@ -45,6 +49,7 @@ message GetRepositoryContentsRequest {
   string namespace_name = 2;
   // optional feature_name to filter responses by
   string feature_name = 3;
+  string session_key = 4;
 }
 
 message GetRepositoryContentsResponse {
@@ -83,6 +88,26 @@ message FlagEvaluationEvent {
 
 message SendFlagEvaluationMetricsRequest {
   repeated FlagEvaluationEvent events = 1;
+  string session_key = 2;
 }
 
 message SendFlagEvaluationMetricsResponse {}
+
+message RegisterClientRequest {
+  lekko.backend.v1beta1.RepositoryKey repo_key = 1;
+  // The namespaces to register within the repo. If empty,
+  // all namespaces will be registered.
+  repeated string namespace_list = 2;
+
+  // If the client was initialized from a git bootstrap,
+  // the commit sha is provided. If there was no bootstrap, this
+  // can be an empty string.
+  string initial_bootstrap_sha = 3;
+  // If the client is a lekko sidecar, provide the semver version,
+  // or if not available, the sha of the sidecar.
+  string sidecar_version = 4;
+}
+
+message RegisterClientResponse {
+  string session_key = 4;
+}
