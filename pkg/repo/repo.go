@@ -126,13 +126,14 @@ func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
-func NewEphemeral(url string, auth AuthProvider) (*Repo, error) {
+func NewEphemeral(url string, auth AuthProvider, branchName string) (*Repo, error) {
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
+		ReferenceName: plumbing.NewRemoteReferenceName(RemoteName, branchName),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
