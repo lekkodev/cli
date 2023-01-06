@@ -213,6 +213,26 @@ func (r *Repo) CreateOrRestore(branchName string) error {
 	return nil
 }
 
+// Checks out the remote branch and pulls, ensuring it is up to date
+// with remote.
+func (r *Repo) CheckoutRemoteBranch(branchName string) error {
+	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)
+	// set a symbolic git ref, so that the local branch we checkout to next
+	// goes off of the remote ref
+	if err := r.Repo.Storer.SetReference(plumbing.NewSymbolicReference(localRef, remoteRef)); err != nil {
+		return errors.Wrap(err, "set ref")
+	}
+	if err := r.Wt.Checkout(&git.CheckoutOptions{
+		Branch: localRef,
+	}); err != nil {
+		return errors.Wrap(err, "checkout create")
+	}
+	if err := r.Pull(); err != nil {
+		return errors.Wrap(err, "pull")
+	}
+	return nil
+}
+
 func (r *Repo) HasRemote(branchName string) (bool, error) {
 	// Attempt to fetch the remote ref name
 	if err := r.Fetch(branchName); err != nil {
