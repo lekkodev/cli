@@ -133,7 +133,7 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (*Repo, erro
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
-		ReferenceName: plumbing.NewRemoteReferenceName(RemoteName, branchName),
+		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
