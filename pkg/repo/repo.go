@@ -126,13 +126,14 @@ func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
-func NewEphemeral(url string, auth AuthProvider) (*Repo, error) {
+func NewEphemeral(url string, auth AuthProvider, branchName string) (*Repo, error) {
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
+		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
@@ -208,6 +209,22 @@ func (r *Repo) CreateOrRestore(branchName string) error {
 	// set up remote branch tracking
 	if err := r.setTrackingConfig(branchName); err != nil {
 		return errors.Wrap(err, "push to remote")
+	}
+	return nil
+}
+
+// Checks out the remote branch
+func (r *Repo) CheckoutRemoteBranch(branchName string) error {
+	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)
+	// set a symbolic git ref, so that the local branch we checkout to next
+	// goes off of the remote ref
+	if err := r.Repo.Storer.SetReference(plumbing.NewSymbolicReference(localRef, remoteRef)); err != nil {
+		return errors.Wrap(err, "set ref")
+	}
+	if err := r.Wt.Checkout(&git.CheckoutOptions{
+		Branch: localRef,
+	}); err != nil {
+		return errors.Wrap(err, "checkout create")
 	}
 	return nil
 }
