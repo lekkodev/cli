@@ -198,22 +198,16 @@ func compileCmd() *cobra.Command {
 					return err
 				}
 			}
-
-			compile := func() error {
-				if ns != "" {
-					if f != "" {
-						_, err = r.CompileFeature(ctx, registry, ns, f, true, force)
-						return err
-					}
-					return r.CompileNamespace(ctx, registry, ns, force)
-				}
-				return r.Compile(ctx, registry, force)
-			}
-
-			if err := compile(); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:                     registry,
+				NamespaceFilter:              ns,
+				FeatureFilter:                f,
+				Persist:                      true, // TODO: change to true, or make into arg
+				IgnoreBackwardsCompatibility: force,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
-			return r.Verify(ctx)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
@@ -652,7 +646,11 @@ func restoreCmd() *cobra.Command {
 				return errors.Wrap(err, "rebuild type registry")
 			}
 			fmt.Printf("Successfully rebuilt dynamic type registry.\n")
-			if err := r.Compile(ctx, registry, force); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:                     registry,
+				Persist:                      true,
+				IgnoreBackwardsCompatibility: force,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 			fmt.Printf("Successfully compiled.\n")

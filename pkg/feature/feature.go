@@ -55,6 +55,50 @@ type Rule struct {
 type UnitTest struct {
 	Context       map[string]interface{}
 	ExpectedValue interface{}
+	// The starlark textual representation of the context and expected value.
+	// These fields are helpful for print statements.
+	ContextStar, ExpectedValueStar string
+}
+
+func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starVal string) *UnitTest {
+	return &UnitTest{
+		Context:           context,
+		ExpectedValue:     val,
+		ContextStar:       starCtx,
+		ExpectedValueStar: starVal,
+	}
+}
+
+func (ut *UnitTest) ToKey(idx int) string {
+	end := 25
+	if end > len(ut.ContextStar) {
+		end = len(ut.ContextStar)
+	}
+	return fmt.Sprintf("test %d [%s...]", idx, ut.ContextStar[0:end])
+}
+
+func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+	k := ut.ToKey(idx)
+	a, _, err := eval.Evaluate(ut.Context)
+	if err != nil {
+		return &TestResult{Key: k, Error: errors.Wrap(err, "evaluate feature")}
+	}
+	val, err := ValToAny(ut.ExpectedValue)
+	if err != nil {
+		return &TestResult{Key: k, Error: errors.Wrap(err, "invalid test value")}
+	}
+	if !proto.Equal(a, val) {
+		if a.GetTypeUrl() != val.GetTypeUrl() {
+			err = fmt.Errorf("mismatched types, expecting %s, got %s", val.GetTypeUrl(), a.GetTypeUrl())
+		} else {
+			err = fmt.Errorf("incorrect test result, expecting %s, got %v", ut.ExpectedValueStar, a.String())
+		}
+		return &TestResult{Key: k, Error: err}
+	}
+	// test passed
+	return &TestResult{
+		Key: k,
+	}
 }
 
 type Feature struct {
@@ -239,14 +283,11 @@ func (f *Feature) AddJSONRule(rule string, ast *rulesv1beta2.Rule, val *structpb
 	return nil
 }
 
-func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value) error {
+func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value, starCtx, starVal string) error {
 	if f.FeatureType != FeatureTypeJSON {
 		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
 	}
-	f.UnitTests = append(f.UnitTests, &UnitTest{
-		Context:       context,
-		ExpectedValue: val,
-	})
+	f.UnitTests = append(f.UnitTests, NewUnitTest(context, val, starCtx, starVal))
 	return nil
 }
 
@@ -345,27 +386,57 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	return &v1beta3{res}, nil
 }
 
-func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
+type CompiledFeature struct {
+	Feature          *Feature
+	TestResults      []*TestResult
+	ValidatorResults []*ValidatorResult
+}
+
+type TestResult struct {
+	Key   string // Identifies the test, e.g. 'test 1 ["{"org"...]'
+	Error error  // human-readable error
+}
+
+func (tr *TestResult) Passed() bool {
+	return tr.Error == nil
+}
+
+func (f *Feature) RunUnitTests() ([]*TestResult, error) {
 	eval, err := f.ToEvaluableFeature()
 	if err != nil {
-		return err
+		return nil, errors.Wrap(err, "invalid feature")
 	}
+	var results []*TestResult
 	for idx, test := range f.UnitTests {
-		a, _, err := eval.Evaluate(test.Context)
-		if err != nil {
-			return err
-		}
-		val, err := ValToAny(test.ExpectedValue)
-		if err != nil {
-			return err
-		}
-		if !proto.Equal(a, val) {
-			return fmt.Errorf("test failed: %v index: %d %+v %+v", f.Key, idx, a, val)
-		}
+		results = append(results, test.Run(idx, eval))
 	}
-	return nil
+	return results, nil
 }
 
 func newTypeMismatchErr(expected, got FeatureType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
+}
+
+type ValidatorResult struct {
+	Key   string // identifies the part of the feature being validated, e.g. 'rule 1: {"age":...'
+	Error error  // human-readable error describing what the validation error was
+}
+
+func NewValidatorResult(idx int, starVal string, err error) *ValidatorResult {
+	keyPrefix := "validate default"
+	if idx > 0 {
+		keyPrefix = fmt.Sprintf("validate rule %d", idx)
+	}
+	end := 25
+	if len(starVal) < end {
+		end = len(starVal)
+	}
+	return &ValidatorResult{
+		Key:   fmt.Sprintf("%s: %s...", keyPrefix, starVal[0:end]),
+		Error: err,
+	}
+}
+
+func (vr *ValidatorResult) Passed() bool {
+	return vr.Error == nil
 }

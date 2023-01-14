@@ -17,7 +17,6 @@ package star
 import (
 	"context"
 	"fmt"
-	"log"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/feature"
@@ -34,8 +33,8 @@ import (
 )
 
 type Compiler interface {
-	Compile(context.Context) (*feature.Feature, error)
-	Persist(context.Context, *feature.Feature, bool) error
+	Compile(context.Context) (*feature.CompiledFeature, error)
+	Persist(context.Context, *feature.Feature, bool) (bool, error)
 }
 
 type compiler struct {
@@ -56,7 +55,7 @@ func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.C
 	}
 }
 
-func (c *compiler) Compile(ctx context.Context) (*feature.Feature, error) {
+func (c *compiler) Compile(ctx context.Context) (*feature.CompiledFeature, error) {
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
@@ -78,18 +77,17 @@ func (c *compiler) Compile(ctx context.Context) (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	f, err := newFeatureBuilder(globals).Build()
+	cf, err := newFeatureBuilder(c.ff.Name, globals).Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}
-	f.Key = c.ff.Name
-	return f, nil
+	return cf, nil
 }
 
-func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) error {
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) (bool, error) {
 	fProto, err := f.ToProto()
 	if err != nil {
-		return errors.Wrap(err, "feature to proto")
+		return false, errors.Wrap(err, "feature to proto")
 	}
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
@@ -97,39 +95,38 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) 
 	if !force { // check for backwards compatibility
 		diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
 		if err != nil {
-			return errors.Wrap(err, "comparing with existing proto")
+			return false, errors.Wrap(err, "comparing with existing proto")
 		}
 		if !diffExists {
 			// skipping i/o as no diff exists
-			return nil
+			return false, nil
 		}
 	}
 
 	// Create the json file
 	jBytes, err := feature.ProtoToJSON(fProto, c.registry)
 	if err != nil {
-		return errors.Wrap(err, "proto to json")
+		return false, errors.Wrap(err, "proto to json")
 	}
 	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", c.ff.Name))
 	if err := c.cw.MkdirAll(jsonGenPath, 0775); err != nil {
-		return errors.Wrap(err, "failed to make gen json directory")
+		return false, errors.Wrap(err, "failed to make gen json directory")
 	}
 	if err := c.cw.WriteFile(jsonFile, jBytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write file")
+		return false, errors.Wrap(err, "failed to write file")
 	}
 	// Create the proto file
 	pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(fProto)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal to proto")
+		return false, errors.Wrap(err, "failed to marshal to proto")
 	}
 	if err := c.cw.MkdirAll(protoGenPath, 0775); err != nil {
-		return errors.Wrap(err, "failed to make gen proto directory")
+		return false, errors.Wrap(err, "failed to make gen proto directory")
 	}
 	if err := c.cw.WriteFile(protoBinFile, pBytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write file")
+		return false, errors.Wrap(err, "failed to write file")
 	}
-	log.Printf("Generated diff for %s/%s\n", c.ff.NamespaceName, c.ff.Name)
-	return nil
+	return true, nil
 }
 
 // returns true if there is an actual semantic difference between the existing compiled proto,
