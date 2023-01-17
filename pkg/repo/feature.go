@@ -137,11 +137,7 @@ type FeatureCompilationResult struct {
 }
 
 func (fcr *FeatureCompilationResult) Debug() (ret string) {
-	color := green
-	if fcr.Err() != nil {
-		color = red
-	}
-	lines := []string{color + fmt.Sprintf("[%s/%s]: %s", fcr.NamespaceName, fcr.FeatureName, fcr.SummaryString()) + reset}
+	lines := []string{fmt.Sprintf("%s[%s/%s]%s %s", bold, fcr.NamespaceName, fcr.FeatureName, reset, fcr.SummaryString())}
 	defer func() {
 		ret = strings.Join(lines, "\n")
 	}()
@@ -163,10 +159,16 @@ func (fcr *FeatureCompilationResult) Debug() (ret string) {
 }
 
 func (fcr *FeatureCompilationResult) SummaryString() string {
-	if fcr.CompilationError != nil {
-		return "Compile ✖"
+	stylizeStr := func(s string, pass bool) string {
+		if pass {
+			return fmt.Sprintf("%s%s %s%s", green, s, "✔", reset)
+		}
+		return fmt.Sprintf("%s%s %s%s", red, s, "✖", reset)
 	}
-	subs := []string{"Compile ✔"}
+	if fcr.CompilationError != nil {
+		return stylizeStr("Compile", false)
+	}
+	subs := []string{stylizeStr("Compile", true)}
 	if len(fcr.CompiledFeature.ValidatorResults) > 0 {
 		var numPassed int
 		for _, vr := range fcr.CompiledFeature.ValidatorResults {
@@ -174,11 +176,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 				numPassed++
 			}
 		}
-		symbol := "✔"
-		if numPassed != len(fcr.CompiledFeature.ValidatorResults) {
-			symbol = "✖"
-		}
-		subs = append(subs, fmt.Sprintf("Validate %d/%d %s", numPassed, len(fcr.CompiledFeature.ValidatorResults), symbol))
+		subs = append(subs, stylizeStr(fmt.Sprintf("Validate %d/%d", numPassed, len(fcr.CompiledFeature.ValidatorResults)), numPassed == len(fcr.CompiledFeature.ValidatorResults)))
 	}
 	if len(fcr.CompiledFeature.TestResults) > 0 {
 		var numPassed int
@@ -187,11 +185,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 				numPassed++
 			}
 		}
-		symbol := "✔"
-		if numPassed != len(fcr.CompiledFeature.TestResults) {
-			symbol = "✖"
-		}
-		subs = append(subs, fmt.Sprintf("Test %d/%d %s", numPassed, len(fcr.CompiledFeature.TestResults), symbol))
+		subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 	}
 	return strings.Join(subs, " | ")
 }

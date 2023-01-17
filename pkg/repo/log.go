@@ -23,6 +23,7 @@ import (
 var reset = "\033[0m"
 var red = "\033[31m"
 var green = "\033[32m"
+var bold = "\033[1m"
 
 func (r *Repo) initColors() {
 	if runtime.GOOS == "windows" {
