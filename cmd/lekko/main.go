@@ -169,7 +169,7 @@ func initCmd() *cobra.Command {
 	return cmd
 }
 func compileCmd() *cobra.Command {
-	var force bool
+	var force, dryRun bool
 	cmd := &cobra.Command{
 		Use:   "compile [namespace[/feature]]",
 		Short: "compiles features based on individual definitions",
@@ -202,7 +202,7 @@ func compileCmd() *cobra.Command {
 				Registry:                     registry,
 				NamespaceFilter:              ns,
 				FeatureFilter:                f,
-				Persist:                      true, // TODO: change to true, or make into arg
+				Persist:                      !dryRun,
 				IgnoreBackwardsCompatibility: force,
 			}); err != nil {
 				return errors.Wrap(err, "compile")
@@ -211,6 +211,7 @@ func compileCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
+	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "skip persisting any newly compiled changes to disk.")
 	return cmd
 }
 

@@ -210,7 +210,7 @@ func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
 	}
 	p := dynamicpb.Message{}
 	if err := a.UnmarshalTo(&p); err == nil {
-		return &p, FeatureTypeProto, nil // proto type. TODO: check that this works
+		return &p, FeatureTypeProto, nil // proto type.
 	}
 	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 }

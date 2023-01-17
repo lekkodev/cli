@@ -137,7 +137,11 @@ type FeatureCompilationResult struct {
 }
 
 func (fcr *FeatureCompilationResult) Debug() (ret string) {
-	lines := []string{fmt.Sprintf("[%s/%s]: %s", fcr.NamespaceName, fcr.FeatureName, fcr.SummaryString())}
+	color := green
+	if fcr.Err() != nil {
+		color = red
+	}
+	lines := []string{color + fmt.Sprintf("[%s/%s]: %s", fcr.NamespaceName, fcr.FeatureName, fcr.SummaryString()) + reset}
 	defer func() {
 		ret = strings.Join(lines, "\n")
 	}()
