@@ -115,9 +115,12 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	}
 
 	// Run user validation
-	validatorResults := []*feature.ValidatorResult{fb.validate(0, defaultVal)}
-	for idx, rv := range ruleVals {
-		validatorResults = append(validatorResults, fb.validate(idx+1, rv))
+	var validatorResults []*feature.ValidatorResult
+	if fb.validator != nil {
+		validatorResults = append(validatorResults, fb.validate(0, defaultVal))
+		for idx, rv := range ruleVals {
+			validatorResults = append(validatorResults, fb.validate(idx+1, rv))
+		}
 	}
 
 	// Run unit tests
