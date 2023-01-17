@@ -39,7 +39,6 @@ import (
 )
 
 func main() {
-	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(evalCmd)
@@ -76,22 +75,6 @@ var rootCmd = &cobra.Command{
 	Short:         "lekko - dynamic configuration helper",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-}
-
-var verifyCmd = &cobra.Command{
-	Use:   "verify",
-	Short: "verify a config repository with a lekko.root.yaml",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		r, err := repo.NewLocal(wd)
-		if err != nil {
-			return errors.Wrap(err, "new local repo")
-		}
-		return r.Verify(cmd.Context())
-	},
 }
 
 func formatCmd() *cobra.Command {
@@ -253,8 +236,8 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if err := r.Verify(ctx); err != nil {
-				return errors.Wrap(err, "verify")
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 
 			secrets := metadata.NewSecretsOrFail()
@@ -285,8 +268,8 @@ var mergeCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 		ctx := cmd.Context()
-		if err := r.Verify(ctx); err != nil {
-			return errors.Wrap(err, "verification failed")
+		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			return errors.Wrap(err, "compile")
 		}
 		var prNum *int
 		if len(args) > 0 {
@@ -491,8 +474,8 @@ func applyCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if err := r.Verify(ctx); err != nil {
-				return errors.Wrap(err, "verification failed")
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
@@ -582,8 +565,8 @@ func commitCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if err := r.Verify(ctx); err != nil {
-				return err
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 			if _, err = r.Commit(ctx, message); err != nil {
 				return err

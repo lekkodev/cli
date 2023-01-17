@@ -215,7 +215,7 @@ func (fcr *FeatureCompilationResult) Err() error {
 
 func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
 	// Step 1: collect. Find all features
-	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter)
+	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, true)
 	if err != nil {
 		return nil, errors.Wrap(err, "find features")
 	}
@@ -296,7 +296,7 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 	return results, nil
 }
 
-func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string) ([]*feature.FeatureFile, int, error) {
+func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error) {
 	contents, err := r.GetContents(ctx)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "get contents")
@@ -312,6 +312,14 @@ func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFil
 			ff := ff
 			if len(featureFilter) > 0 && ff.Name != featureFilter {
 				continue
+			}
+			if verify {
+				if err := ff.Verify(); err != nil {
+					return nil, 0, errors.Wrapf(err, "feature %s/%s verify", ff.NamespaceName, ff.Name)
+				}
+				if err := feature.ComplianceCheck(ff, &nsMD); err != nil {
+					return nil, 0, errors.Wrapf(err, "feature %s/%s compliance check", ff.NamespaceName, ff.Name)
+				}
 			}
 			results = append(results, &ff)
 		}
@@ -343,68 +351,10 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
 func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
+	if !r.bufEnabled {
+		return nil, errors.New("buf cmd line not enabled")
+	}
 	return star.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
-}
-
-func (r *Repo) Verify(ctx context.Context) error {
-	rootMD, nsMDs, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return errors.Wrap(err, "parse metadata")
-	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return errors.Wrap(err, "build dynamic type registry")
-	}
-	for ns, nsMD := range nsMDs {
-		ffs, err := r.GetFeatureFiles(ctx, ns)
-		if err != nil {
-			return errors.Wrap(err, "get feature files")
-		}
-		for _, ff := range ffs {
-			ff := ff
-			if err := r.verifyFeature(ctx, registry, ns, ff, nsMD); err != nil {
-				return fmt.Errorf("verify feature %s/%s: %w", ns, ff.Name, err)
-			}
-		}
-	}
-	// lint protos
-	if r.bufEnabled {
-		if err := star.Lint(rootMD.ProtoDirectory); err != nil {
-			return errors.Wrap(err, "lint protos")
-		}
-	}
-	return nil
-}
-
-func (r *Repo) verifyFeature(
-	ctx context.Context,
-	registry *protoregistry.Types,
-	ns string,
-	ff feature.FeatureFile,
-	nsMD *metadata.NamespaceConfigRepoMetadata,
-) error {
-	if err := feature.ComplianceCheck(ff, nsMD); err != nil {
-		return errors.Wrap(err, "compliance check")
-	}
-	if err := ff.Verify(); err != nil {
-		return errors.Wrap(err, "verify feature file")
-	}
-	if _, err := encoding.ParseFeature(ctx, "", ff, nsMD, r); err != nil {
-		return errors.Wrap(err, "parse feature")
-	}
-	if nsMD.Version == metadata.LatestNamespaceVersion {
-		f, err := r.CompileFeature(ctx, registry, ns, ff.Name)
-		fcr := &FeatureCompilationResult{
-			NamespaceName:    nsMD.Name,
-			FeatureName:      f.Feature.Key,
-			CompiledFeature:  f,
-			CompilationError: err,
-		}
-		if fcr.Err() != nil {
-			return errors.Wrap(fcr.Err(), "compile feature")
-		}
-	}
-	return nil
 }
 
 func (r *Repo) Format(ctx context.Context) error {
