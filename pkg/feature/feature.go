@@ -69,6 +69,11 @@ func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starV
 	}
 }
 
+// Creates a short string - a human-readable version of this unit test
+// that is helpful for debugging and printing errors.
+// e.g. 'test 1 ["{"org"...]'
+// idx refers to the index of the unit test in the list of unit tests
+// written in starlark.
 func (ut *UnitTest) ToKey(idx int) string {
 	end := 25
 	if end > len(ut.ContextStar) {
@@ -386,12 +391,16 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	return &v1beta3{res}, nil
 }
 
+// Contains the compiled feature model, along with any
+// validator results and unit test results that were
+// collected as part of compilation.
 type CompiledFeature struct {
 	Feature          *Feature
 	TestResults      []*TestResult
 	ValidatorResults []*ValidatorResult
 }
 
+// This struct holds information about a test run
 type TestResult struct {
 	Key   string // Identifies the test, e.g. 'test 1 ["{"org"...]'
 	Error error  // human-readable error
@@ -417,6 +426,10 @@ func newTypeMismatchErr(expected, got FeatureType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
 }
 
+// Holds the results of validation checks performed on the compiled feature.
+// Since a validation check is done on a single final feature value,
+// There will be 1 validator result for the default value and 1 for each subsequent
+// rule.
 type ValidatorResult struct {
 	Key   string // identifies the part of the feature being validated, e.g. 'rule 1: {"age":...'
 	Error error  // human-readable error describing what the validation error was
