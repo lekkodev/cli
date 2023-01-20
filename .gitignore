@@ -3,5 +3,4 @@
 /.tmp/
 /.vscode/
 /cmd/lekko/lekko
-
-dist/
+/dist/
