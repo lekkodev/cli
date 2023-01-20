@@ -69,28 +69,15 @@ func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starV
 	}
 }
 
-// Creates a short string - a human-readable version of this unit test
-// that is helpful for debugging and printing errors.
-// e.g. 'test 1 ["{"org"...]'
-// idx refers to the index of the unit test in the list of unit tests
-// written in starlark.
-func (ut *UnitTest) ToKey(idx int) string {
-	end := 25
-	if end > len(ut.ContextStar) {
-		end = len(ut.ContextStar)
-	}
-	return fmt.Sprintf("test %d [%s...]", idx, ut.ContextStar[0:end])
-}
-
 func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
-	k := ut.ToKey(idx)
+	tr := NewTestResult(ut.ContextStar, idx)
 	a, _, err := eval.Evaluate(ut.Context)
 	if err != nil {
-		return &TestResult{Key: k, Error: errors.Wrap(err, "evaluate feature")}
+		return tr.WithError(errors.Wrap(err, "evaluate feature"))
 	}
 	val, err := ValToAny(ut.ExpectedValue)
 	if err != nil {
-		return &TestResult{Key: k, Error: errors.Wrap(err, "invalid test value")}
+		return tr.WithError(errors.Wrap(err, "invalid test value"))
 	}
 	if !proto.Equal(a, val) {
 		if a.GetTypeUrl() != val.GetTypeUrl() {
@@ -98,12 +85,10 @@ func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 		} else {
 			err = fmt.Errorf("incorrect test result, expecting %s, got %v", ut.ExpectedValueStar, a.String())
 		}
-		return &TestResult{Key: k, Error: err}
+		return tr.WithError(err)
 	}
 	// test passed
-	return &TestResult{
-		Key: k,
-	}
+	return tr
 }
 
 type Feature struct {
@@ -400,14 +385,44 @@ type CompiledFeature struct {
 	ValidatorResults []*ValidatorResult
 }
 
-// This struct holds information about a test run
+// This struct holds information about a test run.
 type TestResult struct {
-	Key   string // Identifies the test, e.g. 'test 1 ["{"org"...]'
-	Error error  // human-readable error
+	Test      string // a string representation of the test, as written in starlark
+	TestIndex int    // The index of the test in the list of tests.
+	Error     error  // human-readable error
+}
+
+func NewTestResult(testStar string, testIndex int) *TestResult {
+	return &TestResult{
+		Test:      testStar,
+		TestIndex: testIndex,
+	}
+}
+
+func (tr *TestResult) WithError(err error) *TestResult {
+	tr.Error = err
+	return tr
 }
 
 func (tr *TestResult) Passed() bool {
 	return tr.Error == nil
+}
+
+// Creates a short string - a human-readable version of this unit test
+// that is helpful for debugging and printing errors.
+// e.g. 'test 1 ["{"org"...]'
+// idx refers to the index of the unit test in the list of unit tests
+// written in starlark.
+func (tr *TestResult) Identifier() string {
+	end := 25
+	if end > len(tr.Test) {
+		end = len(tr.Test)
+	}
+	return fmt.Sprintf("test %d [%s...]", tr.TestIndex, tr.Test[0:end])
+}
+
+func (tr *TestResult) DebugString() string {
+	return fmt.Sprintf("%s: %v", tr.Identifier(), tr.Error)
 }
 
 func (f *Feature) RunUnitTests() ([]*TestResult, error) {
@@ -426,28 +441,56 @@ func newTypeMismatchErr(expected, got FeatureType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
 }
 
+type ValidatorResultType int
+
+const (
+	ValidatorResultTypeDefault ValidatorResultType = iota
+	ValidatorResultTypeRule
+	ValidatorResultTypeTest
+)
+
 // Holds the results of validation checks performed on the compiled feature.
 // Since a validation check is done on a single final feature value,
 // There will be 1 validator result for the default value and 1 for each subsequent
 // rule.
 type ValidatorResult struct {
-	Key   string // identifies the part of the feature being validated, e.g. 'rule 1: {"age":...'
-	Error error  // human-readable error describing what the validation error was
+	// Indicates whether this validator result applies on a rule value, the default value, or a test value.
+	Type ValidatorResultType
+	// If this is a rule value validator result, specifies the index of the rule that this result applies to.
+	// If this is a test value validator result, specifies the index of the unit test that this result applies to.
+	Index int
+	// A string representation of the starlark value that was invalid
+	Value string
+	Error error // human-readable error describing what the validation error was
 }
 
-func NewValidatorResult(idx int, starVal string, err error) *ValidatorResult {
-	keyPrefix := "validate default"
-	if idx > 0 {
-		keyPrefix = fmt.Sprintf("validate rule %d", idx)
+func NewValidatorResult(t ValidatorResultType, index int, starVal string) *ValidatorResult {
+	return &ValidatorResult{
+		Type:  t,
+		Index: index,
+		Value: starVal,
+	}
+}
+
+func (vr *ValidatorResult) WithError(err error) *ValidatorResult {
+	vr.Error = err
+	return vr
+}
+
+func (vr *ValidatorResult) Identifier() string {
+	prefix := "validate default"
+	if vr.Type == ValidatorResultTypeRule {
+		prefix = fmt.Sprintf("validate rule %d", vr.Index)
 	}
 	end := 25
-	if len(starVal) < end {
-		end = len(starVal)
+	if len(vr.Value) < end {
+		end = len(vr.Value)
 	}
-	return &ValidatorResult{
-		Key:   fmt.Sprintf("%s: %s...", keyPrefix, starVal[0:end]),
-		Error: err,
-	}
+	return fmt.Sprintf("%s [%s]", prefix, vr.Value[0:end])
+}
+
+func (vr *ValidatorResult) DebugString() string {
+	return fmt.Sprintf("%s: %v", vr.Identifier(), vr.Error)
 }
 
 func (vr *ValidatorResult) Passed() bool {

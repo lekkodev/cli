@@ -117,9 +117,9 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	// Run user validation
 	var validatorResults []*feature.ValidatorResult
 	if fb.validator != nil {
-		validatorResults = append(validatorResults, fb.validate(0, defaultVal))
+		validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeDefault, 0, defaultVal))
 		for idx, rv := range ruleVals {
-			validatorResults = append(validatorResults, fb.validate(idx+1, rv))
+			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeRule, idx, rv))
 		}
 	}
 
@@ -159,10 +159,11 @@ func (fb *featureBuilder) validateFeature(featureVal *starlarkstruct.Struct) err
 }
 
 // idx indicates which part of the feature we are validating. 0 for default, 1-n for each subsequent rule.
-func (fb *featureBuilder) validate(idx int, value starlark.Value) *feature.ValidatorResult {
+func (fb *featureBuilder) validate(t feature.ValidatorResultType, index int, value starlark.Value) *feature.ValidatorResult {
 	if fb.validator == nil {
-		return feature.NewValidatorResult(idx, value.String(), nil)
+		return nil
 	}
+	vr := feature.NewValidatorResult(t, index, value.String())
 	var err error
 	thread := &starlark.Thread{Name: "validate", Load: load}
 	reporter := &validatorReporter{}
@@ -170,9 +171,9 @@ func (fb *featureBuilder) validate(idx int, value starlark.Value) *feature.Valid
 	args := starlark.Tuple([]starlark.Value{value})
 	_, err = starlark.Call(thread, fb.validator, args, nil)
 	if err != nil {
-		return feature.NewValidatorResult(idx, value.String(), errors.Wrap(err, "running validator"))
+		return vr.WithError(err)
 	}
-	return feature.NewValidatorResult(idx, value.String(), reporter.toErr())
+	return vr.WithError(reporter.toErr())
 }
 
 func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, error) {
@@ -388,7 +389,7 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 		}
 
 		expectedVal := tuple.Index(1)
-		if vr := fb.validate(i, expectedVal); vr.Error != nil {
+		if vr := fb.validate(feature.ValidatorResultTypeTest, i, expectedVal); vr != nil && vr.Error != nil {
 			return errors.Wrap(err, "test value validate")
 		}
 		switch f.FeatureType {
