@@ -62,6 +62,13 @@ func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.
 
 // Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
 func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.ConfigWriter) (*protoregistry.Types, error) {
+	if err := checkBufExists(); err != nil {
+		return nil, err
+	}
+	// Lint before generating the new buf image
+	if err := lint(protoDir); err != nil {
+		return nil, errors.Wrap(err, "buf lint")
+	}
 	_, err := newBufImage(protoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
@@ -161,10 +168,8 @@ type bufImage struct {
 // Generates a buf image, which is compatible with
 // protobuf's native FileDescriptorSet type. This allows us to build a
 // registry of protobuf types, adding any user-defined types.
+// Note: expects that buf cmd line exists.
 func newBufImage(protoDir string) (*bufImage, error) {
-	if err := checkBufExists(); err != nil {
-		return nil, err
-	}
 	outputFile := bufImageFilepath(protoDir)
 	args := []string{
 		"build",
@@ -183,10 +188,8 @@ func newBufImage(protoDir string) (*bufImage, error) {
 	}, nil
 }
 
-func Lint(protoDir string) error {
-	if err := checkBufExists(); err != nil {
-		return err
-	}
+// Note: expects that buf cmd lint exists.
+func lint(protoDir string) error {
 	cmd := exec.Command("buf", "lint", protoDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

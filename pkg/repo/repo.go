@@ -94,6 +94,8 @@ func NewLocal(path string) (*Repo, error) {
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
+	cr.initColors()
+
 	return cr, nil
 }
 
@@ -510,11 +512,4 @@ func (r *Repo) getOwnerRepo() (string, string, error) {
 		return "", "", fmt.Errorf("invalid path: %s", u.Path)
 	}
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
-}
-
-func (r *Repo) Logf(format string, a ...any) {
-	if !r.loggingEnabled {
-		return
-	}
-	fmt.Printf(format, a...)
 }

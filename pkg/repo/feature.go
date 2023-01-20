@@ -19,6 +19,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
@@ -31,81 +34,311 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types, force bool) error {
-	var err error
-	if registry == nil {
-		rootMD, _, err := r.ParseMetadata(ctx)
-		if err != nil {
-			return errors.Wrap(err, "parse metadata")
-		}
-		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-		if err != nil {
-			return errors.Wrap(err, "build dynamic type registry")
-		}
-	}
-	contents, err := r.GetContents(ctx)
-	if err != nil {
-		return errors.Wrap(err, "get contents")
-	}
-	for nsMD, ffs := range contents {
-		for _, ff := range ffs {
-			if _, err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name, true, force); err != nil {
-				return errors.Wrap(err, "compile feature")
-			}
-		}
-	}
-	return nil
-}
+// func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types, force bool) error {
+// 	var err error
+// 	if registry == nil {
+// 		rootMD, _, err := r.ParseMetadata(ctx)
+// 		if err != nil {
+// 			return errors.Wrap(err, "parse metadata")
+// 		}
+// 		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+// 		if err != nil {
+// 			return errors.Wrap(err, "build dynamic type registry")
+// 		}
+// 	}
+// 	contents, err := r.GetContents(ctx)
+// 	if err != nil {
+// 		return errors.Wrap(err, "get contents")
+// 	}
+// 	for nsMD, ffs := range contents {
+// 		for _, ff := range ffs {
+// 			if _, err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name, true, force); err != nil {
+// 				return errors.Wrap(err, "compile feature")
+// 			}
+// 		}
+// 	}
+// 	return nil
+// }
 
-func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string, force bool) error {
-	ffs, err := r.GetFeatureFiles(ctx, namespace)
-	if err != nil {
-		return errors.Wrap(err, "get feature files")
-	}
-	if registry == nil {
-		rootMD, _, err := r.ParseMetadata(ctx)
-		if err != nil {
-			return errors.Wrap(err, "parse metadata")
-		}
-		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-		if err != nil {
-			return errors.Wrap(err, "build dynamic type registry")
-		}
-	}
-	for _, ff := range ffs {
-		if _, err := r.CompileFeature(ctx, registry, namespace, ff.Name, true, force); err != nil {
-			return errors.Wrap(err, "compile feature")
-		}
-	}
-	return nil
-}
+// func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string, force bool) error {
+// 	ffs, err := r.GetFeatureFiles(ctx, namespace)
+// 	if err != nil {
+// 		return errors.Wrap(err, "get feature files")
+// 	}
+// 	if registry == nil {
+// 		rootMD, _, err := r.ParseMetadata(ctx)
+// 		if err != nil {
+// 			return errors.Wrap(err, "parse metadata")
+// 		}
+// 		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+// 		if err != nil {
+// 			return errors.Wrap(err, "build dynamic type registry")
+// 		}
+// 	}
+// 	for _, ff := range ffs {
+// 		if _, err := r.CompileFeature(ctx, registry, namespace, ff.Name, true, force); err != nil {
+// 			return errors.Wrap(err, "compile feature")
+// 		}
+// 	}
+// 	return nil
+// }
 
-func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, persist, force bool) (*feature.Feature, error) {
+func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
 	ff := feature.NewFeatureFile(namespace, featureName)
-	if registry == nil {
-		rootMD, _, err := r.ParseMetadata(ctx)
-		if err != nil {
-			return nil, errors.Wrap(err, "parse metadata")
-		}
-		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-		if err != nil {
-			return nil, errors.Wrap(err, "build dynamic type registry")
-		}
+	registry, err := r.registry(ctx, registry)
+	if err != nil {
+		return nil, errors.Wrap(err, "registry")
 	}
 	compiler := star.NewCompiler(registry, &ff, r)
 	f, err := compiler.Compile(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "compile")
 	}
-	if persist {
-		if err := compiler.Persist(ctx, f, force); err != nil {
-			return nil, errors.Wrap(err, "persist")
+	return f, nil
+}
+
+func (r *Repo) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error {
+	registry, err := r.registry(ctx, registry)
+	if err != nil {
+		return errors.Wrap(err, "registry")
+	}
+	ff := feature.NewFeatureFile(namespace, f.Key)
+	compiler := star.NewCompiler(registry, &ff, r)
+	persisted, err := compiler.Persist(ctx, f, force)
+	if err != nil {
+		return errors.Wrap(err, "persist")
+	}
+	if persisted {
+		r.Logf("Generated diff for %s/%s", namespace, f.Key)
+	}
+	if err := r.FormatFeature(ctx, ff); err != nil {
+		return errors.Wrap(err, "format")
+	}
+	return nil
+}
+
+type CompileRequest struct {
+	// Registry of protobuf types. This field is optional, if it does not exist, it will be instantiated.
+	Registry *protoregistry.Types
+	// Optional fields to filter features by, so as to not compile the entire world.
+	NamespaceFilter, FeatureFilter string
+	// Whether or not to persist the successfully compiled features
+	Persist bool
+	// If true, any generated compilation changes will overwrite previous features
+	// even if there are type mismatches
+	IgnoreBackwardsCompatibility bool
+}
+
+type FeatureCompilationResult struct {
+	NamespaceName    string
+	FeatureName      string
+	CompiledFeature  *feature.CompiledFeature
+	CompilationError error
+}
+
+func (fcr *FeatureCompilationResult) SummaryString() string {
+	stylizeStr := func(s string, pass bool) string {
+		if pass {
+			return fmt.Sprintf("%s%s %s%s", green, s, "✔", reset)
 		}
-		if err := r.FormatFeature(ctx, ff); err != nil {
-			return nil, errors.Wrap(err, "format")
+		return fmt.Sprintf("%s%s %s%s", red, s, "✖", reset)
+	}
+	var subs []string
+	if fcr.CompilationError != nil {
+		subs = append(subs, stylizeStr("Compile", false))
+	} else {
+		subs = append(subs, stylizeStr("Compile", true))
+		if len(fcr.CompiledFeature.ValidatorResults) > 0 {
+			var numPassed int
+			for _, vr := range fcr.CompiledFeature.ValidatorResults {
+				if vr.Passed() {
+					numPassed++
+				}
+			}
+			subs = append(subs, stylizeStr(fmt.Sprintf("Validate %d/%d", numPassed, len(fcr.CompiledFeature.ValidatorResults)), numPassed == len(fcr.CompiledFeature.ValidatorResults)))
+		}
+		if len(fcr.CompiledFeature.TestResults) > 0 {
+			var numPassed int
+			for _, tr := range fcr.CompiledFeature.TestResults {
+				if tr.Passed() {
+					numPassed++
+				}
+			}
+			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 		}
 	}
-	return f, nil
+	return fmt.Sprintf("%s[%s/%s]%s %s", bold, fcr.NamespaceName, fcr.FeatureName, reset, strings.Join(subs, " | "))
+}
+
+func (fcr *FeatureCompilationResult) Err() error {
+	if fcr.CompilationError != nil {
+		return fcr.CompilationError
+	}
+	for _, r := range fcr.CompiledFeature.ValidatorResults {
+		if !r.Passed() {
+			return r.Error
+		}
+	}
+	for _, r := range fcr.CompiledFeature.TestResults {
+		if !r.Passed() {
+			return r.Error
+		}
+	}
+	return nil
+}
+
+type FeatureCompilationResults []*FeatureCompilationResult
+
+func (fcrs FeatureCompilationResults) Err() error {
+	for _, fcr := range fcrs {
+		if fcr.Err() != nil {
+			return fcr.Err()
+		}
+	}
+	return nil
+}
+
+func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
+	// Step 1: collect. Find all features
+	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, true)
+	if err != nil {
+		return nil, errors.Wrap(err, "find features")
+	}
+	var results FeatureCompilationResults
+	for _, ff := range ffs {
+		results = append(results, &FeatureCompilationResult{NamespaceName: ff.NamespaceName, FeatureName: ff.Name})
+	}
+	r.Logf("Found %d features across %d namespaces\n", len(ffs), numNamespaces)
+	r.Logf("Compiling...\n")
+	registry, err := r.registry(ctx, req.Registry)
+	if err != nil {
+		return nil, errors.Wrap(err, "registry")
+	}
+	concurrency := 50
+	if len(results) < 50 {
+		concurrency = len(results)
+	}
+	var wg sync.WaitGroup
+	featureChan := make(chan *FeatureCompilationResult)
+	// start compile workers
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case fcr, ok := <-featureChan:
+					if !ok {
+						return
+					}
+					cf, err := r.CompileFeature(ctx, registry, fcr.NamespaceName, fcr.FeatureName)
+					fcr.CompiledFeature = cf
+					fcr.CompilationError = err
+				}
+			}
+		}()
+	}
+
+	for _, fcr := range results {
+		featureChan <- fcr
+	}
+	close(featureChan)
+	wg.Wait()
+
+	// print results
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].NamespaceName < results[j].NamespaceName {
+			return true
+		} else if results[i].NamespaceName > results[j].NamespaceName {
+			return false
+		} else {
+			return results[i].FeatureName < results[j].FeatureName
+		}
+	})
+	// print summary
+	for _, fcr := range results {
+		r.Logf("%v\n", fcr.SummaryString())
+	}
+	if results.Err() != nil {
+		// print errors
+		r.Logf("-------------------\n")
+		for _, fcr := range results {
+			if fcr.Err() == nil {
+				continue
+			}
+			r.Logf(bold+"[%s/%s]\n"+reset, fcr.NamespaceName, fcr.FeatureName)
+			for _, res := range fcr.CompiledFeature.ValidatorResults {
+				if !res.Passed() {
+					r.Logf(red+"→"+reset+" %s\n", res.DebugString())
+				}
+			}
+			for _, res := range fcr.CompiledFeature.TestResults {
+				if !res.Passed() {
+					r.Logf(red+"→"+reset+" %s\n", res.DebugString())
+				}
+			}
+		}
+		// exit (don't persist with errors)
+		return results, results.Err()
+	}
+	if req.Persist {
+		r.Logf("-------------------\n")
+		for _, fcr := range results {
+			if err := r.PersistFeature(ctx, registry, fcr.NamespaceName, fcr.CompiledFeature.Feature, req.IgnoreBackwardsCompatibility); err != nil {
+				return nil, errors.Wrapf(err, "persist feature %s/%s", fcr.NamespaceName, fcr.FeatureName)
+			}
+		}
+	}
+
+	return results, nil
+}
+
+func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error) {
+	contents, err := r.GetContents(ctx)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "get contents")
+	}
+	var numNamespaces int
+	var results []*feature.FeatureFile
+	for nsMD, ffs := range contents {
+		if len(namespaceFilter) > 0 && nsMD.Name != namespaceFilter {
+			continue
+		}
+		numNamespaces++
+		for _, ff := range ffs {
+			ff := ff
+			if len(featureFilter) > 0 && ff.Name != featureFilter {
+				continue
+			}
+			if verify {
+				if err := ff.Verify(); err != nil {
+					return nil, 0, errors.Wrapf(err, "feature %s/%s verify", ff.NamespaceName, ff.Name)
+				}
+				if err := feature.ComplianceCheck(ff, &nsMD); err != nil {
+					return nil, 0, errors.Wrapf(err, "feature %s/%s compliance check", ff.NamespaceName, ff.Name)
+				}
+			}
+			results = append(results, &ff)
+		}
+	}
+	return results, numNamespaces, nil
+}
+
+func (r *Repo) registry(ctx context.Context, registry *protoregistry.Types) (*protoregistry.Types, error) {
+	if registry != nil {
+		return registry, nil
+	}
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse metadata")
+	}
+	registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, errors.Wrap(err, "build dynamic type registry")
+	}
+	return registry, nil
 }
 
 func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
@@ -117,71 +350,10 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
 func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
+	if !r.bufEnabled {
+		return nil, errors.New("buf cmd line not enabled")
+	}
 	return star.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
-}
-
-func (r *Repo) Verify(ctx context.Context) error {
-	rootMD, nsMDs, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return errors.Wrap(err, "parse metadata")
-	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return errors.Wrap(err, "build dynamic type registry")
-	}
-	for ns, nsMD := range nsMDs {
-		ffs, err := r.GetFeatureFiles(ctx, ns)
-		if err != nil {
-			return errors.Wrap(err, "get feature files")
-		}
-		for _, ff := range ffs {
-			ff := ff
-			if err := r.verifyFeature(ctx, registry, ns, ff, nsMD); err != nil {
-				return fmt.Errorf("verify feature %s/%s: %w", ns, ff.Name, err)
-			}
-		}
-	}
-	// lint protos
-	if r.bufEnabled {
-		if err := star.Lint(rootMD.ProtoDirectory); err != nil {
-			return errors.Wrap(err, "lint protos")
-		}
-	}
-	return nil
-}
-
-func (r *Repo) verifyFeature(
-	ctx context.Context,
-	registry *protoregistry.Types,
-	ns string,
-	ff feature.FeatureFile,
-	nsMD *metadata.NamespaceConfigRepoMetadata,
-) error {
-	if err := feature.ComplianceCheck(ff, nsMD); err != nil {
-		return errors.Wrap(err, "compliance check")
-	}
-	if err := ff.Verify(); err != nil {
-		return errors.Wrap(err, "verify feature file")
-	}
-	if _, err := encoding.ParseFeature(ctx, "", ff, nsMD, r); err != nil {
-		return errors.Wrap(err, "parse feature")
-	}
-	if nsMD.Version == metadata.LatestNamespaceVersion {
-		f, err := r.CompileFeature(ctx, registry, ns, ff.Name, false, false)
-		if err != nil {
-			return errors.Wrap(err, "compile feature")
-		}
-		if len(f.UnitTests) > 0 {
-			r.Logf("running %d unit tests for feature %s/%s: ", len(f.UnitTests), ns, ff.Name)
-			if err := f.RunUnitTests(registry); err != nil {
-				r.Logf("FAIL: %v\n", err)
-				return errors.Wrap(err, "failed unit test(s)")
-			} else {
-				r.Logf("PASS\n")
-			}
-		}
-	}
-	return nil
 }
 
 func (r *Repo) Format(ctx context.Context) error {

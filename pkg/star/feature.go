@@ -58,21 +58,23 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 }
 
 type Builder interface {
-	Build() (*feature.Feature, error)
+	Build() (*feature.CompiledFeature, error)
 }
 
 type featureBuilder struct {
-	globals   starlark.StringDict
-	validator starlark.Callable
+	featureName string
+	globals     starlark.StringDict
+	validator   starlark.Callable
 }
 
-func newFeatureBuilder(globals starlark.StringDict) Builder {
+func newFeatureBuilder(featureName string, globals starlark.StringDict) Builder {
 	return &featureBuilder{
-		globals: globals,
+		featureName: featureName,
+		globals:     globals,
 	}
 }
 
-func (fb *featureBuilder) Build() (*feature.Feature, error) {
+func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	resultVal, ok := fb.globals[FeatureVariableName]
 	if !ok {
 		return nil, fmt.Errorf("required variable %s is not found", FeatureVariableName)
@@ -89,24 +91,49 @@ func (fb *featureBuilder) Build() (*feature.Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "get validator")
 	}
-	f, err := fb.init(featureVal)
+	defaultVal, err := featureVal.Attr(DefaultValueAttrName)
+	if err != nil {
+		return nil, errors.Wrap(err, "default attribute")
+	}
+	f, err := fb.init(defaultVal)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize feature")
 	}
+	f.Key = fb.featureName
 	f.Description, err = fb.getDescription(featureVal)
 	if err != nil {
 		return nil, errors.Wrap(err, "description")
 	}
 
-	if err := fb.addRules(f, featureVal); err != nil {
+	ruleVals, err := fb.addRules(f, featureVal)
+	if err != nil {
 		return nil, errors.Wrap(err, "add rules")
 	}
 
 	if err := fb.addUnitTests(f, featureVal); err != nil {
 		return nil, errors.Wrap(err, "add unit tests")
 	}
-	// TODO run unit tests
-	return f, nil
+
+	// Run user validation
+	var validatorResults []*feature.ValidatorResult
+	if fb.validator != nil {
+		validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeDefault, 0, defaultVal))
+		for idx, rv := range ruleVals {
+			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeRule, idx, rv))
+		}
+	}
+
+	// Run unit tests
+	results, err := f.RunUnitTests()
+	if err != nil {
+		return nil, errors.Wrap(err, "run unit tests")
+	}
+
+	return &feature.CompiledFeature{
+		Feature:          f,
+		TestResults:      results,
+		ValidatorResults: validatorResults,
+	}, nil
 }
 
 func (fb *featureBuilder) getValidator(featureVal *starlarkstruct.Struct) (starlark.Callable, error) {
@@ -131,30 +158,25 @@ func (fb *featureBuilder) validateFeature(featureVal *starlarkstruct.Struct) err
 	return nil
 }
 
-func (fb *featureBuilder) validate(value starlark.Value) error {
+// idx indicates which part of the feature we are validating. 0 for default, 1-n for each subsequent rule.
+func (fb *featureBuilder) validate(t feature.ValidatorResultType, index int, value starlark.Value) *feature.ValidatorResult {
 	if fb.validator == nil {
 		return nil
 	}
+	vr := feature.NewValidatorResult(t, index, value.String())
 	var err error
 	thread := &starlark.Thread{Name: "validate", Load: load}
-	vr := &validatorReporter{}
-	starlarktest.SetReporter(thread, vr)
+	reporter := &validatorReporter{}
+	starlarktest.SetReporter(thread, reporter)
 	args := starlark.Tuple([]starlark.Value{value})
 	_, err = starlark.Call(thread, fb.validator, args, nil)
 	if err != nil {
-		return errors.Wrap(err, "validator")
+		return vr.WithError(err)
 	}
-	return vr.toErr()
+	return vr.WithError(reporter.toErr())
 }
 
-func (fb *featureBuilder) init(featureVal *starlarkstruct.Struct) (*feature.Feature, error) {
-	defaultVal, err := featureVal.Attr(DefaultValueAttrName)
-	if err != nil {
-		return nil, errors.Wrap(err, "default attribute")
-	}
-	if err := fb.validate(defaultVal); err != nil {
-		return nil, errors.Wrap(err, "default value validate")
-	}
+func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, error) {
 	// check if this is a complex type
 	message, ok := protomodule.AsProtoMessage(defaultVal)
 	if ok {
@@ -224,51 +246,50 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 	return dsc.GoString(), nil
 }
 
-func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
+func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {
 	rulesVal, err := featureVal.Attr(RulesAttrName)
 	if err != nil {
 		// Attr returns nil, err when not present, which is terrible.
-		return nil
+		return nil, nil
 	}
 	seq, ok := rulesVal.(starlark.Sequence)
 	if !ok {
-		return fmt.Errorf("rules: did not get back a starlark sequence: %v", rulesVal)
+		return nil, fmt.Errorf("rules: did not get back a starlark sequence: %v", rulesVal)
 	}
 	it := seq.Iterate()
 	defer it.Done()
 	var val starlark.Value
 	var i int
+	var ruleVals []starlark.Value
 	for it.Next(&val) {
 		if val == starlark.None {
-			return fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
+			return nil, fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
 		}
 		tuple, ok := val.(starlark.Tuple)
 		if !ok {
-			return fmt.Errorf("type error: expecting tuple, got %v", val.Type())
+			return nil, fmt.Errorf("type error: expecting tuple, got %v", val.Type())
 		}
 		if tuple.Len() != 2 {
-			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
+			return nil, fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
 		}
 		conditionStr, ok := tuple.Index(0).(starlark.String)
 		if !ok {
-			return fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
+			return nil, fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
 		}
 		if conditionStr.GoString() == "" {
-			return fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
+			return nil, fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
 		}
 		ruleAST, err := parseRulesLang(conditionStr.GoString())
 		if err != nil {
-			return fmt.Errorf("error expecting rules language string: %s, error while parsing: %q", conditionStr.GoString(), err)
+			return nil, fmt.Errorf("error expecting rules language string: %s, error while parsing: %q", conditionStr.GoString(), err)
 		}
 		ruleVal := tuple.Index(1)
-		if err := fb.validate(ruleVal); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("rule #%d value validate", i))
-		}
+		ruleVals = append(ruleVals, ruleVal)
 		switch f.FeatureType {
 		case feature.FeatureTypeProto:
 			message, ok := protomodule.AsProtoMessage(ruleVal)
 			if !ok {
-				return typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, ruleVal)
 			}
 			f.Rules = append(f.Rules, &feature.Rule{
 				Condition:    conditionStr.GoString(),
@@ -278,58 +299,58 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		case feature.FeatureTypeBool:
 			typedRuleVal, ok := ruleVal.(starlark.Bool)
 			if !ok {
-				return typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, ruleVal)
 			}
 			if err := f.AddBoolRule(conditionStr.GoString(), ruleAST, bool(typedRuleVal)); err != nil {
-				return err
+				return nil, err
 			}
 		case feature.FeatureTypeString:
 			typedRuleVal, ok := ruleVal.(starlark.String)
 			if !ok {
-				return typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, ruleVal)
 			}
 			if err := f.AddStringRule(conditionStr.GoString(), ruleAST, typedRuleVal.GoString()); err != nil {
-				return err
+				return nil, err
 			}
 		case feature.FeatureTypeInt:
 			typedRuleVal, ok := ruleVal.(starlark.Int)
 			if !ok {
-				return typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, ruleVal)
 			}
 			intVal, ok := typedRuleVal.Int64()
 			if !ok {
-				return errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
+				return nil, errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
 			}
 			if err := f.AddIntRule(conditionStr.GoString(), ruleAST, intVal); err != nil {
-				return err
+				return nil, err
 			}
 		case feature.FeatureTypeFloat:
 			typedRuleVal, ok := ruleVal.(starlark.Float)
 			if !ok {
-				return typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, ruleVal)
 			}
 			if err := f.AddFloatRule(conditionStr.GoString(), ruleAST, float64(typedRuleVal)); err != nil {
-				return err
+				return nil, err
 			}
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(ruleVal)
 			if err != nil {
-				return errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
+				return nil, errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
 			}
 			structVal := &structpb.Value{}
 			if err := structVal.UnmarshalJSON(encoded); err != nil {
-				return errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
+				return nil, errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
 			}
 			if err := f.AddJSONRule(conditionStr.GoString(), ruleAST, structVal); err != nil {
-				return errors.Wrap(err, "failed to add json rule")
+				return nil, errors.Wrap(err, "failed to add json rule")
 			}
 		default:
-			return fmt.Errorf("unsupported type %s for rule #%d", f.FeatureType, i)
+			return nil, fmt.Errorf("unsupported type %s for rule #%d", f.FeatureType, i)
 		}
 		i++
 	}
 
-	return nil
+	return ruleVals, nil
 }
 
 func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
@@ -357,18 +378,18 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 		if tuple.Len() != 2 {
 			return fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
 		}
-		contextMap, ok := tuple.Index(0).(*starlark.Dict)
+		starCtx, ok := tuple.Index(0).(*starlark.Dict)
 		if !ok {
 			return fmt.Errorf("invalid first type of tuple %T, should be a starlark dict to build a context object", tuple.Index(0))
 		}
 
-		translatedContextMap, err := translateContext(contextMap)
+		goCtx, err := translateContext(starCtx)
 		if err != nil {
 			return errors.Wrap(err, "error translating starlark context for unit test")
 		}
 
 		expectedVal := tuple.Index(1)
-		if err := fb.validate(expectedVal); err != nil {
+		if vr := fb.validate(feature.ValidatorResultTypeTest, i, expectedVal); vr != nil && vr.Error != nil {
 			return errors.Wrap(err, "test value validate")
 		}
 		switch f.FeatureType {
@@ -377,28 +398,19 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
-				Context:       translatedContextMap,
-				ExpectedValue: message,
-			})
+			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, message, starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeBool:
 			typedUnitTestVal, ok := expectedVal.(starlark.Bool)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
-				Context:       translatedContextMap,
-				ExpectedValue: bool(typedUnitTestVal),
-			})
+			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, bool(typedUnitTestVal), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeString:
 			typedUnitTestVal, ok := expectedVal.(starlark.String)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
-				Context:       translatedContextMap,
-				ExpectedValue: typedUnitTestVal.GoString(),
-			})
+			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, typedUnitTestVal.GoString(), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeInt:
 			typedUnitTestVal, ok := expectedVal.(starlark.Int)
 			if !ok {
@@ -408,19 +420,13 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if !ok {
 				return errors.Wrapf(typeError(f.FeatureType, i, expectedVal), "%T not representable as int64", intVal)
 			}
-			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
-				Context:       translatedContextMap,
-				ExpectedValue: intVal,
-			})
+			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, intVal, starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeFloat:
 			typedUnitTestVal, ok := expectedVal.(starlark.Float)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, &feature.UnitTest{
-				Context:       translatedContextMap,
-				ExpectedValue: float64(typedUnitTestVal),
-			})
+			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, float64(typedUnitTestVal), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(expectedVal)
 			if err != nil {
@@ -430,7 +436,7 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if err := structVal.UnmarshalJSON(encoded); err != nil {
 				return errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
 			}
-			if err := f.AddJSONUnitTest(translatedContextMap, structVal); err != nil {
+			if err := f.AddJSONUnitTest(goCtx, structVal, starCtx.String(), expectedVal.String()); err != nil {
 				return errors.Wrap(err, "failed to add json unit test")
 			}
 		default:

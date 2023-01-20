@@ -55,6 +55,40 @@ type Rule struct {
 type UnitTest struct {
 	Context       map[string]interface{}
 	ExpectedValue interface{}
+	// The starlark textual representation of the context and expected value.
+	// These fields are helpful for print statements.
+	ContextStar, ExpectedValueStar string
+}
+
+func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starVal string) *UnitTest {
+	return &UnitTest{
+		Context:           context,
+		ExpectedValue:     val,
+		ContextStar:       starCtx,
+		ExpectedValueStar: starVal,
+	}
+}
+
+func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+	tr := NewTestResult(ut.ContextStar, idx)
+	a, _, err := eval.Evaluate(ut.Context)
+	if err != nil {
+		return tr.WithError(errors.Wrap(err, "evaluate feature"))
+	}
+	val, err := ValToAny(ut.ExpectedValue)
+	if err != nil {
+		return tr.WithError(errors.Wrap(err, "invalid test value"))
+	}
+	if !proto.Equal(a, val) {
+		if a.GetTypeUrl() != val.GetTypeUrl() {
+			err = fmt.Errorf("mismatched types, expecting %s, got %s", val.GetTypeUrl(), a.GetTypeUrl())
+		} else {
+			err = fmt.Errorf("incorrect test result, expecting %s, got %v", ut.ExpectedValueStar, a.String())
+		}
+		return tr.WithError(err)
+	}
+	// test passed
+	return tr
 }
 
 type Feature struct {
@@ -166,7 +200,7 @@ func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
 	}
 	p := dynamicpb.Message{}
 	if err := a.UnmarshalTo(&p); err == nil {
-		return &p, FeatureTypeProto, nil // proto type. TODO: check that this works
+		return &p, FeatureTypeProto, nil // proto type.
 	}
 	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 }
@@ -239,14 +273,11 @@ func (f *Feature) AddJSONRule(rule string, ast *rulesv1beta2.Rule, val *structpb
 	return nil
 }
 
-func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value) error {
+func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value, starCtx, starVal string) error {
 	if f.FeatureType != FeatureTypeJSON {
 		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
 	}
-	f.UnitTests = append(f.UnitTests, &UnitTest{
-		Context:       context,
-		ExpectedValue: val,
-	})
+	f.UnitTests = append(f.UnitTests, NewUnitTest(context, val, starCtx, starVal))
 	return nil
 }
 
@@ -345,27 +376,123 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	return &v1beta3{res}, nil
 }
 
-func (f *Feature) RunUnitTests(_ *protoregistry.Types) error {
+// Contains the compiled feature model, along with any
+// validator results and unit test results that were
+// collected as part of compilation.
+type CompiledFeature struct {
+	Feature          *Feature
+	TestResults      []*TestResult
+	ValidatorResults []*ValidatorResult
+}
+
+// This struct holds information about a test run.
+type TestResult struct {
+	Test      string // a string representation of the test, as written in starlark
+	TestIndex int    // The index of the test in the list of tests.
+	Error     error  // human-readable error
+}
+
+func NewTestResult(testStar string, testIndex int) *TestResult {
+	return &TestResult{
+		Test:      testStar,
+		TestIndex: testIndex,
+	}
+}
+
+func (tr *TestResult) WithError(err error) *TestResult {
+	tr.Error = err
+	return tr
+}
+
+func (tr *TestResult) Passed() bool {
+	return tr.Error == nil
+}
+
+// Creates a short string - a human-readable version of this unit test
+// that is helpful for debugging and printing errors.
+// e.g. 'test 1 ["{"org"...]'
+// idx refers to the index of the unit test in the list of unit tests
+// written in starlark.
+func (tr *TestResult) Identifier() string {
+	end := 25
+	if end > len(tr.Test) {
+		end = len(tr.Test)
+	}
+	return fmt.Sprintf("test %d [%s...]", tr.TestIndex, tr.Test[0:end])
+}
+
+func (tr *TestResult) DebugString() string {
+	return fmt.Sprintf("%s: %v", tr.Identifier(), tr.Error)
+}
+
+func (f *Feature) RunUnitTests() ([]*TestResult, error) {
 	eval, err := f.ToEvaluableFeature()
 	if err != nil {
-		return err
+		return nil, errors.Wrap(err, "invalid feature")
 	}
+	var results []*TestResult
 	for idx, test := range f.UnitTests {
-		a, _, err := eval.Evaluate(test.Context)
-		if err != nil {
-			return err
-		}
-		val, err := ValToAny(test.ExpectedValue)
-		if err != nil {
-			return err
-		}
-		if !proto.Equal(a, val) {
-			return fmt.Errorf("test failed: %v index: %d %+v %+v", f.Key, idx, a, val)
-		}
+		results = append(results, test.Run(idx, eval))
 	}
-	return nil
+	return results, nil
 }
 
 func newTypeMismatchErr(expected, got FeatureType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
+}
+
+type ValidatorResultType int
+
+const (
+	ValidatorResultTypeDefault ValidatorResultType = iota
+	ValidatorResultTypeRule
+	ValidatorResultTypeTest
+)
+
+// Holds the results of validation checks performed on the compiled feature.
+// Since a validation check is done on a single final feature value,
+// There will be 1 validator result for the default value and 1 for each subsequent
+// rule.
+type ValidatorResult struct {
+	// Indicates whether this validator result applies on a rule value, the default value, or a test value.
+	Type ValidatorResultType
+	// If this is a rule value validator result, specifies the index of the rule that this result applies to.
+	// If this is a test value validator result, specifies the index of the unit test that this result applies to.
+	Index int
+	// A string representation of the starlark value that was invalid
+	Value string
+	Error error // human-readable error describing what the validation error was
+}
+
+func NewValidatorResult(t ValidatorResultType, index int, starVal string) *ValidatorResult {
+	return &ValidatorResult{
+		Type:  t,
+		Index: index,
+		Value: starVal,
+	}
+}
+
+func (vr *ValidatorResult) WithError(err error) *ValidatorResult {
+	vr.Error = err
+	return vr
+}
+
+func (vr *ValidatorResult) Identifier() string {
+	prefix := "validate default"
+	if vr.Type == ValidatorResultTypeRule {
+		prefix = fmt.Sprintf("validate rule %d", vr.Index)
+	}
+	end := 25
+	if len(vr.Value) < end {
+		end = len(vr.Value)
+	}
+	return fmt.Sprintf("%s [%s]", prefix, vr.Value[0:end])
+}
+
+func (vr *ValidatorResult) DebugString() string {
+	return fmt.Sprintf("%s: %v", vr.Identifier(), vr.Error)
+}
+
+func (vr *ValidatorResult) Passed() bool {
+	return vr.Error == nil
 }

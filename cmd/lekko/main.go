@@ -39,7 +39,6 @@ import (
 )
 
 func main() {
-	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(evalCmd)
@@ -76,22 +75,6 @@ var rootCmd = &cobra.Command{
 	Short:         "lekko - dynamic configuration helper",
 	SilenceUsage:  true,
 	SilenceErrors: true,
-}
-
-var verifyCmd = &cobra.Command{
-	Use:   "verify",
-	Short: "verify a config repository with a lekko.root.yaml",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		r, err := repo.NewLocal(wd)
-		if err != nil {
-			return errors.Wrap(err, "new local repo")
-		}
-		return r.Verify(cmd.Context())
-	},
 }
 
 func formatCmd() *cobra.Command {
@@ -169,7 +152,7 @@ func initCmd() *cobra.Command {
 	return cmd
 }
 func compileCmd() *cobra.Command {
-	var force bool
+	var force, dryRun bool
 	cmd := &cobra.Command{
 		Use:   "compile [namespace[/feature]]",
 		Short: "compiles features based on individual definitions",
@@ -198,25 +181,20 @@ func compileCmd() *cobra.Command {
 					return err
 				}
 			}
-
-			compile := func() error {
-				if ns != "" {
-					if f != "" {
-						_, err = r.CompileFeature(ctx, registry, ns, f, true, force)
-						return err
-					}
-					return r.CompileNamespace(ctx, registry, ns, force)
-				}
-				return r.Compile(ctx, registry, force)
-			}
-
-			if err := compile(); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:                     registry,
+				NamespaceFilter:              ns,
+				FeatureFilter:                f,
+				Persist:                      !dryRun,
+				IgnoreBackwardsCompatibility: force,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
-			return r.Verify(ctx)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
+	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "skip persisting any newly compiled changes to disk.")
 	return cmd
 }
 
@@ -258,8 +236,8 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if err := r.Verify(ctx); err != nil {
-				return errors.Wrap(err, "verify")
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 
 			secrets := metadata.NewSecretsOrFail()
@@ -290,8 +268,8 @@ var mergeCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 		ctx := cmd.Context()
-		if err := r.Verify(ctx); err != nil {
-			return errors.Wrap(err, "verification failed")
+		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			return errors.Wrap(err, "compile")
 		}
 		var prNum *int
 		if len(args) > 0 {
@@ -496,8 +474,8 @@ func applyCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if err := r.Verify(ctx); err != nil {
-				return errors.Wrap(err, "verification failed")
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
@@ -587,8 +565,8 @@ func commitCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if err := r.Verify(ctx); err != nil {
-				return err
+			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+				return errors.Wrap(err, "compile")
 			}
 			if _, err = r.Commit(ctx, message); err != nil {
 				return err
@@ -652,7 +630,11 @@ func restoreCmd() *cobra.Command {
 				return errors.Wrap(err, "rebuild type registry")
 			}
 			fmt.Printf("Successfully rebuilt dynamic type registry.\n")
-			if err := r.Compile(ctx, registry, force); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:                     registry,
+				Persist:                      true,
+				IgnoreBackwardsCompatibility: force,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 			fmt.Printf("Successfully compiled.\n")
