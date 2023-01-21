@@ -90,7 +90,7 @@ brews:
     # gitlab or gitea)
     #
     # Default depends on the client.
-    url_template: "https://github.com/lekkodev/cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "\"https://github.com/lekkodev/cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}\", :using => GitHubPrivateRepositoryReleaseDownloadStrategy"
 
     # Allows you to set a custom download strategy. Note that you'll need
     # to implement the strategy and add it to your tap repository.
@@ -101,7 +101,7 @@ brews:
     # Allows you to add a custom require_relative at the top of the formula
     # template.
     # Default is empty
-    # custom_require: custom_download_strategy
+    custom_require: lib/private_strategy
 
     # Git author used to commit to the repository.
     # Defaults are shown.
@@ -178,10 +178,9 @@ brews:
 
     # Custom install script for brew.
     # Default is 'bin.install "the binary name"'.
-    # install: |
-    #   bin.install "some_other_name"
-    #   bash_completion.install "completions/foo.bash" => "foo"
-    #   # ...
+    install: |
+      bin.install "lekko"
+      # ...
 
     # Custom post_install script for brew.
     # Could be used to do any additional work after the "install" script
