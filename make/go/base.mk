@@ -12,6 +12,8 @@ $(call _assert_var,GO_MODULE)
 UNAME_OS := $(shell uname -s)
 UNAME_ARCH := $(shell uname -m)
 
+DIST_DIR := dist
+
 ENV_DIR := .env
 ENV_SH := $(ENV_DIR)/env.sh
 ENV_BACKUP_DIR := $(HOME)/.config/$(PROJECT)/env
@@ -20,7 +22,7 @@ TMP := .tmp
 
 # Settable
 # These are exact file paths that are added to .gitignore and .dockerignore
-FILE_IGNORES := $(FILE_IGNORES) $(ENV_DIR)/ $(TMP)/
+FILE_IGNORES := $(FILE_IGNORES) $(ENV_DIR)/ $(TMP)/ $(DIST_DIR)/
 # Settable
 # These will be added without any modification to .gitignore
 GIT_FILE_IGNORES ?=
