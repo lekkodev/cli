@@ -269,6 +269,12 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 				continue
 			}
 			r.Logf(bold+"[%s/%s]\n"+reset, fcr.NamespaceName, fcr.FeatureName)
+			if fcr.CompilationError != nil {
+				r.Logf(red+"→"+reset+" %v\n", fcr.CompilationError)
+			}
+			if fcr.CompiledFeature == nil {
+				continue
+			}
 			for _, res := range fcr.CompiledFeature.ValidatorResults {
 				if !res.Passed() {
 					r.Logf(red+"→"+reset+" %s\n", res.DebugString())
