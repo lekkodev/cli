@@ -28,6 +28,8 @@ import (
 const (
 	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
+	// Lekko CLI client ID
+	LekkoClientID string = "test"
 )
 
 type AuthFS struct {
