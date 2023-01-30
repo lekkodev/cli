@@ -1,0 +1,467 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package lekko.bff.v1beta1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "lekko/backend/v1beta1/configuration_service.proto";
+import "lekko/feature/v1beta1/feature.proto";
+
+// BFFService exposes functionality needed for the lekko UI.
+// All actions will be performed on behalf of a user, who has
+// a valid JWT token. Therefore, organization or user information
+// does not need to be passed into the RPCs.
+service BFFService {
+  // User management
+
+  rpc GetUserLoggedInInfo(GetUserLoggedInInfoRequest) returns (GetUserLoggedInInfoResponse) {}
+  // Retrieves an oauth access token for the user, and stores in in the database
+  rpc OAuthUser(OAuthUserRequest) returns (OAuthUserResponse) {}
+  rpc GetUserOAuth(GetUserOAuthRequest) returns (GetUserOAuthResponse) {}
+
+  // Team management
+
+  rpc CreateTeam(CreateTeamRequest) returns (CreateTeamResponse) {}
+  rpc DeleteTeam(DeleteTeamRequest) returns (DeleteTeamResponse) {}
+  rpc UseTeam(UseTeamRequest) returns (UseTeamResponse) {}
+  rpc ListTeamMemberships(ListTeamMembershipsRequest) returns (ListTeamMembershipsResponse) {}
+  rpc ListUserMemberships(ListUserMembershipsRequest) returns (ListUserMembershipsResponse) {}
+  rpc UpsertMembership(UpsertMembershipRequest) returns (UpsertMembershipResponse) {}
+
+  // Repository management
+
+  rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse) {}
+  rpc DeleteRepository(DeleteRepositoryRequest) returns (DeleteRepositoryResponse) {}
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse) {}
+
+  // Namespace & feature management
+
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse) {}
+  // Lists all the features within a repository (and optionally, namespace)
+  rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
+  rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
+
+  rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {}
+  rpc MergePR(MergePRRequest) returns (MergePRResponse) {}
+
+  // Branch management
+
+  rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse) {}
+  rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
+  rpc DeleteBranch(DeleteBranchRequest) returns (DeleteBranchResponse) {}
+
+  // Saves a feature to the local repo, and runs compilation
+  rpc Save(SaveRequest) returns (SaveResponse) {}
+  // Review opens a pull request against main using the currently committed changes.
+  rpc Review(ReviewRequest) returns (ReviewResponse) {}
+  // Merges the pull request based on the given session.
+  rpc Merge(MergeRequest) returns (MergeResponse) {}
+  // Evaluates the feature based on the given session.
+  rpc Eval(EvalRequest) returns (EvalResponse) {}
+  rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
+  // Performs a global restore of the repo, creating a dev session under the hood with the changes.
+  rpc Restore(RestoreRequest) returns (RestoreResponse) {}
+  rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
+  rpc GetRollout(GetRolloutRequest) returns (GetRolloutResponse) {}
+}
+
+message GetUserLoggedInInfoRequest {}
+
+message GetUserLoggedInInfoResponse {
+  string username = 1;
+  string team_name = 2;
+}
+
+message CreateTeamRequest {
+  string name = 1;
+}
+
+message CreateTeamResponse {}
+
+message DeleteTeamRequest {}
+
+message DeleteTeamResponse {}
+
+message UseTeamRequest {
+  string name = 1;
+}
+
+message UseTeamResponse {}
+
+enum MembershipRole {
+  MEMBERSHIP_ROLE_UNSPECIFIED = 0;
+  MEMBERSHIP_ROLE_MEMBER = 1;
+  MEMBERSHIP_ROLE_OWNER = 2;
+}
+
+message Membership {
+  string team_name = 1;
+  string username = 2;
+  MembershipRole role = 3;
+}
+
+message ListTeamMembershipsRequest {}
+
+message ListTeamMembershipsResponse {
+  repeated Membership memberships = 1;
+}
+
+message ListUserMembershipsRequest {}
+
+message ListUserMembershipsResponse {
+  repeated Membership memberships = 1;
+}
+
+message UpsertMembershipRequest {
+  // User that you wish to add to the current team
+  string username = 1;
+  // Role that you wish to assign
+  MembershipRole role = 2;
+}
+
+message UpsertMembershipResponse {
+  Membership membership = 1;
+}
+
+message RepositoryKey {
+  string owner_name = 1; // github owner
+  string repo_name = 2;
+}
+
+message CreateRepositoryRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message CreateRepositoryResponse {
+  string url = 1;
+}
+
+message DeleteRepositoryRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message DeleteRepositoryResponse {}
+
+message ListRepositoriesRequest {}
+
+message Repository {
+  string owner_name = 1;
+  string repo_name = 2;
+  int64 github_installation_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+  string description = 6;
+}
+
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+}
+
+message ListNamespacesRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message ListNamespacesResponse {
+  repeated Namespace namespaces = 1;
+}
+
+message Namespace {
+  string name = 1;
+  string version = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+message ListFeaturesRequest {
+  RepositoryKey repo_key = 1;
+  string namespace_name = 2; // optional
+}
+
+message ListFeaturesResponse {
+  message FeatureListItem {
+    string name = 1;
+    string namespace_name = 2;
+    google.protobuf.Timestamp updated_at = 3;
+    // the blob sha of the proto bin file according to git
+    string sha = 4;
+  }
+  repeated FeatureListItem features = 1;
+}
+
+message GetFeatureRequest {
+  // includes the branch name to fetch from. If 'main',
+  // we will fetch from mysql. If not, we will fetch
+  // from the appropriate development session.
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+}
+
+message GetFeatureResponse {
+  Feature feature = 1;
+}
+
+message Feature {
+  string name = 1;
+  string namespace_name = 2;
+  bytes json = 3;
+  bytes star = 4;
+  // This field will only be populated if we are able to
+  // statically parse the requested feature.
+  lekko.feature.v1beta1.Feature static_feature = 5;
+  // the blob sha of the proto bin file according to git
+  string sha = 6;
+}
+
+message OAuthUserRequest {
+  // oauth code obtained from the provider (assuming github for now)
+  string code = 1;
+  // The random string given to the auth provider.
+  string state = 2;
+}
+
+message OAuthUserResponse {}
+
+message GetUserOAuthRequest {}
+
+message GetUserOAuthResponse {
+  bool authenticated = 1;
+}
+
+enum ChecksState {
+  CHECKS_STATE_UNSPECIFIED = 0;
+  CHECKS_STATE_IN_PROGRESS = 1;
+  CHECKS_STATE_PASSED = 2;
+  CHECKS_STATE_FAILED = 3;
+}
+
+message PullRequest {
+  string title = 1;
+  string url = 2;
+  int64 number = 3;
+  string state = 4;
+  bool approved = 5;
+  ChecksState checks_state = 6;
+  google.protobuf.Timestamp pushed_at = 7;
+}
+
+message GetPRInfoRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message GetPRInfoResponse {
+  repeated PullRequest pull_requests = 1;
+}
+
+message MergePRRequest {
+  RepositoryKey repo_key = 1;
+  int64 pr_number = 2;
+}
+
+message MergePRResponse {}
+
+// Branches are user-scoped git-branches
+message Branch {
+  BranchKey key = 1;
+  string description = 2;
+  string sha = 3;
+  // Note: pr_number is 0 if there is no PR.
+  int64 pr_number = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message BranchKey {
+  string owner_name = 1;
+  string repo_name = 2;
+  string name = 3;
+}
+
+message CreateBranchRequest {
+  // Includes sufficiently unique branch name
+  // generated by the caller.
+  BranchKey key = 1;
+  // user-friendly description of the branch
+  string description = 2;
+  // commit sha to branch off from. This is what HEAD of
+  // the new branch will point to.
+  string sha = 3;
+}
+
+message CreateBranchResponse {
+  Branch branch = 1;
+}
+
+message ListBranchesRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message ListBranchesResponse {
+  // Will always include the main branch and its sha info in the response.
+  repeated Branch branches = 1;
+}
+
+message DeleteBranchRequest {
+  BranchKey key = 1;
+}
+
+message DeleteBranchResponse {}
+
+message SaveRequest {
+  reserved 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+
+  bytes star = 4;
+  lekko.feature.v1beta1.Feature feature = 5;
+  BranchKey key = 6;
+}
+
+message SaveResponse {}
+
+message ReviewRequest {
+  reserved 1;
+  BranchKey key = 2;
+}
+
+message ReviewResponse {
+  // url of the pull request that has just been created
+  string url = 1;
+}
+
+message MergeRequest {
+  reserved 1;
+  BranchKey key = 2;
+}
+
+message MergeResponse {}
+
+message EvalRequest {
+  reserved 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+
+  map<string, lekko.backend.v1beta1.Value> context = 4;
+  BranchKey key = 5;
+}
+
+message EvalResponse {
+  // TODO: infer the feature type, and return a oneof
+  // of {bool/int/float/string/jsonBytes/protoAny}
+  google.protobuf.Any result = 1;
+}
+
+message GetFlagEvaluationMetricsRequest {
+  RepositoryKey repo_key = 1;
+  // if empty, picks the latest sha. We will find the blob
+  // sha of the feature under this commit, and retrieve metrics
+  // for flag evaluations against that feature sha. This ensures
+  // that we obtain metrics for a feature that remains unchanged
+  // across multiple commits.
+  string commit_sha = 2;
+  string namespace_name = 3;
+  string feature_name = 4;
+  // Defaults to T-7 days
+  google.protobuf.Timestamp start_time = 5;
+  // Defaults to now
+  google.protobuf.Timestamp end_time = 6;
+}
+
+message GetFlagEvaluationMetricsResponse {
+  // commit sha that was picked (same as request unless empty)
+  string commit_sha = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  // total number of times the given feature was evaluated
+  int64 total_evaluations = 4;
+
+  message ContextKeyCount {
+    string key = 1;
+    string type = 2;
+    int64 count = 3;
+  }
+
+  // All the context keys that were provided, and how frequent they were
+  repeated ContextKeyCount context_key_counts = 5;
+
+  message PathCount {
+    repeated int64 path = 1;
+    int64 count = 2;
+  }
+
+  // Which paths successfully evaluated, and how frequently
+  repeated PathCount path_counts = 6;
+  // feature sha that we queried metrics for
+  string feature_sha = 7;
+}
+
+// Restore will start a new session, with all
+// data in the repo restored to the hash requested.
+message RestoreRequest {
+  reserved 1;
+  string branch_description = 2;
+  // Commit hash to restore the repo to.
+  string commit_hash = 3;
+  // Includes sufficiently unique branch name
+  // generated by the caller.
+  BranchKey key = 4;
+}
+
+message RestoreResponse {
+  reserved 1;
+  Branch branch = 2;
+}
+
+message GetRepositoryLogsRequest {
+  RepositoryKey repo_key = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message RepositoryLog {
+  string sha = 1;
+  // If we are able to identify the lekko user that authored the commit,
+  // this will refer to their username. If not, we fall back to github
+  // username.
+  string username = 2;
+  google.protobuf.Timestamp create_time = 3;
+  string commit_message = 4;
+}
+
+message GetRepositoryLogsResponse {
+  repeated RepositoryLog logs = 1;
+  string next_page_token = 2;
+}
+
+message GetRolloutRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message Rollout {
+  string target_sha = 1;
+  string source = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  // If we are able to identify the lekko user that authored the commit,
+  // this will refer to their username. If not, we fall back to github
+  // username.
+  string username = 5;
+  string commit_message = 6;
+}
+
+message GetRolloutResponse {
+  Rollout rollout = 1;
+}
