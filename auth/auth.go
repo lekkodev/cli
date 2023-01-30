@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package gh
+package auth
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	ghauth "github.com/cli/oauth"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
@@ -28,8 +29,8 @@ import (
 const (
 	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
-	// Lekko CLI client ID
-	LekkoClientID string = "test"
+	// Lekko CLI client ID. Used for oauth with lekko.
+	LekkoClientID string = "v0.303976a05d96c02eee5b1a75a3923815d82599b0"
 )
 
 type AuthFS struct {
@@ -114,7 +115,7 @@ func (a *AuthFS) Status(ctx context.Context) {
 }
 
 func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, string, error) {
-	ghCli := NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
+	ghCli := gh.NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
 	user, err := ghCli.GetUser(ctx)
 	if err != nil {
 		return "", "", errors.Wrap(err, "check auth")
