@@ -45,6 +45,7 @@ type BFFServiceClient interface {
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
+	AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
 	UseTeam(context.Context, *connect_go.Request[v1beta1.UseTeamRequest]) (*connect_go.Response[v1beta1.UseTeamResponse], error)
@@ -101,6 +102,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		getUserOAuth: connect_go.NewClient[v1beta1.GetUserOAuthRequest, v1beta1.GetUserOAuthResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetUserOAuth",
+			opts...,
+		),
+		authorizeDevice: connect_go.NewClient[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/AuthorizeDevice",
 			opts...,
 		),
 		createTeam: connect_go.NewClient[v1beta1.CreateTeamRequest, v1beta1.CreateTeamResponse](
@@ -236,6 +242,7 @@ type bFFServiceClient struct {
 	getUserLoggedInInfo      *connect_go.Client[v1beta1.GetUserLoggedInInfoRequest, v1beta1.GetUserLoggedInInfoResponse]
 	oAuthUser                *connect_go.Client[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse]
 	getUserOAuth             *connect_go.Client[v1beta1.GetUserOAuthRequest, v1beta1.GetUserOAuthResponse]
+	authorizeDevice          *connect_go.Client[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse]
 	createTeam               *connect_go.Client[v1beta1.CreateTeamRequest, v1beta1.CreateTeamResponse]
 	deleteTeam               *connect_go.Client[v1beta1.DeleteTeamRequest, v1beta1.DeleteTeamResponse]
 	useTeam                  *connect_go.Client[v1beta1.UseTeamRequest, v1beta1.UseTeamResponse]
@@ -276,6 +283,11 @@ func (c *bFFServiceClient) OAuthUser(ctx context.Context, req *connect_go.Reques
 // GetUserOAuth calls lekko.bff.v1beta1.BFFService.GetUserOAuth.
 func (c *bFFServiceClient) GetUserOAuth(ctx context.Context, req *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error) {
 	return c.getUserOAuth.CallUnary(ctx, req)
+}
+
+// AuthorizeDevice calls lekko.bff.v1beta1.BFFService.AuthorizeDevice.
+func (c *bFFServiceClient) AuthorizeDevice(ctx context.Context, req *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error) {
+	return c.authorizeDevice.CallUnary(ctx, req)
 }
 
 // CreateTeam calls lekko.bff.v1beta1.BFFService.CreateTeam.
@@ -409,6 +421,7 @@ type BFFServiceHandler interface {
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
+	AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
 	UseTeam(context.Context, *connect_go.Request[v1beta1.UseTeamRequest]) (*connect_go.Response[v1beta1.UseTeamResponse], error)
@@ -462,6 +475,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetUserOAuth", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/GetUserOAuth",
 		svc.GetUserOAuth,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/AuthorizeDevice", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/AuthorizeDevice",
+		svc.AuthorizeDevice,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/CreateTeam", connect_go.NewUnaryHandler(
@@ -605,6 +623,10 @@ func (UnimplementedBFFServiceHandler) OAuthUser(context.Context, *connect_go.Req
 
 func (UnimplementedBFFServiceHandler) GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetUserOAuth is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.AuthorizeDevice is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error) {

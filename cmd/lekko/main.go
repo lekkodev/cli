@@ -26,6 +26,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
+	"github.com/lekkodev/cli/auth"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
@@ -309,7 +310,7 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
+		auth := auth.NewAuthFS()
 		defer auth.Close()
 		return auth.Login(cmd.Context())
 	},
@@ -319,7 +320,7 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "log out of github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
+		auth := auth.NewAuthFS()
 		defer auth.Close()
 		return auth.Logout(cmd.Context())
 	},
@@ -329,7 +330,7 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
+		auth := auth.NewAuthFS()
 		auth.Status(cmd.Context())
 		return nil
 	},
