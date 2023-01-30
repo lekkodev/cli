@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -247,11 +248,20 @@ func reviewCmd() *cobra.Command {
 				return errors.Wrap(err, "github auth fail")
 			}
 
+			if len(title) == 0 {
+				fmt.Printf("-------------------\n")
+				if err := survey.AskOne(&survey.Input{
+					Message: "Title: ",
+				}, &title); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+
 			_, err = r.Review(ctx, title, ghCli)
 			return err
 		},
 	}
-	cmd.Flags().StringVarP(&title, "title", "t", "New feature change", "Title of pull request")
+	cmd.Flags().StringVarP(&title, "title", "t", "", "Title of pull request")
 	return cmd
 }
 
