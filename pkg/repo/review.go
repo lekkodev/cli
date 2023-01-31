@@ -160,7 +160,6 @@ func (r *Repo) pushToRemote(ctx context.Context, branchName string) error {
 	if err := r.Repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: RemoteName,
 		Auth:       r.BasicAuth(),
-		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)))},
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}
