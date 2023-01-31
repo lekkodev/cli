@@ -310,7 +310,7 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewAuthFS()
+		auth := oauth.NewOAuth()
 		defer auth.Close()
 		return auth.Login(cmd.Context())
 	},
@@ -320,7 +320,7 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "log out of github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewAuthFS()
+		auth := oauth.NewOAuth()
 		defer auth.Close()
 		return auth.Logout(cmd.Context())
 	},
@@ -330,7 +330,7 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewAuthFS()
+		auth := oauth.NewOAuth()
 		auth.Status(cmd.Context())
 		return nil
 	},

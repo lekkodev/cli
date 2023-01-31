@@ -18,9 +18,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
+	"github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
+	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
@@ -29,23 +33,27 @@ import (
 const (
 	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
-	// Lekko CLI client ID. Used for oauth with lekko.
-	LekkoClientID string = "v0.303976a05d96c02eee5b1a75a3923815d82599b0"
+	// lekkoURL string = "https://prod.api.lekko.dev"
+	lekkoURL string = "http://localhost:8080"
 )
 
-type AuthFS struct {
-	Secrets metadata.Secrets
+type OAuth struct {
+	Secrets         metadata.Secrets
+	lekkoBFFClient  bffv1beta1connect.BFFServiceClient
+	lekkoAuthClient bffv1beta1connect.AuthServiceClient
 }
 
-// Returns an AuthFS object, responsible for managing authentication on the local FS.
+// Returns an OAuth object, responsible for managing oauth on the local FS.
 // This is meant to be used by the cli on the user's local filesystem.
-func NewAuthFS() *AuthFS {
-	return &AuthFS{
-		Secrets: metadata.NewSecretsOrFail(),
+func NewOAuth() *OAuth {
+	return &OAuth{
+		Secrets:         metadata.NewSecretsOrFail(),
+		lekkoBFFClient:  bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, lekkoURL),
+		lekkoAuthClient: bffv1beta1connect.NewAuthServiceClient(http.DefaultClient, lekkoURL),
 	}
 }
 
-func (a *AuthFS) Close() {
+func (a *OAuth) Close() {
 	if err := a.Secrets.Close(); err != nil {
 		log.Printf("error closing secrets: %v\n", err)
 	}
@@ -53,31 +61,14 @@ func (a *AuthFS) Close() {
 
 // Login will attempt to read any existing github credentials from disk. If unavailable,
 // it will initiate oauth with github.
-func (a *AuthFS) Login(ctx context.Context) error {
+func (a *OAuth) Login(ctx context.Context) error {
 	defer a.Status(ctx)
-	if a.Secrets.HasGithubToken() {
-		if err := a.CheckGithubAuth(ctx); err == nil {
-			return nil
-		} else {
-			log.Printf("Existing gh token expired: %v\n", err)
-		}
+	if err := a.loginLekko(ctx); err != nil {
+		return errors.Wrap(err, "login lekko")
 	}
-	flow := &ghauth.Flow{
-		Host:     ghauth.GitHubHost("https://github.com"),
-		ClientID: lekkoGHAppClientID,
-		Scopes:   []string{"user", "repo"},
+	if err := a.loginGithub(ctx); err != nil {
+		return errors.Wrap(err, "login github")
 	}
-	token, err := flow.DetectFlow()
-	if err != nil {
-		return errors.Wrap(err, "gh oauth flow")
-	}
-	a.Secrets.SetGithubToken(token.Token)
-	login, email, err := a.GetGithubUserLogin(ctx)
-	if err != nil {
-		return err
-	}
-	a.Secrets.SetGithubUser(login)
-	a.Secrets.SetGithubEmail(email)
 	return nil
 }
 
@@ -89,7 +80,7 @@ func maskToken(token string) string {
 	return strings.Join(ret, "")
 }
 
-func (a *AuthFS) Logout(ctx context.Context) error {
+func (a *OAuth) Logout(ctx context.Context) error {
 	a.Secrets.SetGithubToken("")
 	a.Secrets.SetGithubUser("")
 	a.Secrets.SetGithubEmail("")
@@ -97,12 +88,12 @@ func (a *AuthFS) Logout(ctx context.Context) error {
 	return nil
 }
 
-func (a *AuthFS) Status(ctx context.Context) {
+func (a *OAuth) Status(ctx context.Context) {
 	status := "Logged In"
 	if !a.Secrets.HasGithubToken() {
 		status = "Logged out"
 	}
-	if err := a.CheckGithubAuth(ctx); err != nil {
+	if err := a.checkGithubAuth(ctx); err != nil {
 		status = fmt.Sprintf("Auth Failed: %v", err)
 	}
 	fmt.Printf(
@@ -114,7 +105,74 @@ func (a *AuthFS) Status(ctx context.Context) {
 	)
 }
 
-func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, string, error) {
+func (a *OAuth) loginLekko(ctx context.Context) error {
+	if a.Secrets.HasLekkoToken() {
+		_, err := a.checkLekkoAuth(ctx)
+		if err == nil {
+			return nil
+		}
+		log.Printf("Existing lekko token auth: %v\n", err)
+	}
+	authCreds, err := NewDeviceFlow(lekkoURL).Authorize(ctx)
+	if err != nil {
+		return errors.Wrap(err, "lekko oauth authorize")
+	}
+	a.Secrets.SetLekkoToken(authCreds.Token)
+	a.Secrets.SetLekkoTeam(*authCreds.Team)
+	username, err := a.checkLekkoAuth(ctx)
+	if err != nil {
+		return errors.Wrap(err, "check lekko auth after login")
+	}
+	a.Secrets.SetLekkoUsername(username)
+	return nil
+}
+
+func (a *OAuth) loginGithub(ctx context.Context) error {
+	if a.Secrets.HasGithubToken() {
+		err := a.checkGithubAuth(ctx)
+		if err == nil {
+			return nil
+		}
+		log.Printf("Existing gh token expired: %v\n", err)
+	}
+	flow := &ghauth.Flow{
+		ClientID: lekkoGHAppClientID,
+		Scopes:   []string{"user", "repo"},
+	}
+	token, err := flow.DetectFlow()
+	if err != nil {
+		return errors.Wrap(err, "gh oauth flow")
+	}
+	a.Secrets.SetGithubToken(token.Token)
+	login, email, err := a.getGithubUserLogin(ctx)
+	if err != nil {
+		return err
+	}
+	a.Secrets.SetGithubUser(login)
+	a.Secrets.SetGithubEmail(email)
+	return nil
+}
+
+func (a *OAuth) checkLekkoAuth(ctx context.Context) (username string, err error) {
+	req := connect.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
+	a.setLekkoHeaders(req)
+	resp, err := a.lekkoBFFClient.GetUserLoggedInInfo(ctx, req)
+	if err != nil {
+		return "", errors.Wrap(err, "check lekko auth")
+	}
+	return resp.Msg.GetUsername(), nil
+}
+
+func (a *OAuth) setLekkoHeaders(req connect.AnyRequest) {
+	if a.Secrets.HasLekkoToken() {
+		req.Header().Set("Authorization", fmt.Sprintf("Bearer %s", a.Secrets.GetLekkoToken()))
+		if lekkoTeam := a.Secrets.GetLekkoTeam(); len(lekkoTeam) > 0 {
+			req.Header().Set("X-Lekko-Team", a.Secrets.GetLekkoTeam())
+		}
+	}
+}
+
+func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, string, error) {
 	ghCli := gh.NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
 	user, err := ghCli.GetUser(ctx)
 	if err != nil {
@@ -126,8 +184,8 @@ func (a *AuthFS) GetGithubUserLogin(ctx context.Context) (string, string, error)
 	return user.GetLogin(), user.GetEmail(), nil
 }
 
-func (a *AuthFS) CheckGithubAuth(ctx context.Context) error {
-	if _, _, err := a.GetGithubUserLogin(ctx); err != nil {
+func (a *OAuth) checkGithubAuth(ctx context.Context) error {
+	if _, _, err := a.getGithubUserLogin(ctx); err != nil {
 		return err
 	}
 	return nil
