@@ -59,7 +59,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 		if err := r.setTrackingConfig(branchName); err != nil {
 			return "", errors.Wrap(err, "push to remote")
 		}
-		if _, err := r.Commit(ctx, ""); err != nil {
+		if _, err := r.Commit(ctx, title); err != nil {
 			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
@@ -68,7 +68,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", err
 		}
 		if !clean {
-			if _, err := r.Commit(ctx, ""); err != nil {
+			if _, err := r.Commit(ctx, title); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
 		}
