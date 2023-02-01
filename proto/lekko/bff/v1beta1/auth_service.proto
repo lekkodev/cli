@@ -78,11 +78,9 @@ message GetDeviceCodeResponse {
 }
 
 message GetAccessTokenRequest {
-  // OAuth 2.0 grant type
-  string grant_type = 1;
   // device code originally obtained from GetDeviceCode rpc
-  string device_code = 2;
-  string client_id = 3;
+  string device_code = 1;
+  string client_id = 2;
 }
 
 message GetAccessTokenResponse {

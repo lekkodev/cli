@@ -34,7 +34,6 @@ import (
 const (
 	// Lekko CLI client ID. Used for oauth with lekko.
 	LekkoClientID string = "v0.303976a05d96c02eee5b1a75a3923815d82599b0"
-	grantType     string = "urn:ietf:params:oauth:grant-type:device_code"
 )
 
 // DeviceFlow initiates the OAuth 2.0 device authorization
@@ -79,7 +78,6 @@ func (f *DeviceFlow) pollToken(ctx context.Context, deviceCode string, interval 
 
 	operation := func() error {
 		resp, err := f.lekkoAuthClient.GetAccessToken(ctx, connect.NewRequest(&bffv1beta1.GetAccessTokenRequest{
-			GrantType:  grantType,
 			DeviceCode: deviceCode,
 			ClientId:   LekkoClientID,
 		}))
