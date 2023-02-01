@@ -86,25 +86,16 @@ func (f *DeviceFlow) pollToken(ctx context.Context, deviceCode string, interval 
 		if err != nil {
 			return backoff.Permanent(errors.Wrap(err, "get access token"))
 		}
-		switch r := resp.Msg.Response.(type) {
-		case *bffv1beta1.GetAccessTokenResponse_Token_:
-			ret = &AuthCredentials{
-				Token: r.Token.AccessToken,
-				Team:  &r.Token.TeamName,
-			}
-			return nil
-		case *bffv1beta1.GetAccessTokenResponse_Error_:
-			switch r.Error.Code {
-			case bffv1beta1.GetAccessTokenResponse_ERROR_CODE_SLOW_DOWN:
-				fallthrough
-			case bffv1beta1.GetAccessTokenResponse_ERROR_CODE_AUTHORIZATION_PENDING:
-				return errors.Errorf("pending: %s", r.Error.GetDescription())
-			default:
-				return backoff.Permanent(errors.Errorf("%s: %s", r.Error.GetCode().String(), r.Error.GetDescription()))
-			}
-		default:
-			return backoff.Permanent(errors.Errorf("unrecognized option: %v", r))
+		if len(resp.Msg.GetAccessToken()) == 0 {
+			return fmt.Errorf("no access token yet, retry")
 		}
+		ret := &AuthCredentials{
+			Token: resp.Msg.GetAccessToken(),
+		}
+		if len(resp.Msg.GetTeamName()) > 0 {
+			ret.Team = &resp.Msg.TeamName
+		}
+		return nil
 	}
 
 	return ret, backoff.Retry(operation, backoff.NewConstantBackOff(interval))

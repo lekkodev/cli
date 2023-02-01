@@ -242,6 +242,9 @@ func (a *OAuth) setLekkoHeaders(req connect.AnyRequest) {
 			req.Header().Set("X-Lekko-Team", a.Secrets.GetLekkoTeam())
 		}
 	}
+	if a.Secrets.HasGithubToken() {
+		req.Header().Set("X-Github-Token", a.Secrets.GetGithubToken())
+	}
 }
 
 func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, string, error) {
