@@ -237,13 +237,16 @@ func (a *OAuth) checkLekkoAuth(ctx context.Context) (username string, err error)
 
 func (a *OAuth) setLekkoHeaders(req connect.AnyRequest) {
 	if a.Secrets.HasLekkoToken() {
-		req.Header().Set("Authorization", fmt.Sprintf("Bearer %s", a.Secrets.GetLekkoToken()))
+		req.Header().Set(AuthorizationHeaderKey, fmt.Sprintf("Bearer %s", a.Secrets.GetLekkoToken()))
 		if lekkoTeam := a.Secrets.GetLekkoTeam(); len(lekkoTeam) > 0 {
-			req.Header().Set("X-Lekko-Team", a.Secrets.GetLekkoTeam())
+			req.Header().Set(LekkoTeamHeaderKey, lekkoTeam)
 		}
 	}
 	if a.Secrets.HasGithubToken() {
-		req.Header().Set("X-Github-Token", a.Secrets.GetGithubToken())
+		req.Header().Set(GithubOAuthHeaderKey, a.Secrets.GetGithubToken())
+		if ghUser := a.Secrets.GetGithubUser(); len(ghUser) > 0 {
+			req.Header().Set(GithubUserHeaderKey, ghUser)
+		}
 	}
 }
 
