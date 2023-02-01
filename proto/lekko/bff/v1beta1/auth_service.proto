@@ -87,10 +87,9 @@ message GetAccessTokenResponse {
   // Long-lived access token that the client can provide
   // to the server in future requests to remain authenticated.
   string access_token = 1;
-  string token_type = 2; // e.g. 'Bearer'
   // Optional team name that the authenticated user is authorized
   // to operate on.
-  string team_name = 3;
+  string team_name = 2;
   // Optional future values:
   // google.protobuf.Timestamp expires_at
   // string refresh_token
