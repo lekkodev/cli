@@ -26,6 +26,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
+	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/oauth"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -66,6 +67,7 @@ func main() {
 	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
 
+	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -331,7 +333,7 @@ var statusCmd = &cobra.Command{
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		auth := oauth.NewOAuth()
-		auth.Status(cmd.Context())
+		auth.Status(cmd.Context(), false)
 		return nil
 	},
 }

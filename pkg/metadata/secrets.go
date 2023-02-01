@@ -199,7 +199,7 @@ func (s *secrets) SetLekkoToken(token string) {
 }
 
 func (s *secrets) HasLekkoToken() bool {
-	return s.GetLekkoToken() != ""
+	return len(s.GetLekkoToken()) > 0
 }
 
 func (s *secrets) GetLekkoTeam() string {
@@ -216,7 +216,7 @@ func (s *secrets) SetLekkoTeam(team string) {
 }
 
 func (s *secrets) HasGithubToken() bool {
-	return s.GetGithubToken() != ""
+	return len(s.GetGithubToken()) > 0
 }
 
 /*

@@ -20,9 +20,11 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
+	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -33,10 +35,15 @@ import (
 const (
 	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
+	// TODO: switch this once the feature is enabled
 	// lekkoURL string = "https://prod.api.lekko.dev"
 	lekkoURL string = "http://localhost:8080"
 )
 
+var errNoToken error = fmt.Errorf("no token")
+
+// OAuth is responsible for managing all of the authentication
+// credentials and settings on the CLI.
 type OAuth struct {
 	Secrets         metadata.Secrets
 	lekkoBFFClient  bffv1beta1connect.BFFServiceClient
@@ -59,10 +66,11 @@ func (a *OAuth) Close() {
 	}
 }
 
-// Login will attempt to read any existing github credentials from disk. If unavailable,
-// it will initiate oauth with github.
+// Login will attempt to read any existing lekko and github credentials
+// from disk. If either of those credentials don't exist, or are expired,
+// we will reinitiate oauath with that provider.
 func (a *OAuth) Login(ctx context.Context) error {
-	defer a.Status(ctx)
+	defer a.Status(ctx, true)
 	if err := a.loginLekko(ctx); err != nil {
 		return errors.Wrap(err, "login lekko")
 	}
@@ -73,36 +81,95 @@ func (a *OAuth) Login(ctx context.Context) error {
 }
 
 func maskToken(token string) string {
-	var ret []string
-	for range token {
-		ret = append(ret, "*")
+	if len(token) == 0 {
+		return ""
 	}
-	return strings.Join(ret, "")
+	parts := strings.Split(token, "_")
+	parts[len(parts)-1] = "**********"
+	return strings.Join(parts, "_")
 }
 
+// Logout implicitly expires the relevant credentials by
+// deleting them. TODO: explore explicitly expiring these
+// credentials with each provider.
 func (a *OAuth) Logout(ctx context.Context) error {
+	fmt.Println("Logging out...")
+	a.Secrets.SetLekkoUsername("")
+	a.Secrets.SetLekkoTeam("")
+	a.Secrets.SetLekkoToken("")
 	a.Secrets.SetGithubToken("")
 	a.Secrets.SetGithubUser("")
 	a.Secrets.SetGithubEmail("")
-	a.Status(ctx)
+	a.Status(ctx, true)
 	return nil
 }
 
-func (a *OAuth) Status(ctx context.Context) {
-	status := "Logged In"
-	if !a.Secrets.HasGithubToken() {
-		status = "Logged out"
+// Status reads existing credentials and prints them out in stdout.
+func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool) {
+	var lekkoAuthErr, ghAuthErr error
+	if !skipAuthCheck {
+		fmt.Println("Checking authentication status...")
 	}
-	if err := a.checkGithubAuth(ctx); err != nil {
-		status = fmt.Sprintf("Auth Failed: %v", err)
+	lekkoAuthErr, ghAuthErr = a.authStatus(ctx, skipAuthCheck)
+
+	authStatus := func(err error) string {
+		if err == nil {
+			return fmt.Sprintf("Authenticated %s✔%s", logging.Green, logging.Reset)
+		}
+		return fmt.Sprintf("Unauthenticated %s✖%s | %s", logging.Red, logging.Reset, err.Error())
 	}
-	fmt.Printf(
-		"Github Authentication Status: %s\n\tUser: %s\n\tEmail: %s\n\tToken: %s\n",
-		status,
-		a.Secrets.GetGithubUser(),
-		a.Secrets.GetGithubEmail(),
-		maskToken(a.Secrets.GetGithubToken()),
-	)
+
+	var teamSuffix string
+	if len(a.Secrets.GetLekkoTeam()) > 0 {
+		teamSuffix = fmt.Sprintf(", using team %s", logging.Bold+a.Secrets.GetLekkoTeam()+logging.Reset)
+	}
+
+	lines := []string{
+		fmt.Sprintf(logging.Bold+"lekko.com"+logging.Reset+" %s", authStatus(lekkoAuthErr)),
+	}
+	if lekkoAuthErr == nil {
+		lines = append(lines, fmt.Sprintf("  Logged in to Lekko as %s%s", logging.Bold+a.Secrets.GetLekkoUsername()+logging.Reset, teamSuffix))
+	}
+	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(a.Secrets.GetLekkoToken())))
+	lines = append(lines, fmt.Sprintf(logging.Bold+"github.com"+logging.Reset+" %s", authStatus(ghAuthErr)))
+	if ghAuthErr == nil {
+		lines = append(lines, fmt.Sprintf("  Logged in to GitHub as %s", logging.Bold+a.Secrets.GetGithubUser()+logging.Reset))
+	}
+	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(a.Secrets.GetGithubToken())))
+
+	fmt.Println(strings.Join(lines, "\n"))
+}
+
+func (a *OAuth) authStatus(ctx context.Context, skipAuthCheck bool) (lekkoAuthErr error, ghAuthErr error) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if a.Secrets.HasLekkoToken() {
+			if !skipAuthCheck {
+				if _, err := a.checkLekkoAuth(ctx); err != nil {
+					lekkoAuthErr = err
+				}
+			}
+		} else {
+			lekkoAuthErr = errNoToken
+		}
+	}()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if a.Secrets.HasGithubToken() {
+			if !skipAuthCheck {
+				if err := a.checkGithubAuth(ctx); err != nil {
+					ghAuthErr = err
+				}
+			}
+		} else {
+			ghAuthErr = errNoToken
+		}
+	}()
+	wg.Wait()
+	return
 }
 
 func (a *OAuth) loginLekko(ctx context.Context) error {
@@ -113,12 +180,15 @@ func (a *OAuth) loginLekko(ctx context.Context) error {
 		}
 		log.Printf("Existing lekko token auth: %v\n", err)
 	}
+	fmt.Println("Initiating OAuth for Lekko")
 	authCreds, err := NewDeviceFlow(lekkoURL).Authorize(ctx)
 	if err != nil {
 		return errors.Wrap(err, "lekko oauth authorize")
 	}
 	a.Secrets.SetLekkoToken(authCreds.Token)
-	a.Secrets.SetLekkoTeam(*authCreds.Team)
+	if authCreds.Team != nil {
+		a.Secrets.SetLekkoTeam(*authCreds.Team)
+	}
 	username, err := a.checkLekkoAuth(ctx)
 	if err != nil {
 		return errors.Wrap(err, "check lekko auth after login")
@@ -135,7 +205,9 @@ func (a *OAuth) loginGithub(ctx context.Context) error {
 		}
 		log.Printf("Existing gh token expired: %v\n", err)
 	}
+	fmt.Println("Initiating OAuth for GitHub")
 	flow := &ghauth.Flow{
+		Host:     ghauth.GitHubHost("https://github.com"),
 		ClientID: lekkoGHAppClientID,
 		Scopes:   []string{"user", "repo"},
 	}

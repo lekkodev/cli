@@ -94,7 +94,6 @@ func NewLocal(path string) (*Repo, error) {
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
-	cr.initColors()
 
 	return cr, nil
 }
