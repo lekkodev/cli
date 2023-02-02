@@ -63,11 +63,9 @@ type Repo struct {
 
 // AuthProvider provides access to basic auth credentials. Depending on the
 // context (local vs ephemeral), credentials may be provided in different ways,
-// thus the interface. Note that email is only used for additional metadata
-// on commits, and is not strictly necessary.
+// thus the interface.
 type AuthProvider interface {
 	GetUsername() string
-	GetEmail() string
 	GetToken() string
 }
 
@@ -298,9 +296,8 @@ func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
 	hash, err := r.Wt.Commit(message, &git.CommitOptions{
 		All: true,
 		Author: &object.Signature{
-			Name:  r.Auth.GetUsername(),
-			Email: r.Auth.GetEmail(),
-			When:  time.Now(),
+			Name: r.Auth.GetUsername(),
+			When: time.Now(),
 		},
 	})
 	if err != nil {

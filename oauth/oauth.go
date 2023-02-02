@@ -99,7 +99,6 @@ func (a *OAuth) Logout(ctx context.Context) error {
 	a.Secrets.SetLekkoToken("")
 	a.Secrets.SetGithubToken("")
 	a.Secrets.SetGithubUser("")
-	a.Secrets.SetGithubEmail("")
 	a.Status(ctx, true)
 	return nil
 }
@@ -216,12 +215,11 @@ func (a *OAuth) loginGithub(ctx context.Context) error {
 		return errors.Wrap(err, "gh oauth flow")
 	}
 	a.Secrets.SetGithubToken(token.Token)
-	login, email, err := a.getGithubUserLogin(ctx)
+	login, err := a.getGithubUserLogin(ctx)
 	if err != nil {
 		return err
 	}
 	a.Secrets.SetGithubUser(login)
-	a.Secrets.SetGithubEmail(email)
 	return nil
 }
 
@@ -250,20 +248,17 @@ func (a *OAuth) setLekkoHeaders(req connect.AnyRequest) {
 	}
 }
 
-func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, string, error) {
+func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, error) {
 	ghCli := gh.NewGithubClientFromToken(ctx, a.Secrets.GetGithubToken())
 	user, err := ghCli.GetUser(ctx)
 	if err != nil {
-		return "", "", errors.Wrap(err, "check auth")
+		return "", errors.Wrap(err, "check auth")
 	}
-	// Note: user.Email is only set if the user has allowed their email
-	// address to be publically available on github. So it may not be populated.
-	// If it is there, we will use it as part of the commit message.
-	return user.GetLogin(), user.GetEmail(), nil
+	return user.GetLogin(), nil
 }
 
 func (a *OAuth) checkGithubAuth(ctx context.Context) error {
-	if _, _, err := a.getGithubUserLogin(ctx); err != nil {
+	if _, err := a.getGithubUserLogin(ctx); err != nil {
 		return err
 	}
 	return nil

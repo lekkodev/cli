@@ -42,8 +42,6 @@ type Secrets interface {
 	SetGithubToken(token string)
 	GetGithubUser() string
 	SetGithubUser(user string)
-	GetGithubEmail() string
-	SetGithubEmail(email string)
 	HasGithubToken() bool
 	Close() error
 }
@@ -159,19 +157,6 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
-func (s *secrets) GetGithubEmail() string {
-	s.RLock()
-	defer s.RUnlock()
-	return s.GithubEmail
-}
-
-func (s *secrets) SetGithubEmail(email string) {
-	s.Lock()
-	defer s.Unlock()
-	s.changed = true
-	s.GithubEmail = email
-}
-
 func (s *secrets) GetLekkoUsername() string {
 	s.RLock()
 	defer s.RUnlock()
@@ -231,9 +216,6 @@ func (s *secrets) GetToken() string {
 
 func (s *secrets) GetUsername() string {
 	return s.GetGithubUser()
-}
-func (s *secrets) GetEmail() string {
-	return s.GetGithubEmail()
 }
 
 func (s *secrets) filename() string {
