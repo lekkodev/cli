@@ -52,7 +52,8 @@ type secrets struct {
 	LekkoTeam     string `json:"lekko_team,omitempty" yaml:"lekko_team,omitempty"`
 	GithubUser    string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
 	GithubToken   string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
-	GithubEmail   string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
+	// Deprecated
+	GithubEmail string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
 
 	homeDir      string
 	changed      bool
