@@ -35,9 +35,6 @@ import (
 const (
 	// The client ID is public knowledge, so this is safe to commit in version control.
 	lekkoGHAppClientID string = "Iv1.031cf53c3284be35"
-	// TODO: switch this once the feature is enabled
-	// lekkoURL string = "https://prod.api.lekko.dev"
-	lekkoURL string = "http://localhost:8080"
 )
 
 var errNoToken error = fmt.Errorf("no token")
@@ -55,8 +52,8 @@ type OAuth struct {
 func NewOAuth() *OAuth {
 	return &OAuth{
 		Secrets:         metadata.NewSecretsOrFail(),
-		lekkoBFFClient:  bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, lekkoURL),
-		lekkoAuthClient: bffv1beta1connect.NewAuthServiceClient(http.DefaultClient, lekkoURL),
+		lekkoBFFClient:  bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, LekkoURL),
+		lekkoAuthClient: bffv1beta1connect.NewAuthServiceClient(http.DefaultClient, LekkoURL),
 	}
 }
 
@@ -180,7 +177,7 @@ func (a *OAuth) loginLekko(ctx context.Context) error {
 		log.Printf("Existing lekko token auth: %v\n", err)
 	}
 	fmt.Println("Initiating OAuth for Lekko")
-	authCreds, err := NewDeviceFlow(lekkoURL).Authorize(ctx)
+	authCreds, err := NewDeviceFlow(LekkoURL).Authorize(ctx)
 	if err != nil {
 		return errors.Wrap(err, "lekko oauth authorize")
 	}

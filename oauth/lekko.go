@@ -39,6 +39,7 @@ const (
 	GithubOAuthHeaderKey   string = "X-Github-Token"
 	GithubUserHeaderKey    string = "X-Github-User"
 	AuthorizationHeaderKey string = "Authorization"
+	LekkoURL               string = "https://prod.api.lekko.dev"
 )
 
 // DeviceFlow initiates the OAuth 2.0 device authorization
