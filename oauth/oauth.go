@@ -258,8 +258,6 @@ func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, error) {
 }
 
 func (a *OAuth) checkGithubAuth(ctx context.Context) error {
-	if _, err := a.getGithubUserLogin(ctx); err != nil {
-		return err
-	}
-	return nil
+	_, err := a.getGithubUserLogin(ctx)
+	return err
 }
