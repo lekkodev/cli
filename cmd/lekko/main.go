@@ -77,7 +77,7 @@ func main() {
 var rootCmd = &cobra.Command{
 	Use:           "lekko",
 	Short:         "lekko - dynamic configuration helper",
-	Version:       "v0.1.7", // TODO: autoupdate this when releasing a new tag
+	Version:       "v0.1.8", // TODO: autoupdate this when releasing a new tag
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
