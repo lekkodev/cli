@@ -32,6 +32,7 @@ service BFFService {
   // Retrieves an oauth access token for the user, and stores in in the database
   rpc OAuthUser(OAuthUserRequest) returns (OAuthUserResponse) {}
   rpc GetUserOAuth(GetUserOAuthRequest) returns (GetUserOAuthResponse) {}
+  rpc AuthorizeDevice(AuthorizeDeviceRequest) returns (AuthorizeDeviceResponse) {}
 
   // Team management
 
@@ -240,6 +241,12 @@ message GetUserOAuthRequest {}
 message GetUserOAuthResponse {
   bool authenticated = 1;
 }
+
+message AuthorizeDeviceRequest {
+  string user_code = 1;
+}
+
+message AuthorizeDeviceResponse {}
 
 enum ChecksState {
   CHECKS_STATE_UNSPECIFIED = 0;

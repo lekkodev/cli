@@ -31,19 +31,28 @@ const AuthenticateGituhubMessage = "User is not authenticated.\nRun 'lekko auth 
 // the github auth token. The secrets are backed by the filesystem under the user's home
 // directory, so these secrets don't need to be fetched as part of every cli command.
 type Secrets interface {
+	GetLekkoUsername() string
+	SetLekkoUsername(username string)
+	GetLekkoToken() string
+	SetLekkoToken(token string)
+	HasLekkoToken() bool
+	GetLekkoTeam() string
+	SetLekkoTeam(team string)
 	GetGithubToken() string
 	SetGithubToken(token string)
 	GetGithubUser() string
 	SetGithubUser(user string)
-	GetGithubEmail() string
-	SetGithubEmail(email string)
 	HasGithubToken() bool
 	Close() error
 }
 
 type secrets struct {
-	GithubUser  string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
-	GithubToken string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
+	LekkoUsername string `json:"lekko_username,omitempty" yaml:"lekko_username,omitempty"`
+	LekkoToken    string `json:"lekko_token,omitempty" yaml:"lekko_token,omitempty"`
+	LekkoTeam     string `json:"lekko_team,omitempty" yaml:"lekko_team,omitempty"`
+	GithubUser    string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
+	GithubToken   string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
+	// Deprecated
 	GithubEmail string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
 
 	homeDir      string
@@ -149,21 +158,51 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
-func (s *secrets) GetGithubEmail() string {
+func (s *secrets) GetLekkoUsername() string {
 	s.RLock()
 	defer s.RUnlock()
-	return s.GithubEmail
+	return s.LekkoUsername
 }
 
-func (s *secrets) SetGithubEmail(email string) {
+func (s *secrets) SetLekkoUsername(username string) {
 	s.Lock()
 	defer s.Unlock()
 	s.changed = true
-	s.GithubEmail = email
+	s.LekkoUsername = username
+}
+
+func (s *secrets) GetLekkoToken() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.LekkoToken
+}
+
+func (s *secrets) SetLekkoToken(token string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.LekkoToken = token
+}
+
+func (s *secrets) HasLekkoToken() bool {
+	return len(s.GetLekkoToken()) > 0
+}
+
+func (s *secrets) GetLekkoTeam() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.LekkoTeam
+}
+
+func (s *secrets) SetLekkoTeam(team string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.LekkoTeam = team
 }
 
 func (s *secrets) HasGithubToken() bool {
-	return s.GetGithubToken() != ""
+	return len(s.GetGithubToken()) > 0
 }
 
 /*
@@ -178,9 +217,6 @@ func (s *secrets) GetToken() string {
 
 func (s *secrets) GetUsername() string {
 	return s.GetGithubUser()
-}
-func (s *secrets) GetEmail() string {
-	return s.GetGithubEmail()
 }
 
 func (s *secrets) filename() string {

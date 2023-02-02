@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
@@ -139,9 +140,9 @@ type FeatureCompilationResult struct {
 func (fcr *FeatureCompilationResult) SummaryString() string {
 	stylizeStr := func(s string, pass bool) string {
 		if pass {
-			return fmt.Sprintf("%s%s %s%s", green, s, "✔", reset)
+			return fmt.Sprintf("%s%s %s%s", logging.Green, s, "✔", logging.Reset)
 		}
-		return fmt.Sprintf("%s%s %s%s", red, s, "✖", reset)
+		return fmt.Sprintf("%s%s %s%s", logging.Red, s, "✖", logging.Reset)
 	}
 	var subs []string
 	if fcr.CompilationError != nil {
@@ -167,7 +168,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 		}
 	}
-	return fmt.Sprintf("%s[%s/%s]%s %s", bold, fcr.NamespaceName, fcr.FeatureName, reset, strings.Join(subs, " | "))
+	return fmt.Sprintf("%s[%s/%s]%s %s", logging.Bold, fcr.NamespaceName, fcr.FeatureName, logging.Reset, strings.Join(subs, " | "))
 }
 
 func (fcr *FeatureCompilationResult) Err() error {
@@ -268,21 +269,21 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 			if fcr.Err() == nil {
 				continue
 			}
-			r.Logf(bold+"[%s/%s]\n"+reset, fcr.NamespaceName, fcr.FeatureName)
+			r.Logf(logging.Bold+"[%s/%s]\n"+logging.Reset, fcr.NamespaceName, fcr.FeatureName)
 			if fcr.CompilationError != nil {
-				r.Logf(red+"→"+reset+" %v\n", fcr.CompilationError)
+				r.Logf(logging.Red+"→"+logging.Reset+" %v\n", fcr.CompilationError)
 			}
 			if fcr.CompiledFeature == nil {
 				continue
 			}
 			for _, res := range fcr.CompiledFeature.ValidatorResults {
 				if !res.Passed() {
-					r.Logf(red+"→"+reset+" %s\n", res.DebugString())
+					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
 				}
 			}
 			for _, res := range fcr.CompiledFeature.TestResults {
 				if !res.Passed() {
-					r.Logf(red+"→"+reset+" %s\n", res.DebugString())
+					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
 				}
 			}
 		}

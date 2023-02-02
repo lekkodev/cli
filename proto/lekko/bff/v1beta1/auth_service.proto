@@ -16,6 +16,8 @@ syntax = "proto3";
 
 package lekko.bff.v1beta1;
 
+import "google/protobuf/timestamp.proto";
+
 // Services FE Auth.
 service AuthService {
   // We will return required auth info in a cookie
@@ -25,6 +27,16 @@ service AuthService {
   // Returns a response indicating if the account already
   // existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
+
+  /* The following rpcs implement part of the OAuth 2.0 Device Authorization Grant
+     * https://www.ietf.org/rfc/rfc8628.html
+  */
+  // An rpc that a 3rd party device makes to our backend to obtain device and user
+  // codes to complete device oauth.
+  rpc GetDeviceCode(GetDeviceCodeRequest) returns (GetDeviceCodeResponse) {}
+  // An rpc that a 3rd party device polls to obtain an access token once
+  // the user has completed authentication through a browser-based user agent.
+  rpc GetAccessToken(GetAccessTokenRequest) returns (GetAccessTokenResponse) {}
 }
 
 message LoginRequest {
@@ -41,4 +53,45 @@ message RegisterUserRequest {
 
 message RegisterUserResponse {
   bool account_existed = 1;
+}
+
+message GetDeviceCodeRequest {
+  // The identifier given to the client (in our case, a hardcoded id shipped with lekko cli)
+  string client_id = 1;
+  // Note: in the future, we may introduce an additional param 'repeated string scopes'.
+}
+
+message GetDeviceCodeResponse {
+  // Server-generated code that identifies the device making the request
+  string device_code = 1;
+  // Server-generated user code that must be entered at the verification uri
+  string user_code = 2;
+  // URI to display to the user where the user will be able to complete auth.
+  string verification_uri = 3;
+  // ${verification_uri}?user_code=${user_code}
+  string verification_uri_complete = 4;
+  // Time at which the device and user codes expire.
+  google.protobuf.Timestamp expires_at = 5;
+  // Number of seconds to wait between subsequent polls to
+  // GetAccessToken.
+  int64 interval_s = 6;
+}
+
+message GetAccessTokenRequest {
+  // device code originally obtained from GetDeviceCode rpc
+  string device_code = 1;
+  string client_id = 2;
+}
+
+message GetAccessTokenResponse {
+  // Long-lived access token that the client can provide
+  // to the server in future requests to remain authenticated.
+  string access_token = 1;
+  // Optional team name that the authenticated user is authorized
+  // to operate on.
+  string team_name = 2;
+  // Optional future values:
+  // google.protobuf.Timestamp expires_at
+  // string refresh_token
+  // repeated string scopes
 }

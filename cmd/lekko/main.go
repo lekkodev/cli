@@ -26,6 +26,8 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
+	"github.com/lekkodev/cli/logging"
+	"github.com/lekkodev/cli/oauth"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
@@ -65,6 +67,7 @@ func main() {
 	experimentalCmd.AddCommand(cleanupCmd)
 	rootCmd.AddCommand(experimentalCmd)
 
+	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		log.Println(err)
 		os.Exit(1)
@@ -309,7 +312,7 @@ var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "authenticate with github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
+		auth := oauth.NewOAuth()
 		defer auth.Close()
 		return auth.Login(cmd.Context())
 	},
@@ -319,7 +322,7 @@ var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "log out of github",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
+		auth := oauth.NewOAuth()
 		defer auth.Close()
 		return auth.Logout(cmd.Context())
 	},
@@ -329,8 +332,8 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := gh.NewAuthFS()
-		auth.Status(cmd.Context())
+		auth := oauth.NewOAuth()
+		auth.Status(cmd.Context(), false)
 		return nil
 	},
 }

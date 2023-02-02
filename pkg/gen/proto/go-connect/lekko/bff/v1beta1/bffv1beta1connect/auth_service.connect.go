@@ -48,6 +48,12 @@ type AuthServiceClient interface {
 	// Returns a response indicating if the account already
 	// existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
+	// An rpc that a 3rd party device makes to our backend to obtain device and user
+	// codes to complete device oauth.
+	GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error)
+	// An rpc that a 3rd party device polls to obtain an access token once
+	// the user has completed authentication through a browser-based user agent.
+	GetAccessToken(context.Context, *connect_go.Request[v1beta1.GetAccessTokenRequest]) (*connect_go.Response[v1beta1.GetAccessTokenResponse], error)
 }
 
 // NewAuthServiceClient constructs a client for the lekko.bff.v1beta1.AuthService service. By
@@ -70,13 +76,25 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 			baseURL+"/lekko.bff.v1beta1.AuthService/RegisterUser",
 			opts...,
 		),
+		getDeviceCode: connect_go.NewClient[v1beta1.GetDeviceCodeRequest, v1beta1.GetDeviceCodeResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.AuthService/GetDeviceCode",
+			opts...,
+		),
+		getAccessToken: connect_go.NewClient[v1beta1.GetAccessTokenRequest, v1beta1.GetAccessTokenResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.AuthService/GetAccessToken",
+			opts...,
+		),
 	}
 }
 
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
-	login        *connect_go.Client[v1beta1.LoginRequest, v1beta1.LoginResponse]
-	registerUser *connect_go.Client[v1beta1.RegisterUserRequest, v1beta1.RegisterUserResponse]
+	login          *connect_go.Client[v1beta1.LoginRequest, v1beta1.LoginResponse]
+	registerUser   *connect_go.Client[v1beta1.RegisterUserRequest, v1beta1.RegisterUserResponse]
+	getDeviceCode  *connect_go.Client[v1beta1.GetDeviceCodeRequest, v1beta1.GetDeviceCodeResponse]
+	getAccessToken *connect_go.Client[v1beta1.GetAccessTokenRequest, v1beta1.GetAccessTokenResponse]
 }
 
 // Login calls lekko.bff.v1beta1.AuthService.Login.
@@ -89,6 +107,16 @@ func (c *authServiceClient) RegisterUser(ctx context.Context, req *connect_go.Re
 	return c.registerUser.CallUnary(ctx, req)
 }
 
+// GetDeviceCode calls lekko.bff.v1beta1.AuthService.GetDeviceCode.
+func (c *authServiceClient) GetDeviceCode(ctx context.Context, req *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error) {
+	return c.getDeviceCode.CallUnary(ctx, req)
+}
+
+// GetAccessToken calls lekko.bff.v1beta1.AuthService.GetAccessToken.
+func (c *authServiceClient) GetAccessToken(ctx context.Context, req *connect_go.Request[v1beta1.GetAccessTokenRequest]) (*connect_go.Response[v1beta1.GetAccessTokenResponse], error) {
+	return c.getAccessToken.CallUnary(ctx, req)
+}
+
 // AuthServiceHandler is an implementation of the lekko.bff.v1beta1.AuthService service.
 type AuthServiceHandler interface {
 	// We will return required auth info in a cookie
@@ -98,6 +126,12 @@ type AuthServiceHandler interface {
 	// Returns a response indicating if the account already
 	// existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
+	// An rpc that a 3rd party device makes to our backend to obtain device and user
+	// codes to complete device oauth.
+	GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error)
+	// An rpc that a 3rd party device polls to obtain an access token once
+	// the user has completed authentication through a browser-based user agent.
+	GetAccessToken(context.Context, *connect_go.Request[v1beta1.GetAccessTokenRequest]) (*connect_go.Response[v1beta1.GetAccessTokenResponse], error)
 }
 
 // NewAuthServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -117,6 +151,16 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect_go.HandlerOpt
 		svc.RegisterUser,
 		opts...,
 	))
+	mux.Handle("/lekko.bff.v1beta1.AuthService/GetDeviceCode", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.AuthService/GetDeviceCode",
+		svc.GetDeviceCode,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.AuthService/GetAccessToken", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.AuthService/GetAccessToken",
+		svc.GetAccessToken,
+		opts...,
+	))
 	return "/lekko.bff.v1beta1.AuthService/", mux
 }
 
@@ -129,4 +173,12 @@ func (UnimplementedAuthServiceHandler) Login(context.Context, *connect_go.Reques
 
 func (UnimplementedAuthServiceHandler) RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.RegisterUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.GetDeviceCode is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) GetAccessToken(context.Context, *connect_go.Request[v1beta1.GetAccessTokenRequest]) (*connect_go.Response[v1beta1.GetAccessTokenResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.GetAccessToken is not implemented"))
 }

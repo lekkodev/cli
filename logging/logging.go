@@ -12,15 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package repo
+package logging
 
-import (
-	"fmt"
-)
+import "runtime"
 
-func (r *Repo) Logf(format string, a ...any) {
-	if !r.loggingEnabled {
-		return
+// Source: https://twin.sh/articles/35/how-to-add-colors-to-your-console-terminal-output-in-go
+
+var Reset = "\033[0m"
+var Red = "\033[31m"
+var Green = "\033[32m"
+var Bold = "\033[1m"
+
+func InitColors() {
+	if runtime.GOOS == "windows" {
+		Reset = ""
+		Red = ""
+		Green = ""
+		Bold = ""
 	}
-	fmt.Printf(format, a...)
 }
