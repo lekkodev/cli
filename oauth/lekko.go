@@ -70,7 +70,7 @@ func (f *DeviceFlow) Authorize(ctx context.Context) (*AuthCredentials, error) {
 	}
 	// open browser
 	fmt.Printf("First, copy your one-time code: %s\n", resp.Msg.UserCode)
-	fmt.Print("Then press [Enter] to continue in the web browser... ")
+	fmt.Printf("Then press [Enter] to continue in the web browser [%s]... ", resp.Msg.GetVerificationUriComplete())
 	_ = waitForEnter(os.Stdin)
 	if err := browser.OpenURL(resp.Msg.GetVerificationUriComplete()); err != nil {
 		return nil, errors.Wrapf(err, "error opening the web browser at url %s", resp.Msg.GetVerificationUriComplete())
