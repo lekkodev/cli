@@ -52,8 +52,8 @@ func main() {
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(restoreCmd())
 	// auth
-	authCmd.AddCommand(loginCmd)
-	authCmd.AddCommand(logoutCmd)
+	authCmd.AddCommand(loginCmd())
+	authCmd.AddCommand(logoutCmd())
 	authCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(authCmd)
 	// k8s
@@ -69,7 +69,7 @@ func main() {
 
 	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
-		log.Println(err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
 }
@@ -77,7 +77,7 @@ func main() {
 var rootCmd = &cobra.Command{
 	Use:           "lekko",
 	Short:         "lekko - dynamic configuration helper",
-	Version:       "v0.1.8", // TODO: autoupdate this when releasing a new tag
+	Version:       "v0.2.0", // TODO: autoupdate this when releasing a new tag
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }
@@ -305,27 +305,62 @@ var mergeCmd = &cobra.Command{
 
 var authCmd = &cobra.Command{
 	Use:   "auth",
-	Short: "authenticates lekko with github",
+	Short: "authenticates lekko cli",
 }
 
-var loginCmd = &cobra.Command{
-	Use:   "login",
-	Short: "authenticate with github",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewOAuth()
-		defer auth.Close()
-		return auth.Login(cmd.Context())
-	},
+func loginCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "login",
+		Short: "authenticate with lekko and github, if unauthenticated",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			auth := oauth.NewOAuth()
+			defer auth.Close()
+			return auth.Login(cmd.Context())
+		},
+	}
 }
 
-var logoutCmd = &cobra.Command{
-	Use:   "logout",
-	Short: "log out of github",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewOAuth()
-		defer auth.Close()
-		return auth.Logout(cmd.Context())
-	},
+type provider string
+
+const (
+	providerLekko  provider = "lekko"
+	providerGithub provider = "github"
+)
+
+func (p *provider) String() string {
+	return string(*p)
+}
+
+func (p *provider) Set(v string) error {
+	switch v {
+	case string(providerLekko), string(providerGithub):
+		*p = provider(v)
+	default:
+		return errors.New(`must be one of "lekko" or "github"`)
+	}
+	return nil
+}
+
+func (p *provider) Type() string {
+	return "provider"
+}
+
+func logoutCmd() *cobra.Command {
+	var p provider
+	cmd := &cobra.Command{
+		Use:   "logout",
+		Short: "log out of lekko or github",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(string(p)) == 0 {
+				return errors.Errorf("provider must be specified")
+			}
+			auth := oauth.NewOAuth()
+			defer auth.Close()
+			return auth.Logout(cmd.Context(), string(p))
+		},
+	}
+	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github.'")
+	return cmd
 }
 
 var statusCmd = &cobra.Command{

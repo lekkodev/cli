@@ -93,7 +93,7 @@ func (f *DeviceFlow) pollToken(ctx context.Context, deviceCode string, interval 
 		if len(resp.Msg.GetAccessToken()) == 0 {
 			return fmt.Errorf("no access token yet, retry")
 		}
-		ret := &AuthCredentials{
+		ret = &AuthCredentials{
 			Token: resp.Msg.GetAccessToken(),
 		}
 		if len(resp.Msg.GetTeamName()) > 0 {
