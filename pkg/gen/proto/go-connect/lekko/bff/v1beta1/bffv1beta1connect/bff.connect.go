@@ -60,6 +60,8 @@ type BFFServiceClient interface {
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
 	// Get info about a single PR for the provided branch
 	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
@@ -363,6 +365,8 @@ func (c *bFFServiceClient) GetFeature(ctx context.Context, req *connect_go.Reque
 }
 
 // GetPRInfo calls lekko.bff.v1beta1.BFFService.GetPRInfo.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) GetPRInfo(ctx context.Context, req *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
 	return c.getPRInfo.CallUnary(ctx, req)
 }
@@ -455,6 +459,8 @@ type BFFServiceHandler interface {
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
 	// Get info about a single PR for the provided branch
 	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
