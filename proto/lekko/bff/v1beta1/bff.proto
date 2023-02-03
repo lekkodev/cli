@@ -56,8 +56,14 @@ service BFFService {
   rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
 
+  // Get info about multiple PRs in a repository
   rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {}
-  rpc MergePR(MergePRRequest) returns (MergePRResponse) {}
+  // Get info about a single PR for the provided branch
+  rpc GetPR(GetPRRequest) returns (GetPRResponse) {}
+  // Deprecated, use Merge instead
+  rpc MergePR(MergePRRequest) returns (MergePRResponse) {
+    option deprecated = true;
+  }
 
   // Branch management
 
@@ -271,6 +277,14 @@ message GetPRInfoRequest {
 
 message GetPRInfoResponse {
   repeated PullRequest pull_requests = 1;
+}
+
+message GetPRRequest {
+  BranchKey branch_key = 2;
+}
+
+message GetPRResponse {
+  PullRequest pull_request = 1;
 }
 
 message MergePRRequest {
