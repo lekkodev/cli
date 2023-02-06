@@ -56,8 +56,19 @@ service BFFService {
   rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
 
-  rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {}
-  rpc MergePR(MergePRRequest) returns (MergePRResponse) {}
+  // Get info about multiple PRs in a repository
+  rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
+    // use GetPR to get info about a single PR.
+    // To get info about multiple PRs, first get their branch info
+    // with ListBranches.
+    option deprecated = true;
+  }
+  // Get info about a single PR for the provided branch
+  rpc GetPR(GetPRRequest) returns (GetPRResponse) {}
+  // Deprecated, use Merge instead
+  rpc MergePR(MergePRRequest) returns (MergePRResponse) {
+    option deprecated = true;
+  }
 
   // Branch management
 
@@ -262,14 +273,44 @@ enum ChecksState {
   CHECKS_STATE_FAILED = 3;
 }
 
+// The result of a single github CI check run.
+// There are potentially many check runs associated with
+// a single git sha.
+message CheckRun {
+  string name = 1;
+  string status = 2;
+  string conclusion = 3;
+  string url = 4;
+  google.protobuf.Timestamp started_at = 5;
+  google.protobuf.Timestamp completed_at = 6;
+}
+
 message PullRequest {
+  message Review {
+    // user who performed the review
+    string user = 1;
+    google.protobuf.Timestamp submitted_at = 2;
+    string state = 3;
+    // review author's association with the repo.
+    // https://docs.github.com/en/graphql/reference/enums#commentauthorassociation
+    string author_association = 4;
+  }
+
   string title = 1;
   string url = 2;
   int64 number = 3;
   string state = 4;
-  bool approved = 5;
-  ChecksState checks_state = 6;
-  google.protobuf.Timestamp pushed_at = 7;
+  bool approved = 5 [deprecated = true];
+  ChecksState checks_state = 6 [deprecated = true];
+  google.protobuf.Timestamp pushed_at = 7 [deprecated = true];
+  repeated Review reviews = 8;
+  repeated CheckRun check_runs = 9;
+  // the git ref (e.g. my-feature) and git sha of the
+  // head and base of this PR.
+  string head_ref = 10;
+  string head_sha = 11;
+  string base_ref = 12;
+  string base_sha = 13;
 }
 
 message GetPRInfoRequest {
@@ -278,6 +319,14 @@ message GetPRInfoRequest {
 
 message GetPRInfoResponse {
   repeated PullRequest pull_requests = 1;
+}
+
+message GetPRRequest {
+  BranchKey branch_key = 1;
+}
+
+message GetPRResponse {
+  PullRequest pull_request = 1;
 }
 
 message MergePRRequest {

@@ -61,7 +61,15 @@ type BFFServiceClient interface {
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
+	// Get info about a single PR for the provided branch
+	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
+	// Deprecated, use Merge instead
+	//
+	// Deprecated: do not use.
 	MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error)
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
@@ -181,6 +189,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetPRInfo",
 			opts...,
 		),
+		getPR: connect_go.NewClient[v1beta1.GetPRRequest, v1beta1.GetPRResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/GetPR",
+			opts...,
+		),
 		mergePR: connect_go.NewClient[v1beta1.MergePRRequest, v1beta1.MergePRResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/MergePR",
@@ -264,6 +277,7 @@ type bFFServiceClient struct {
 	listFeatures             *connect_go.Client[v1beta1.ListFeaturesRequest, v1beta1.ListFeaturesResponse]
 	getFeature               *connect_go.Client[v1beta1.GetFeatureRequest, v1beta1.GetFeatureResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
+	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
 	mergePR                  *connect_go.Client[v1beta1.MergePRRequest, v1beta1.MergePRResponse]
 	createBranch             *connect_go.Client[v1beta1.CreateBranchRequest, v1beta1.CreateBranchResponse]
 	listBranches             *connect_go.Client[v1beta1.ListBranchesRequest, v1beta1.ListBranchesResponse]
@@ -364,11 +378,20 @@ func (c *bFFServiceClient) GetFeature(ctx context.Context, req *connect_go.Reque
 }
 
 // GetPRInfo calls lekko.bff.v1beta1.BFFService.GetPRInfo.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) GetPRInfo(ctx context.Context, req *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
 	return c.getPRInfo.CallUnary(ctx, req)
 }
 
+// GetPR calls lekko.bff.v1beta1.BFFService.GetPR.
+func (c *bFFServiceClient) GetPR(ctx context.Context, req *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error) {
+	return c.getPR.CallUnary(ctx, req)
+}
+
 // MergePR calls lekko.bff.v1beta1.BFFService.MergePR.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) MergePR(ctx context.Context, req *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error) {
 	return c.mergePR.CallUnary(ctx, req)
 }
@@ -450,7 +473,15 @@ type BFFServiceHandler interface {
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
+	// Get info about a single PR for the provided branch
+	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
+	// Deprecated, use Merge instead
+	//
+	// Deprecated: do not use.
 	MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error)
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
@@ -565,6 +596,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetPRInfo", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/GetPRInfo",
 		svc.GetPRInfo,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/GetPR", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/GetPR",
+		svc.GetPR,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/MergePR", connect_go.NewUnaryHandler(
@@ -703,6 +739,10 @@ func (UnimplementedBFFServiceHandler) GetFeature(context.Context, *connect_go.Re
 
 func (UnimplementedBFFServiceHandler) GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetPRInfo is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetPR is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error) {
