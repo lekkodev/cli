@@ -27,8 +27,8 @@ import "lekko/feature/v1beta1/feature.proto";
 // does not need to be passed into the RPCs.
 service BFFService {
   // User management
-
   rpc GetUserLoggedInInfo(GetUserLoggedInInfoRequest) returns (GetUserLoggedInInfoResponse) {}
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {}
   // Retrieves an oauth access token for the user, and stores in in the database
   rpc OAuthUser(OAuthUserRequest) returns (OAuthUserResponse) {}
   rpc GetUserOAuth(GetUserOAuthRequest) returns (GetUserOAuthResponse) {}
@@ -97,6 +97,13 @@ message GetUserLoggedInInfoResponse {
   string username = 1;
   string team_name = 2;
 }
+
+message ChangePasswordRequest {
+  string old_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
 
 message CreateTeamRequest {
   string name = 1;
@@ -315,7 +322,7 @@ message GetPRInfoResponse {
 }
 
 message GetPRRequest {
-  BranchKey branch_key = 2;
+  BranchKey branch_key = 1;
 }
 
 message GetPRResponse {

@@ -41,7 +41,9 @@ const (
 
 // BFFServiceClient is a client for the lekko.bff.v1beta1.BFFService service.
 type BFFServiceClient interface {
+	// User management
 	GetUserLoggedInInfo(context.Context, *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error)
+	ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error)
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
@@ -100,6 +102,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		getUserLoggedInInfo: connect_go.NewClient[v1beta1.GetUserLoggedInInfoRequest, v1beta1.GetUserLoggedInInfoResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo",
+			opts...,
+		),
+		changePassword: connect_go.NewClient[v1beta1.ChangePasswordRequest, v1beta1.ChangePasswordResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/ChangePassword",
 			opts...,
 		),
 		oAuthUser: connect_go.NewClient[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse](
@@ -253,6 +260,7 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 // bFFServiceClient implements BFFServiceClient.
 type bFFServiceClient struct {
 	getUserLoggedInInfo      *connect_go.Client[v1beta1.GetUserLoggedInInfoRequest, v1beta1.GetUserLoggedInInfoResponse]
+	changePassword           *connect_go.Client[v1beta1.ChangePasswordRequest, v1beta1.ChangePasswordResponse]
 	oAuthUser                *connect_go.Client[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse]
 	getUserOAuth             *connect_go.Client[v1beta1.GetUserOAuthRequest, v1beta1.GetUserOAuthResponse]
 	authorizeDevice          *connect_go.Client[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse]
@@ -287,6 +295,11 @@ type bFFServiceClient struct {
 // GetUserLoggedInInfo calls lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo.
 func (c *bFFServiceClient) GetUserLoggedInInfo(ctx context.Context, req *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error) {
 	return c.getUserLoggedInInfo.CallUnary(ctx, req)
+}
+
+// ChangePassword calls lekko.bff.v1beta1.BFFService.ChangePassword.
+func (c *bFFServiceClient) ChangePassword(ctx context.Context, req *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error) {
+	return c.changePassword.CallUnary(ctx, req)
 }
 
 // OAuthUser calls lekko.bff.v1beta1.BFFService.OAuthUser.
@@ -440,7 +453,9 @@ func (c *bFFServiceClient) GetRollout(ctx context.Context, req *connect_go.Reque
 
 // BFFServiceHandler is an implementation of the lekko.bff.v1beta1.BFFService service.
 type BFFServiceHandler interface {
+	// User management
 	GetUserLoggedInInfo(context.Context, *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error)
+	ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error)
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
@@ -496,6 +511,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo",
 		svc.GetUserLoggedInInfo,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/ChangePassword", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/ChangePassword",
+		svc.ChangePassword,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/OAuthUser", connect_go.NewUnaryHandler(
@@ -651,6 +671,10 @@ type UnimplementedBFFServiceHandler struct{}
 
 func (UnimplementedBFFServiceHandler) GetUserLoggedInInfo(context.Context, *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ChangePassword is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error) {
