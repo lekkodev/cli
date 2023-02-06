@@ -41,7 +41,9 @@ const (
 
 // BFFServiceClient is a client for the lekko.bff.v1beta1.BFFService service.
 type BFFServiceClient interface {
+	// User management
 	GetUserLoggedInInfo(context.Context, *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error)
+	ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error)
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
@@ -59,7 +61,15 @@ type BFFServiceClient interface {
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
+	// Get info about a single PR for the provided branch
+	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
+	// Deprecated, use Merge instead
+	//
+	// Deprecated: do not use.
 	MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error)
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
@@ -92,6 +102,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		getUserLoggedInInfo: connect_go.NewClient[v1beta1.GetUserLoggedInInfoRequest, v1beta1.GetUserLoggedInInfoResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo",
+			opts...,
+		),
+		changePassword: connect_go.NewClient[v1beta1.ChangePasswordRequest, v1beta1.ChangePasswordResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/ChangePassword",
 			opts...,
 		),
 		oAuthUser: connect_go.NewClient[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse](
@@ -174,6 +189,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetPRInfo",
 			opts...,
 		),
+		getPR: connect_go.NewClient[v1beta1.GetPRRequest, v1beta1.GetPRResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/GetPR",
+			opts...,
+		),
 		mergePR: connect_go.NewClient[v1beta1.MergePRRequest, v1beta1.MergePRResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/MergePR",
@@ -240,6 +260,7 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 // bFFServiceClient implements BFFServiceClient.
 type bFFServiceClient struct {
 	getUserLoggedInInfo      *connect_go.Client[v1beta1.GetUserLoggedInInfoRequest, v1beta1.GetUserLoggedInInfoResponse]
+	changePassword           *connect_go.Client[v1beta1.ChangePasswordRequest, v1beta1.ChangePasswordResponse]
 	oAuthUser                *connect_go.Client[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse]
 	getUserOAuth             *connect_go.Client[v1beta1.GetUserOAuthRequest, v1beta1.GetUserOAuthResponse]
 	authorizeDevice          *connect_go.Client[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse]
@@ -256,6 +277,7 @@ type bFFServiceClient struct {
 	listFeatures             *connect_go.Client[v1beta1.ListFeaturesRequest, v1beta1.ListFeaturesResponse]
 	getFeature               *connect_go.Client[v1beta1.GetFeatureRequest, v1beta1.GetFeatureResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
+	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
 	mergePR                  *connect_go.Client[v1beta1.MergePRRequest, v1beta1.MergePRResponse]
 	createBranch             *connect_go.Client[v1beta1.CreateBranchRequest, v1beta1.CreateBranchResponse]
 	listBranches             *connect_go.Client[v1beta1.ListBranchesRequest, v1beta1.ListBranchesResponse]
@@ -273,6 +295,11 @@ type bFFServiceClient struct {
 // GetUserLoggedInInfo calls lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo.
 func (c *bFFServiceClient) GetUserLoggedInInfo(ctx context.Context, req *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error) {
 	return c.getUserLoggedInInfo.CallUnary(ctx, req)
+}
+
+// ChangePassword calls lekko.bff.v1beta1.BFFService.ChangePassword.
+func (c *bFFServiceClient) ChangePassword(ctx context.Context, req *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error) {
+	return c.changePassword.CallUnary(ctx, req)
 }
 
 // OAuthUser calls lekko.bff.v1beta1.BFFService.OAuthUser.
@@ -351,11 +378,20 @@ func (c *bFFServiceClient) GetFeature(ctx context.Context, req *connect_go.Reque
 }
 
 // GetPRInfo calls lekko.bff.v1beta1.BFFService.GetPRInfo.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) GetPRInfo(ctx context.Context, req *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
 	return c.getPRInfo.CallUnary(ctx, req)
 }
 
+// GetPR calls lekko.bff.v1beta1.BFFService.GetPR.
+func (c *bFFServiceClient) GetPR(ctx context.Context, req *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error) {
+	return c.getPR.CallUnary(ctx, req)
+}
+
 // MergePR calls lekko.bff.v1beta1.BFFService.MergePR.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) MergePR(ctx context.Context, req *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error) {
 	return c.mergePR.CallUnary(ctx, req)
 }
@@ -417,7 +453,9 @@ func (c *bFFServiceClient) GetRollout(ctx context.Context, req *connect_go.Reque
 
 // BFFServiceHandler is an implementation of the lekko.bff.v1beta1.BFFService service.
 type BFFServiceHandler interface {
+	// User management
 	GetUserLoggedInInfo(context.Context, *connect_go.Request[v1beta1.GetUserLoggedInInfoRequest]) (*connect_go.Response[v1beta1.GetUserLoggedInInfoResponse], error)
+	ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error)
 	// Retrieves an oauth access token for the user, and stores in in the database
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
@@ -435,7 +473,15 @@ type BFFServiceHandler interface {
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	// Get info about multiple PRs in a repository
+	//
+	// Deprecated: do not use.
 	GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error)
+	// Get info about a single PR for the provided branch
+	GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error)
+	// Deprecated, use Merge instead
+	//
+	// Deprecated: do not use.
 	MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error)
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
@@ -465,6 +511,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/GetUserLoggedInInfo",
 		svc.GetUserLoggedInInfo,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/ChangePassword", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/ChangePassword",
+		svc.ChangePassword,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/OAuthUser", connect_go.NewUnaryHandler(
@@ -547,6 +598,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 		svc.GetPRInfo,
 		opts...,
 	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/GetPR", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/GetPR",
+		svc.GetPR,
+		opts...,
+	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/MergePR", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/MergePR",
 		svc.MergePR,
@@ -617,6 +673,10 @@ func (UnimplementedBFFServiceHandler) GetUserLoggedInInfo(context.Context, *conn
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo is not implemented"))
 }
 
+func (UnimplementedBFFServiceHandler) ChangePassword(context.Context, *connect_go.Request[v1beta1.ChangePasswordRequest]) (*connect_go.Response[v1beta1.ChangePasswordResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ChangePassword is not implemented"))
+}
+
 func (UnimplementedBFFServiceHandler) OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.OAuthUser is not implemented"))
 }
@@ -679,6 +739,10 @@ func (UnimplementedBFFServiceHandler) GetFeature(context.Context, *connect_go.Re
 
 func (UnimplementedBFFServiceHandler) GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetPRInfo is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) GetPR(context.Context, *connect_go.Request[v1beta1.GetPRRequest]) (*connect_go.Response[v1beta1.GetPRResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetPR is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) MergePR(context.Context, *connect_go.Request[v1beta1.MergePRRequest]) (*connect_go.Response[v1beta1.MergePRResponse], error) {

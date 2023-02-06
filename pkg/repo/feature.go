@@ -128,6 +128,11 @@ type CompileRequest struct {
 	// If true, any generated compilation changes will overwrite previous features
 	// even if there are type mismatches
 	IgnoreBackwardsCompatibility bool
+	// If true, we will verify the structure of all feature files, ensuring that each
+	// .star file has the relevant generated json and proto files, and all relevant compliance
+	// checks are run. This should be false if we've just added a new .star file and are
+	// compiling it for the first time.
+	Verify bool
 }
 
 type FeatureCompilationResult struct {
@@ -201,7 +206,7 @@ func (fcrs FeatureCompilationResults) Err() error {
 
 func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
 	// Step 1: collect. Find all features
-	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, true)
+	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
 	if err != nil {
 		return nil, errors.Wrap(err, "find features")
 	}
