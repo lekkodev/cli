@@ -388,12 +388,11 @@ func registerCmd() *cobra.Command {
 			if _, err := mail.ParseAddress(email); err != nil {
 				return errors.New("invalid email address")
 			}
-			if len(password) == 0 {
-				if err := survey.AskOne(&survey.Password{
-					Message: "Password: ",
-				}, &password); err != nil {
-					return errors.Wrap(err, "prompt password")
-				}
+			// prompt password
+			if err := survey.AskOne(&survey.Password{
+				Message: "Password: ",
+			}, &password); err != nil {
+				return errors.Wrap(err, "prompt password")
 			}
 			auth := oauth.NewOAuth()
 			if err := auth.Register(cmd.Context(), email, password); err != nil {
