@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/mail"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,6 +56,7 @@ func main() {
 	authCmd.AddCommand(loginCmd())
 	authCmd.AddCommand(logoutCmd())
 	authCmd.AddCommand(statusCmd)
+	authCmd.AddCommand(registerCmd())
 	rootCmd.AddCommand(authCmd)
 	// k8s
 	k8sCmd.AddCommand(applyCmd())
@@ -367,6 +369,42 @@ func logoutCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github.'")
+	return cmd
+}
+
+func registerCmd() *cobra.Command {
+	var email, password string
+	cmd := &cobra.Command{
+		Use:   "register",
+		Short: "register an account with lekko",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(email) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Email: ",
+				}, &email); err != nil {
+					return errors.Wrap(err, "prompt email")
+				}
+			}
+			if _, err := mail.ParseAddress(email); err != nil {
+				return errors.New("invalid email address")
+			}
+			if len(password) == 0 {
+				if err := survey.AskOne(&survey.Password{
+					Message: "Password: ",
+				}, &password); err != nil {
+					return errors.Wrap(err, "prompt password")
+				}
+			}
+			auth := oauth.NewOAuth()
+			if err := auth.Register(cmd.Context(), email, password); err != nil {
+				return err
+			}
+			fmt.Println("Account registered with lekko.")
+			fmt.Println("Run `lekko auth login` to complete oauth.")
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
 	return cmd
 }
 

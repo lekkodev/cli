@@ -116,7 +116,7 @@ func (a *OAuth) Register(ctx context.Context, username, password string) error {
 		return errors.Wrap(err, "register user")
 	}
 	if resp.Msg.GetAccountExisted() {
-		return errors.Errorf("Account with user '%s' already existed", username)
+		return errors.Errorf("Account with user '%s' already exists", username)
 	}
 	return nil
 }
