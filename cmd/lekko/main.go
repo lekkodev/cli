@@ -192,6 +192,9 @@ func compileCmd() *cobra.Command {
 				FeatureFilter:                f,
 				Persist:                      !dryRun,
 				IgnoreBackwardsCompatibility: force,
+				// don't verify file structure, since we may have not yet generated
+				// the DSLs for newly added features.
+				Verify: false,
 			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
@@ -241,7 +244,9 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Verify: true,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 
@@ -282,7 +287,9 @@ var mergeCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 		ctx := cmd.Context()
-		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+		if _, err := r.Compile(ctx, &repo.CompileRequest{
+			Verify: true,
+		}); err != nil {
 			return errors.Wrap(err, "compile")
 		}
 		var prNum *int
@@ -523,7 +530,9 @@ func applyCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Verify: true,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 			kube, err := k8s.NewKubernetes(kubeConfig, r)
@@ -614,7 +623,9 @@ func commitCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			if _, err := r.Compile(ctx, &repo.CompileRequest{
+				Verify: true,
+			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
 			if _, err = r.Commit(ctx, message); err != nil {
