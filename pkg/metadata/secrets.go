@@ -109,6 +109,8 @@ func (s *secrets) ReadOrCreate() error {
 	return nil
 }
 
+// TODO: don't leave the caller with an optional defer for writes.
+// Expose a safer way for callers to write to the secrets.
 func (s *secrets) Close() error {
 	s.Lock()
 	defer s.Unlock()
