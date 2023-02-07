@@ -53,6 +53,7 @@ func main() {
 	rootCmd.AddCommand(mergeCmd)
 	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(restoreCmd())
+	rootCmd.AddCommand(teamCmd())
 	// auth
 	authCmd.AddCommand(loginCmd())
 	authCmd.AddCommand(logoutCmd())

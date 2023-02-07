@@ -24,6 +24,7 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
+	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
@@ -50,10 +51,11 @@ type OAuth struct {
 // Returns an OAuth object, responsible for managing oauth on the local FS.
 // This is meant to be used by the cli on the user's local filesystem.
 func NewOAuth() *OAuth {
+	secrets := metadata.NewSecretsOrFail()
 	return &OAuth{
-		Secrets:         metadata.NewSecretsOrFail(),
-		lekkoBFFClient:  bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, LekkoURL),
-		lekkoAuthClient: bffv1beta1connect.NewAuthServiceClient(http.DefaultClient, LekkoURL),
+		Secrets:         secrets,
+		lekkoBFFClient:  lekko.NewBFFClient(secrets),
+		lekkoAuthClient: bffv1beta1connect.NewAuthServiceClient(http.DefaultClient, lekko.URL),
 	}
 }
 
@@ -205,7 +207,7 @@ func (a *OAuth) loginLekko(ctx context.Context) error {
 		log.Printf("Existing lekko token auth: %v\n", err)
 	}
 	fmt.Println("Initiating OAuth for Lekko")
-	authCreds, err := NewDeviceFlow(LekkoURL).Authorize(ctx)
+	authCreds, err := NewDeviceFlow(lekko.URL).Authorize(ctx)
 	if err != nil {
 		return errors.Wrap(err, "lekko oauth authorize")
 	}
@@ -250,27 +252,11 @@ func (a *OAuth) loginGithub(ctx context.Context) error {
 
 func (a *OAuth) checkLekkoAuth(ctx context.Context) (username string, err error) {
 	req := connect.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
-	a.setLekkoHeaders(req)
 	resp, err := a.lekkoBFFClient.GetUserLoggedInInfo(ctx, req)
 	if err != nil {
 		return "", errors.Wrap(err, "check lekko auth")
 	}
 	return resp.Msg.GetUsername(), nil
-}
-
-func (a *OAuth) setLekkoHeaders(req connect.AnyRequest) {
-	if a.Secrets.HasLekkoToken() {
-		req.Header().Set(AuthorizationHeaderKey, fmt.Sprintf("Bearer %s", a.Secrets.GetLekkoToken()))
-		if lekkoTeam := a.Secrets.GetLekkoTeam(); len(lekkoTeam) > 0 {
-			req.Header().Set(LekkoTeamHeaderKey, lekkoTeam)
-		}
-	}
-	if a.Secrets.HasGithubToken() {
-		req.Header().Set(GithubOAuthHeaderKey, a.Secrets.GetGithubToken())
-		if ghUser := a.Secrets.GetGithubUser(); len(ghUser) > 0 {
-			req.Header().Set(GithubUserHeaderKey, ghUser)
-		}
-	}
 }
 
 func (a *OAuth) getGithubUserLogin(ctx context.Context) (string, error) {
