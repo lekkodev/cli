@@ -66,6 +66,24 @@ const (
 	MemberRoleMember MemberRole = "member"
 )
 
+func (m *MemberRole) String() string {
+	return string(*m)
+}
+
+func (m *MemberRole) Set(v string) error {
+	switch v {
+	case string(MemberRoleOwner), string(MemberRoleMember):
+		*m = MemberRole(v)
+	default:
+		return errors.New(`must be one of "owner" or "member"`)
+	}
+	return nil
+}
+
+func (m *MemberRole) Type() string {
+	return "role"
+}
+
 type TeamMembership struct {
 	TeamName string
 	User     string

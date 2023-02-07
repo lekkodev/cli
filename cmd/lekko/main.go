@@ -264,7 +264,7 @@ func reviewCmd() *cobra.Command {
 			if len(title) == 0 {
 				fmt.Printf("-------------------\n")
 				if err := survey.AskOne(&survey.Input{
-					Message: "Title: ",
+					Message: "Title:",
 				}, &title); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
@@ -371,7 +371,7 @@ func logoutCmd() *cobra.Command {
 			return auth.Logout(cmd.Context(), string(p))
 		},
 	}
-	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github.'")
+	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github'.")
 	return cmd
 }
 
@@ -383,7 +383,7 @@ func registerCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Email: ",
+					Message: "Email:",
 				}, &email); err != nil {
 					return errors.Wrap(err, "prompt email")
 				}
@@ -393,7 +393,7 @@ func registerCmd() *cobra.Command {
 			}
 			// prompt password
 			if err := survey.AskOne(&survey.Password{
-				Message: "Password: ",
+				Message: "Password:",
 			}, &password); err != nil {
 				return errors.Wrap(err, "prompt password")
 			}

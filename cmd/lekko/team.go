@@ -118,7 +118,7 @@ func createCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Team Name: ",
+					Message: "Team Name:",
 				}, &name); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
@@ -134,14 +134,14 @@ func createCmd() *cobra.Command {
 
 func addMemberCmd() *cobra.Command {
 	var email string
-	var owner bool
+	var role team.MemberRole
 	cmd := &cobra.Command{
 		Use:   "add-member",
 		Short: "add an existing lekko user as a member to the currently active team",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Email to add: ",
+					Message: "Email to add:",
 				}, &email); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
@@ -149,12 +149,17 @@ func addMemberCmd() *cobra.Command {
 					return errors.Wrap(err, "invalid email")
 				}
 			}
-
-			secrets := metadata.NewSecretsOrFail()
-			role := team.MemberRoleMember
-			if owner {
-				role = team.MemberRoleOwner
+			if len(role) == 0 {
+				var roleStr string
+				if err := survey.AskOne(&survey.Select{
+					Message: "Role:",
+					Options: []string{string(team.MemberRoleMember), string(team.MemberRoleOwner)},
+				}, &roleStr); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+				role = team.MemberRole(roleStr)
 			}
+			secrets := metadata.NewSecretsOrFail()
 			if err := team.NewTeam(secrets).AddMember(cmd.Context(), email, role); err != nil {
 				return errors.Wrap(err, "add member")
 			}
@@ -163,7 +168,7 @@ func addMemberCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
-	cmd.Flags().BoolVarP(&owner, "owner", "o", false, "give the user admin privileges")
+	cmd.Flags().VarP(&role, "role", "r", "role to give member. allowed: 'owner', 'member'.")
 	return cmd
 }
 
@@ -175,7 +180,7 @@ func removeMemberCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Email to remove: ",
+					Message: "Email to remove:",
 				}, &email); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
