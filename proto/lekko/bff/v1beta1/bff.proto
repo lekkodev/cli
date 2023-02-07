@@ -192,6 +192,7 @@ message Repository {
   google.protobuf.Timestamp created_at = 4;
   google.protobuf.Timestamp updated_at = 5;
   string description = 6;
+  string url = 7;
 }
 
 message ListRepositoriesResponse {
