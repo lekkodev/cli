@@ -142,3 +142,12 @@ func (t *Team) ListMemberships(ctx context.Context) ([]*TeamMembership, error) {
 	}
 	return ret, nil
 }
+
+func (t *Team) RemoveMember(ctx context.Context, email string) error {
+	if _, err := t.lekkoBFFClient.RemoveMembership(ctx, connect.NewRequest(&bffv1beta1.RemoveMembershipRequest{
+		Username: email,
+	})); err != nil {
+		return errors.Wrap(err, "remove membership")
+	}
+	return nil
+}

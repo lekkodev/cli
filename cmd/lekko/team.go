@@ -38,6 +38,7 @@ func teamCmd() *cobra.Command {
 		teamSwitchCmd(),
 		createCmd(),
 		addMemberCmd(),
+		removeMemberCmd(),
 		teamListMembersCmd,
 	)
 	return cmd
@@ -163,6 +164,32 @@ func addMemberCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
 	cmd.Flags().BoolVarP(&owner, "owner", "o", false, "give the user admin privileges")
+	return cmd
+}
+
+func removeMemberCmd() *cobra.Command {
+	var email string
+	cmd := &cobra.Command{
+		Use:   "remove-member",
+		Short: "remove a member from the currently active team",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(email) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Email to remove: ",
+				}, &email); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+
+			secrets := metadata.NewSecretsOrFail()
+			if err := team.NewTeam(secrets).RemoveMember(cmd.Context(), email); err != nil {
+				return errors.Wrap(err, "remove member")
+			}
+			fmt.Printf("User %s removed from team %s", email, secrets.GetLekkoTeam())
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
 	return cmd
 }
 
