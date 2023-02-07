@@ -107,6 +107,27 @@ func (a *OAuth) Logout(ctx context.Context, provider string) error {
 	return nil
 }
 
+func (a *OAuth) Register(ctx context.Context, username, password string) error {
+	resp, err := a.lekkoAuthClient.RegisterUser(ctx, connect.NewRequest(&bffv1beta1.RegisterUserRequest{
+		Username: username,
+		Password: password,
+	}))
+	if err != nil {
+		return errors.Wrap(err, "register user")
+	}
+	if resp.Msg.GetAccountExisted() {
+		return errors.Errorf("Account with user '%s' already exists", username)
+	}
+	return nil
+}
+
+func (a *OAuth) Tokens(ctx context.Context) []string {
+	return []string{
+		a.Secrets.GetLekkoToken(),
+		a.Secrets.GetGithubToken(),
+	}
+}
+
 // Status reads existing credentials and prints them out in stdout.
 func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool) {
 	var lekkoAuthErr, ghAuthErr error
