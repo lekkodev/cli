@@ -34,12 +34,6 @@ import (
 const (
 	// Lekko CLI client ID. Used for oauth with lekko.
 	LekkoClientID string = "v0.303976a05d96c02eee5b1a75a3923815d82599b0"
-	// Relevant headers used for auth with lekko.
-	LekkoTeamHeaderKey     string = "X-Lekko-Team"
-	GithubOAuthHeaderKey   string = "X-Github-Token"
-	GithubUserHeaderKey    string = "X-Github-User"
-	AuthorizationHeaderKey string = "Authorization"
-	LekkoURL               string = "https://prod.api.lekko.dev"
 )
 
 // DeviceFlow initiates the OAuth 2.0 device authorization
