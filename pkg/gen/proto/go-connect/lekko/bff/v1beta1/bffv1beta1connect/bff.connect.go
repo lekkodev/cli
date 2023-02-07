@@ -54,6 +54,7 @@ type BFFServiceClient interface {
 	ListTeamMemberships(context.Context, *connect_go.Request[v1beta1.ListTeamMembershipsRequest]) (*connect_go.Response[v1beta1.ListTeamMembershipsResponse], error)
 	ListUserMemberships(context.Context, *connect_go.Request[v1beta1.ListUserMembershipsRequest]) (*connect_go.Response[v1beta1.ListUserMembershipsResponse], error)
 	UpsertMembership(context.Context, *connect_go.Request[v1beta1.UpsertMembershipRequest]) (*connect_go.Response[v1beta1.UpsertMembershipResponse], error)
+	RemoveMembership(context.Context, *connect_go.Request[v1beta1.RemoveMembershipRequest]) (*connect_go.Response[v1beta1.RemoveMembershipResponse], error)
 	CreateRepository(context.Context, *connect_go.Request[v1beta1.CreateRepositoryRequest]) (*connect_go.Response[v1beta1.CreateRepositoryResponse], error)
 	DeleteRepository(context.Context, *connect_go.Request[v1beta1.DeleteRepositoryRequest]) (*connect_go.Response[v1beta1.DeleteRepositoryResponse], error)
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
@@ -152,6 +153,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		upsertMembership: connect_go.NewClient[v1beta1.UpsertMembershipRequest, v1beta1.UpsertMembershipResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/UpsertMembership",
+			opts...,
+		),
+		removeMembership: connect_go.NewClient[v1beta1.RemoveMembershipRequest, v1beta1.RemoveMembershipResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/RemoveMembership",
 			opts...,
 		),
 		createRepository: connect_go.NewClient[v1beta1.CreateRepositoryRequest, v1beta1.CreateRepositoryResponse](
@@ -270,6 +276,7 @@ type bFFServiceClient struct {
 	listTeamMemberships      *connect_go.Client[v1beta1.ListTeamMembershipsRequest, v1beta1.ListTeamMembershipsResponse]
 	listUserMemberships      *connect_go.Client[v1beta1.ListUserMembershipsRequest, v1beta1.ListUserMembershipsResponse]
 	upsertMembership         *connect_go.Client[v1beta1.UpsertMembershipRequest, v1beta1.UpsertMembershipResponse]
+	removeMembership         *connect_go.Client[v1beta1.RemoveMembershipRequest, v1beta1.RemoveMembershipResponse]
 	createRepository         *connect_go.Client[v1beta1.CreateRepositoryRequest, v1beta1.CreateRepositoryResponse]
 	deleteRepository         *connect_go.Client[v1beta1.DeleteRepositoryRequest, v1beta1.DeleteRepositoryResponse]
 	listRepositories         *connect_go.Client[v1beta1.ListRepositoriesRequest, v1beta1.ListRepositoriesResponse]
@@ -345,6 +352,11 @@ func (c *bFFServiceClient) ListUserMemberships(ctx context.Context, req *connect
 // UpsertMembership calls lekko.bff.v1beta1.BFFService.UpsertMembership.
 func (c *bFFServiceClient) UpsertMembership(ctx context.Context, req *connect_go.Request[v1beta1.UpsertMembershipRequest]) (*connect_go.Response[v1beta1.UpsertMembershipResponse], error) {
 	return c.upsertMembership.CallUnary(ctx, req)
+}
+
+// RemoveMembership calls lekko.bff.v1beta1.BFFService.RemoveMembership.
+func (c *bFFServiceClient) RemoveMembership(ctx context.Context, req *connect_go.Request[v1beta1.RemoveMembershipRequest]) (*connect_go.Response[v1beta1.RemoveMembershipResponse], error) {
+	return c.removeMembership.CallUnary(ctx, req)
 }
 
 // CreateRepository calls lekko.bff.v1beta1.BFFService.CreateRepository.
@@ -466,6 +478,7 @@ type BFFServiceHandler interface {
 	ListTeamMemberships(context.Context, *connect_go.Request[v1beta1.ListTeamMembershipsRequest]) (*connect_go.Response[v1beta1.ListTeamMembershipsResponse], error)
 	ListUserMemberships(context.Context, *connect_go.Request[v1beta1.ListUserMembershipsRequest]) (*connect_go.Response[v1beta1.ListUserMembershipsResponse], error)
 	UpsertMembership(context.Context, *connect_go.Request[v1beta1.UpsertMembershipRequest]) (*connect_go.Response[v1beta1.UpsertMembershipResponse], error)
+	RemoveMembership(context.Context, *connect_go.Request[v1beta1.RemoveMembershipRequest]) (*connect_go.Response[v1beta1.RemoveMembershipResponse], error)
 	CreateRepository(context.Context, *connect_go.Request[v1beta1.CreateRepositoryRequest]) (*connect_go.Response[v1beta1.CreateRepositoryResponse], error)
 	DeleteRepository(context.Context, *connect_go.Request[v1beta1.DeleteRepositoryRequest]) (*connect_go.Response[v1beta1.DeleteRepositoryResponse], error)
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
@@ -561,6 +574,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/UpsertMembership", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/UpsertMembership",
 		svc.UpsertMembership,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/RemoveMembership", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/RemoveMembership",
+		svc.RemoveMembership,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/CreateRepository", connect_go.NewUnaryHandler(
@@ -711,6 +729,10 @@ func (UnimplementedBFFServiceHandler) ListUserMemberships(context.Context, *conn
 
 func (UnimplementedBFFServiceHandler) UpsertMembership(context.Context, *connect_go.Request[v1beta1.UpsertMembershipRequest]) (*connect_go.Response[v1beta1.UpsertMembershipResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.UpsertMembership is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) RemoveMembership(context.Context, *connect_go.Request[v1beta1.RemoveMembershipRequest]) (*connect_go.Response[v1beta1.RemoveMembershipResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.RemoveMembership is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) CreateRepository(context.Context, *connect_go.Request[v1beta1.CreateRepositoryRequest]) (*connect_go.Response[v1beta1.CreateRepositoryResponse], error) {
