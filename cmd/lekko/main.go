@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
@@ -57,6 +58,7 @@ func main() {
 	authCmd.AddCommand(logoutCmd())
 	authCmd.AddCommand(statusCmd)
 	authCmd.AddCommand(registerCmd())
+	authCmd.AddCommand(tokensCmd)
 	rootCmd.AddCommand(authCmd)
 	// k8s
 	k8sCmd.AddCommand(applyCmd())
@@ -405,6 +407,16 @@ func registerCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
 	return cmd
+}
+
+var tokensCmd = &cobra.Command{
+	Use:   "tokens",
+	Short: "display token(s) currently in use",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		tokens := oauth.NewOAuth().Tokens(cmd.Context())
+		fmt.Println(strings.Join(tokens, "\n"))
+		return nil
+	},
 }
 
 var statusCmd = &cobra.Command{

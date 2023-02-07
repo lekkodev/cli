@@ -121,6 +121,13 @@ func (a *OAuth) Register(ctx context.Context, username, password string) error {
 	return nil
 }
 
+func (a *OAuth) Tokens(ctx context.Context) []string {
+	return []string{
+		a.Secrets.GetLekkoToken(),
+		a.Secrets.GetGithubToken(),
+	}
+}
+
 // Status reads existing credentials and prints them out in stdout.
 func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool) {
 	var lekkoAuthErr, ghAuthErr error
