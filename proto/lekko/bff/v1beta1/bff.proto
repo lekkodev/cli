@@ -55,6 +55,8 @@ service BFFService {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse) {}
   // Lists all the features within a repository (and optionally, namespace)
   rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
+  // Lists all of the namespaces and features in a repository, meant to serve the 
+  // sidebar of the lekko web app.
   rpc ListRepositoryContents(ListRepositoryContentsRequest) returns (ListRepositoryContentsResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
 
