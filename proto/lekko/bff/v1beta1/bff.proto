@@ -55,6 +55,7 @@ service BFFService {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse) {}
   // Lists all the features within a repository (and optionally, namespace)
   rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
+  rpc ListRepositoryContents(ListRepositoryContentsRequest) returns (ListRepositoryContentsResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
 
   // Get info about multiple PRs in a repository
@@ -200,8 +201,7 @@ message ListRepositoriesResponse {
 }
 
 message ListNamespacesRequest {
-  RepositoryKey repo_key = 1 [deprecated = true];
-  BranchKey key = 2;
+  RepositoryKey repo_key = 1;
 }
 
 message ListNamespacesResponse {
@@ -215,9 +215,8 @@ message Namespace {
 }
 
 message ListFeaturesRequest {
-  RepositoryKey repo_key = 1 [deprecated = true];
+  RepositoryKey repo_key = 1;
   string namespace_name = 2; // optional
-  BranchKey key = 3;
 }
 
 message ListFeaturesResponse {
@@ -229,6 +228,24 @@ message ListFeaturesResponse {
     string sha = 4;
   }
   repeated FeatureListItem features = 1;
+}
+
+message ListRepositoryContentsRequest {
+  BranchKey key = 1;
+}
+
+message ListRepositoryContentsResponse {
+  message FeatureListItem {
+    string name = 1;
+  }
+
+  message NamespaceListItem {
+    string name = 1;
+    string version = 2;
+    repeated FeatureListItem features = 3;
+  }
+
+  repeated NamespaceListItem namespaces = 1;
 }
 
 message GetFeatureRequest {

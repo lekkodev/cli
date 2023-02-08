@@ -61,6 +61,7 @@ type BFFServiceClient interface {
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
+	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
 	//
@@ -185,6 +186,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/ListFeatures",
 			opts...,
 		),
+		listRepositoryContents: connect_go.NewClient[v1beta1.ListRepositoryContentsRequest, v1beta1.ListRepositoryContentsResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/ListRepositoryContents",
+			opts...,
+		),
 		getFeature: connect_go.NewClient[v1beta1.GetFeatureRequest, v1beta1.GetFeatureResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetFeature",
@@ -282,6 +288,7 @@ type bFFServiceClient struct {
 	listRepositories         *connect_go.Client[v1beta1.ListRepositoriesRequest, v1beta1.ListRepositoriesResponse]
 	listNamespaces           *connect_go.Client[v1beta1.ListNamespacesRequest, v1beta1.ListNamespacesResponse]
 	listFeatures             *connect_go.Client[v1beta1.ListFeaturesRequest, v1beta1.ListFeaturesResponse]
+	listRepositoryContents   *connect_go.Client[v1beta1.ListRepositoryContentsRequest, v1beta1.ListRepositoryContentsResponse]
 	getFeature               *connect_go.Client[v1beta1.GetFeatureRequest, v1beta1.GetFeatureResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
 	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
@@ -382,6 +389,11 @@ func (c *bFFServiceClient) ListNamespaces(ctx context.Context, req *connect_go.R
 // ListFeatures calls lekko.bff.v1beta1.BFFService.ListFeatures.
 func (c *bFFServiceClient) ListFeatures(ctx context.Context, req *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error) {
 	return c.listFeatures.CallUnary(ctx, req)
+}
+
+// ListRepositoryContents calls lekko.bff.v1beta1.BFFService.ListRepositoryContents.
+func (c *bFFServiceClient) ListRepositoryContents(ctx context.Context, req *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error) {
+	return c.listRepositoryContents.CallUnary(ctx, req)
 }
 
 // GetFeature calls lekko.bff.v1beta1.BFFService.GetFeature.
@@ -485,6 +497,7 @@ type BFFServiceHandler interface {
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
 	// Lists all the features within a repository (and optionally, namespace)
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
+	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
 	//
@@ -604,6 +617,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/ListFeatures", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/ListFeatures",
 		svc.ListFeatures,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/ListRepositoryContents", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/ListRepositoryContents",
+		svc.ListRepositoryContents,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetFeature", connect_go.NewUnaryHandler(
@@ -753,6 +771,10 @@ func (UnimplementedBFFServiceHandler) ListNamespaces(context.Context, *connect_g
 
 func (UnimplementedBFFServiceHandler) ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ListFeatures is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ListRepositoryContents is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error) {
