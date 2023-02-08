@@ -200,7 +200,8 @@ message ListRepositoriesResponse {
 }
 
 message ListNamespacesRequest {
-  RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1 [deprecated = true];
+  BranchKey key = 2;
 }
 
 message ListNamespacesResponse {
@@ -214,8 +215,9 @@ message Namespace {
 }
 
 message ListFeaturesRequest {
-  RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1 [deprecated = true];
   string namespace_name = 2; // optional
+  BranchKey key = 3;
 }
 
 message ListFeaturesResponse {
