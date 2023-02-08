@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -27,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/oauth"
@@ -46,13 +44,12 @@ import (
 
 func main() {
 	rootCmd.AddCommand(compileCmd())
-	rootCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
+	rootCmd.AddCommand(commitCmd())
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
-	rootCmd.AddCommand(initCmd())
 	rootCmd.AddCommand(restoreCmd())
 	rootCmd.AddCommand(teamCmd())
 	rootCmd.AddCommand(repoCmd())
@@ -63,15 +60,14 @@ func main() {
 	authCmd.AddCommand(registerCmd())
 	authCmd.AddCommand(tokensCmd)
 	rootCmd.AddCommand(authCmd)
-	// k8s
+	// exp
 	k8sCmd.AddCommand(applyCmd())
 	k8sCmd.AddCommand(listCmd())
-	rootCmd.AddCommand(k8sCmd)
-	// exp
+	experimentalCmd.AddCommand(k8sCmd)
 	experimentalCmd.AddCommand(parseCmd())
 	experimentalCmd.AddCommand(startCmd)
-	experimentalCmd.AddCommand(commitCmd())
 	experimentalCmd.AddCommand(cleanupCmd)
+	experimentalCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(experimentalCmd)
 
 	logging.InitColors()
@@ -108,57 +104,6 @@ func formatCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
-	return cmd
-}
-
-func initCmd() *cobra.Command {
-	var owner, repoName string
-	var public bool
-	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "initialize new empty config repo and sync with github",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if repoName == "" {
-				return errors.Errorf("must provide owner and repo name in order to push the repo to github")
-			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithubToken())
-
-			fmt.Printf("mkdir %s\n", repoName)
-			if err := os.Mkdir(repoName, 0755); err != nil {
-				return errors.Wrap(err, "mkdir")
-			}
-			if err := os.Chdir(repoName); err != nil {
-				return errors.Wrap(err, "cd")
-			}
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-
-			ghCli := gh.NewGithubClientFromToken(cmd.Context(), rs.GetGithubToken())
-			url, err := ghCli.Init(cmd.Context(), owner, repoName, !public)
-			if errors.Is(err, git.ErrRepositoryAlreadyExists) {
-				fmt.Printf("Repository already exists at %s\n", url)
-			} else if err != nil {
-				return errors.Wrap(err, "init")
-			} else {
-				fmt.Printf("Initialized config repo at %s\n", url)
-			}
-
-			fmt.Printf("Cloning into '%s'...\n", repoName)
-			_, err = repo.NewLocalClone(wd, url, rs)
-			if err != nil {
-				return errors.Wrap(err, "new local clone")
-			}
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner. if empty, defaults to the authorized user's personal account.")
-	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repo name")
-	cmd.Flags().BoolVarP(&public, "public", "p", false, "create a public repo")
-	if err := cmd.MarkFlagRequired("repo"); err != nil {
-		log.Fatal(err)
-	}
 	return cmd
 }
 
