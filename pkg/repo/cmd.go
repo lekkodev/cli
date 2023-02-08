@@ -18,10 +18,8 @@ import (
 	"context"
 
 	"github.com/bufbuild/connect-go"
-	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
@@ -31,9 +29,9 @@ type RepoCmd struct {
 	lekkoBFFClient bffv1beta1connect.BFFServiceClient
 }
 
-func NewRepoCmd(secrets metadata.Secrets) *RepoCmd {
+func NewRepoCmd(bff bffv1beta1connect.BFFServiceClient) *RepoCmd {
 	return &RepoCmd{
-		lekkoBFFClient: lekko.NewBFFClient(secrets),
+		lekkoBFFClient: bff,
 	}
 }
 

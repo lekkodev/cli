@@ -21,7 +21,8 @@ import (
 	"text/tabwriter"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/cli/lekko"
+	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/team"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -48,8 +49,9 @@ var showCmd = &cobra.Command{
 	Use:   "show",
 	Short: "Show the team currently in use",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		t := team.NewTeam(metadata.NewSecretsOrFail())
-		fmt.Println(t.Show())
+		rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
+		t := team.NewTeam(lekko.NewBFFClient(rs))
+		fmt.Println(t.Show(rs))
 		return nil
 	},
 }
@@ -58,14 +60,14 @@ var teamListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "list the teams that the logged-in user is a member of",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		secrets := metadata.NewSecretsOrFail()
-		t := team.NewTeam(secrets)
+		rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
+		t := team.NewTeam(lekko.NewBFFClient(rs))
 		memberships, err := t.List(cmd.Context())
 		if err != nil {
 			return err
 		}
 		if len(memberships) == 0 {
-			fmt.Printf("User '%s' has no team memberhips\n", secrets.GetLekkoUsername())
+			fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
 			return nil
 		}
 		printTeamMemberships(memberships)
@@ -79,27 +81,30 @@ func teamSwitchCmd() *cobra.Command {
 		Use:   "switch",
 		Short: "switch the team currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			secrets := metadata.NewSecretsOrFail()
-			defer secrets.Close() // since we are mutating the team
-			t := team.NewTeam(secrets)
-			ctx := cmd.Context()
-			if len(name) == 0 {
-				memberships, err := t.List(ctx)
-				if err != nil {
+			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				t := team.NewTeam(lekko.NewBFFClient(ws))
+				ctx := cmd.Context()
+				if len(name) == 0 {
+					memberships, err := t.List(ctx)
+					if err != nil {
+						return err
+					}
+					var options []string
+					for _, m := range memberships {
+						options = append(options, m.TeamName)
+					}
+					if err := survey.AskOne(&survey.Select{
+						Message: "Choose a team:",
+						Options: options,
+					}, &name); err != nil {
+						return errors.Wrap(err, "prompt")
+					}
+				}
+				if err := t.Use(ctx, name, ws); err != nil {
 					return err
 				}
-				var options []string
-				for _, m := range memberships {
-					options = append(options, m.TeamName)
-				}
-				if err := survey.AskOne(&survey.Select{
-					Message: "Choose a team:",
-					Options: options,
-				}, &name); err != nil {
-					return errors.Wrap(err, "prompt")
-				}
-			}
-			if err := t.Use(ctx, name); err != nil {
+				return nil
+			}, secrets.RequireLekkoToken()); err != nil {
 				return err
 			}
 			fmt.Printf("Switched team to '%s'\n", name)
@@ -123,9 +128,9 @@ func createCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			secrets := metadata.NewSecretsOrFail()
-			defer secrets.Close() // since we are mutating the team
-			return team.NewTeam(secrets).Create(cmd.Context(), name)
+			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, ws)
+			}, secrets.RequireLekkoToken())
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "name of team to create")
@@ -159,11 +164,11 @@ func addMemberCmd() *cobra.Command {
 				}
 				role = team.MemberRole(roleStr)
 			}
-			secrets := metadata.NewSecretsOrFail()
-			if err := team.NewTeam(secrets).AddMember(cmd.Context(), email, role); err != nil {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if err := team.NewTeam(lekko.NewBFFClient(rs)).AddMember(cmd.Context(), email, role); err != nil {
 				return errors.Wrap(err, "add member")
 			}
-			fmt.Printf("User %s added as %s to team %s", email, role, secrets.GetLekkoTeam())
+			fmt.Printf("User %s added as %s to team %s", email, role, rs.GetLekkoTeam())
 			return nil
 		},
 	}
@@ -186,11 +191,11 @@ func removeMemberCmd() *cobra.Command {
 				}
 			}
 
-			secrets := metadata.NewSecretsOrFail()
-			if err := team.NewTeam(secrets).RemoveMember(cmd.Context(), email); err != nil {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if err := team.NewTeam(lekko.NewBFFClient(rs)).RemoveMember(cmd.Context(), email); err != nil {
 				return errors.Wrap(err, "remove member")
 			}
-			fmt.Printf("User %s removed from team %s", email, secrets.GetLekkoTeam())
+			fmt.Printf("User %s removed from team %s", email, rs.GetLekkoTeam())
 			return nil
 		},
 	}
@@ -202,14 +207,14 @@ var teamListMembersCmd = &cobra.Command{
 	Use:   "list-members",
 	Short: "list the members of the currently active team",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		secrets := metadata.NewSecretsOrFail()
-		t := team.NewTeam(secrets)
+		rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+		t := team.NewTeam(lekko.NewBFFClient(rs))
 		memberships, err := t.ListMemberships(cmd.Context())
 		if err != nil {
 			return err
 		}
 		if len(memberships) == 0 {
-			fmt.Printf("Team '%s' has no memberhips\n", secrets.GetLekkoTeam())
+			fmt.Printf("Team '%s' has no memberhips\n", rs.GetLekkoTeam())
 			return nil
 		}
 		printTeamMemberships(memberships)

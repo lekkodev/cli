@@ -23,9 +23,10 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/logging"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
+	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -52,13 +53,13 @@ var repoListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List the config repositories in the currently active team",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		secrets := metadata.NewSecretsOrFail()
-		repo := repo.NewRepoCmd(secrets)
+		rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+		repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 		repos, err := repo.List(cmd.Context())
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%d repos found in team %s.\n", len(repos), secrets.GetLekkoTeam())
+		fmt.Printf("%d repos found in team %s.\n", len(repos), rs.GetLekkoTeam())
 		for _, r := range repos {
 			fmt.Printf("%s[%s/%s]%s:\n\t%s\n\t%s\n", logging.Bold, r.Owner, r.RepoName, logging.Reset, r.Description, r.URL)
 		}
@@ -78,9 +79,9 @@ func repoCreateCmd() *cobra.Command {
 		Use:   "create",
 		Short: "Create a new, empty config repository in the currently active team",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			secrets := metadata.NewSecretsOrFail()
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			if len(owner) == 0 {
-				owner = secrets.GetGithubUser()
+				owner = rs.GetGithubUser()
 			}
 			if len(repoName) == 0 {
 				if err := survey.AskOne(&survey.Input{
@@ -89,12 +90,12 @@ func repoCreateCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			fmt.Printf("Attempting to create a new configuration repository %s[%s/%s]%s in team %s.\n", logging.Bold, owner, repoName, logging.Reset, secrets.GetLekkoTeam())
+			fmt.Printf("Attempting to create a new configuration repository %s[%s/%s]%s in team %s.\n", logging.Bold, owner, repoName, logging.Reset, rs.GetLekkoTeam())
 			fmt.Printf("First, ensure that the github owner %s has installed Lekko App by visiting:\n\t%s\n", owner, lekkoAppInstallURL)
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)
 
-			repo := repo.NewRepoCmd(secrets)
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			url, err := repo.Create(cmd.Context(), owner, repoName)
 			if err != nil {
 				return err
@@ -119,8 +120,8 @@ func repoCloneCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			secrets := metadata.NewSecretsOrFail()
-			r := repo.NewRepoCmd(secrets)
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			r := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			ctx := cmd.Context()
 			if len(url) == 0 {
 				var options []string
@@ -145,7 +146,7 @@ func repoCloneCmd() *cobra.Command {
 			}
 			repoName := path.Base(url)
 			fmt.Printf("Cloning %s into '%s'...\n", url, repoName)
-			_, err = repo.NewLocalClone(path.Join(wd, repoName), url, secrets)
+			_, err = repo.NewLocalClone(path.Join(wd, repoName), url, rs)
 			if err != nil {
 				return errors.Wrap(err, "new local clone")
 			}
@@ -161,8 +162,8 @@ func repoDeleteCmd() *cobra.Command {
 		Use:   "delete",
 		Short: "Delete an existing config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			secrets := metadata.NewSecretsOrFail()
-			repo := repo.NewRepoCmd(secrets)
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			ctx := cmd.Context()
 			repos, err := repo.List(ctx)
 			if err != nil {
