@@ -28,13 +28,14 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
+	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/oauth"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
+	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 
@@ -98,7 +99,8 @@ func formatCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -119,10 +121,7 @@ func initCmd() *cobra.Command {
 			if repoName == "" {
 				return errors.Errorf("must provide owner and repo name in order to push the repo to github")
 			}
-			secrets := metadata.NewSecretsOrFail()
-			if !secrets.HasGithubToken() {
-				return errors.Errorf("no github token found. Run 'lekko auth login' first")
-			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithubToken())
 
 			fmt.Printf("mkdir %s\n", repoName)
 			if err := os.Mkdir(repoName, 0755); err != nil {
@@ -136,7 +135,7 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
-			ghCli := gh.NewGithubClientFromToken(cmd.Context(), secrets.GetGithubToken())
+			ghCli := gh.NewGithubClientFromToken(cmd.Context(), rs.GetGithubToken())
 			url, err := ghCli.Init(cmd.Context(), owner, repoName, !public)
 			if errors.Is(err, git.ErrRepositoryAlreadyExists) {
 				fmt.Printf("Repository already exists at %s\n", url)
@@ -147,7 +146,7 @@ func initCmd() *cobra.Command {
 			}
 
 			fmt.Printf("Cloning into '%s'...\n", repoName)
-			_, err = repo.NewLocalClone(wd, url, secrets)
+			_, err = repo.NewLocalClone(wd, url, rs)
 			if err != nil {
 				return errors.Wrap(err, "new local clone")
 			}
@@ -162,6 +161,7 @@ func initCmd() *cobra.Command {
 	}
 	return cmd
 }
+
 func compileCmd() *cobra.Command {
 	var force, dryRun bool
 	cmd := &cobra.Command{
@@ -172,7 +172,8 @@ func compileCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return err
 			}
@@ -222,7 +223,8 @@ func parseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -246,7 +248,8 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -256,8 +259,7 @@ func reviewCmd() *cobra.Command {
 				return errors.Wrap(err, "compile")
 			}
 
-			secrets := metadata.NewSecretsOrFail()
-			ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
 			if _, err := ghCli.GetUser(ctx); err != nil {
 				return errors.Wrap(err, "github auth fail")
 			}
@@ -288,7 +290,8 @@ var mergeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		r, err := repo.NewLocal(wd)
+		rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+		r, err := repo.NewLocal(wd, rs)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -307,8 +310,7 @@ var mergeCmd = &cobra.Command{
 			prNum = &num
 		}
 
-		secrets := metadata.NewSecretsOrFail()
-		ghCli := gh.NewGithubClientFromToken(ctx, secrets.GetGithubToken())
+		ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
 		if _, err := ghCli.GetUser(ctx); err != nil {
 			return errors.Wrap(err, "github auth fail")
 		}
@@ -326,9 +328,10 @@ func loginCmd() *cobra.Command {
 		Use:   "login",
 		Short: "authenticate with lekko and github, if unauthenticated",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			auth := oauth.NewOAuth()
-			defer auth.Close()
-			return auth.Login(cmd.Context())
+			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
+				return auth.Login(cmd.Context(), ws)
+			})
 		},
 	}
 }
@@ -367,9 +370,10 @@ func logoutCmd() *cobra.Command {
 			if len(string(p)) == 0 {
 				return errors.Errorf("provider must be specified")
 			}
-			auth := oauth.NewOAuth()
-			defer auth.Close()
-			return auth.Logout(cmd.Context(), string(p))
+			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
+				return auth.Logout(cmd.Context(), string(p), ws)
+			})
 		},
 	}
 	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github'.")
@@ -398,7 +402,7 @@ func registerCmd() *cobra.Command {
 			}, &password); err != nil {
 				return errors.Wrap(err, "prompt password")
 			}
-			auth := oauth.NewOAuth()
+			auth := oauth.NewOAuth(lekko.NewBFFClient(secrets.NewSecretsOrFail()))
 			if err := auth.Register(cmd.Context(), email, password); err != nil {
 				return err
 			}
@@ -415,7 +419,8 @@ var tokensCmd = &cobra.Command{
 	Use:   "tokens",
 	Short: "display token(s) currently in use",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		tokens := oauth.NewOAuth().Tokens(cmd.Context())
+		rs := secrets.NewSecretsOrFail()
+		tokens := oauth.NewOAuth(lekko.NewBFFClient(rs)).Tokens(cmd.Context(), rs)
 		fmt.Println(strings.Join(tokens, "\n"))
 		return nil
 	},
@@ -425,8 +430,9 @@ var statusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "display lekko authentication status",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		auth := oauth.NewOAuth()
-		auth.Status(cmd.Context(), false)
+		rs := secrets.NewSecretsOrFail()
+		auth := oauth.NewOAuth(lekko.NewBFFClient(rs))
+		auth.Status(cmd.Context(), false, rs)
 		return nil
 	},
 }
@@ -440,7 +446,8 @@ var evalCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		r, err := repo.NewLocal(wd)
+		rs := secrets.NewSecretsOrFail()
+		r, err := repo.NewLocal(wd, rs)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -504,7 +511,8 @@ func addCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -529,7 +537,8 @@ func removeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -576,7 +585,8 @@ func applyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -639,7 +649,8 @@ var startCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		r, err := repo.NewLocal(wd)
+		rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+		r, err := repo.NewLocal(wd, rs)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -669,7 +680,8 @@ func commitCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -698,7 +710,8 @@ var cleanupCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		r, err := repo.NewLocal(wd)
+		rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+		r, err := repo.NewLocal(wd, rs)
 		if err != nil {
 			return errors.Wrap(err, "new repo")
 		}
@@ -724,7 +737,8 @@ func restoreCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			r, err := repo.NewLocal(wd)
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package metadata
+package secrets
 
 import (
 	"fmt"
@@ -21,29 +21,35 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
 const AuthenticateGituhubMessage = "User is not authenticated.\nRun 'lekko auth login' to authenticate with GitHub."
 
-// Secrets holds all the user-specific information that needs to exist for the cli
+// WriteSecrets holds all the user-specific information that needs to exist for the cli
 // to work, but should not live in a shared config repo. For instance, it holds
 // the github auth token. The secrets are backed by the filesystem under the user's home
 // directory, so these secrets don't need to be fetched as part of every cli command.
-type Secrets interface {
-	GetLekkoUsername() string
+type WriteSecrets interface {
+	ReadSecrets
 	SetLekkoUsername(username string)
-	GetLekkoToken() string
 	SetLekkoToken(token string)
+	SetLekkoTeam(team string)
+	SetGithubToken(token string)
+	SetGithubUser(user string)
+}
+
+type ReadSecrets interface {
+	GetLekkoUsername() string
+	GetLekkoToken() string
 	HasLekkoToken() bool
 	GetLekkoTeam() string
-	SetLekkoTeam(team string)
 	GetGithubToken() string
-	SetGithubToken(token string)
 	GetGithubUser() string
-	SetGithubUser(user string)
 	HasGithubToken() bool
-	Close() error
+	GetUsername() string
+	GetToken() string
 }
 
 type secrets struct {
@@ -60,37 +66,48 @@ type secrets struct {
 	sync.RWMutex `json:"-" yaml:"-"`
 }
 
-// Instantiates new secrets, attempting to read from local disk if available.
-// NOTE: always defer *Secrets.Close after calling this method.
-func NewSecrets(homeDir string) *secrets {
-	s := &secrets{homeDir: homeDir}
-	if err := s.ReadOrCreate(); err != nil {
-		log.Printf("failed to read secrets: %v\n", err)
-	}
-	return s
-}
-
-func NewSecretsOrFail() *secrets {
-	hd, err := os.UserHomeDir()
+func NewSecretsOrFail(opts ...Option) ReadSecrets {
+	rs, err := newSecrets()
 	if err != nil {
-		log.Fatalf("user home directory: %v", err)
+		log.Fatalf("secrets: %v", err)
 	}
-	return NewSecrets(hd)
+	for _, opt := range opts {
+		if err := opt.applyToSecrets(rs); err != nil {
+			log.Fatalf("secrets: %v", err)
+		}
+	}
+	return rs
 }
 
-func NewSecretsOrError() (*secrets, error) {
+func WithWriteSecrets(f func(WriteSecrets) error, opts ...Option) error {
+	s, err := newSecrets()
+	if err != nil {
+		return err
+	}
+	for _, opt := range opts {
+		if err := opt.applyToSecrets(s); err != nil {
+			log.Fatalf("secrets: %v", err)
+		}
+	}
+	if err := f(s); err != nil {
+		return err
+	}
+	return s.close()
+}
+
+func newSecrets() (*secrets, error) {
 	hd, err := os.UserHomeDir()
 	if err != nil {
 		return nil, errors.Wrap(err, "user home directory")
 	}
 	s := &secrets{homeDir: hd}
-	if err := s.ReadOrCreate(); err != nil {
+	if err := s.readOrCreate(); err != nil {
 		return nil, errors.Wrap(err, "failed to read secrets")
 	}
 	return s, nil
 }
 
-func (s *secrets) ReadOrCreate() error {
+func (s *secrets) readOrCreate() error {
 	s.Lock()
 	defer s.Unlock()
 	bytes, err := os.ReadFile(s.filename())
@@ -103,7 +120,7 @@ func (s *secrets) ReadOrCreate() error {
 			return errors.Wrap(err, "read file")
 		}
 	}
-	if err := UnmarshalYAMLStrict(bytes, s); err != nil {
+	if err := metadata.UnmarshalYAMLStrict(bytes, s); err != nil {
 		return fmt.Errorf("unmarshal secrets from file %s: %w", s.filename(), err)
 	}
 	return nil
@@ -111,7 +128,7 @@ func (s *secrets) ReadOrCreate() error {
 
 // TODO: don't leave the caller with an optional defer for writes.
 // Expose a safer way for callers to write to the secrets.
-func (s *secrets) Close() error {
+func (s *secrets) close() error {
 	s.Lock()
 	defer s.Unlock()
 	if !s.changed {
@@ -121,7 +138,7 @@ func (s *secrets) Close() error {
 }
 
 func (s *secrets) create() error {
-	bytes, err := MarshalYAML(s)
+	bytes, err := metadata.MarshalYAML(s)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal secrets")
 	}

@@ -19,43 +19,42 @@ import (
 	"strings"
 
 	"github.com/bufbuild/connect-go"
-	"github.com/lekkodev/cli/lekko"
 	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 )
 
 type TeamStore interface {
 	GetLekkoTeam() string
+}
+
+type WriteTeamStore interface {
+	TeamStore
 	SetLekkoTeam(team string)
-	Close() error
 }
 
 // Team is responsible for team management with Lekko
 type Team struct {
-	teamStore      TeamStore
 	lekkoBFFClient bffv1beta1connect.BFFServiceClient
 }
 
-func NewTeam(secrets metadata.Secrets) *Team {
+func NewTeam(bff bffv1beta1connect.BFFServiceClient) *Team {
 	return &Team{
-		teamStore:      secrets,
-		lekkoBFFClient: lekko.NewBFFClient(secrets),
+		lekkoBFFClient: bff,
 	}
 }
 
-func (t *Team) Show() string {
-	return t.teamStore.GetLekkoTeam()
+func (t *Team) Show(ts TeamStore) string {
+	return ts.GetLekkoTeam()
 }
 
-func (t *Team) Use(ctx context.Context, team string) error {
+func (t *Team) Use(ctx context.Context, team string, wts WriteTeamStore) error {
 	if _, err := t.lekkoBFFClient.UseTeam(ctx, connect.NewRequest(&bffv1beta1.UseTeamRequest{
 		Name: team,
 	})); err != nil {
 		return errors.Wrap(err, "use team")
 	}
-	t.teamStore.SetLekkoTeam(team)
+	wts.SetLekkoTeam(team)
 	return nil
 }
 
@@ -129,13 +128,13 @@ func roleToProto(role MemberRole) bffv1beta1.MembershipRole {
 	}
 }
 
-func (t *Team) Create(ctx context.Context, name string) error {
+func (t *Team) Create(ctx context.Context, name string, wts WriteTeamStore) error {
 	if _, err := t.lekkoBFFClient.CreateTeam(ctx, connect.NewRequest(&bffv1beta1.CreateTeamRequest{
 		Name: name,
 	})); err != nil {
 		return errors.Wrap(err, "create team")
 	}
-	t.teamStore.SetLekkoTeam(name)
+	wts.SetLekkoTeam(name)
 	return nil
 }
 

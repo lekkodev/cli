@@ -31,7 +31,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
 )
@@ -70,7 +69,7 @@ type AuthProvider interface {
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.
-func NewLocal(path string) (*Repo, error) {
+func NewLocal(path string, auth AuthProvider) (*Repo, error) {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open git repo")
@@ -80,15 +79,11 @@ func NewLocal(path string) (*Repo, error) {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 
-	secrets, err := metadata.NewSecretsOrError()
-	if err != nil {
-		return nil, errors.Wrap(err, "new secrets")
-	}
 	cr := &Repo{
 		Repo:           repo,
 		Wt:             wt,
 		Fs:             wt.Filesystem,
-		Auth:           secrets,
+		Auth:           auth,
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
