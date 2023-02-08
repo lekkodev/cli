@@ -58,9 +58,14 @@ type BFFServiceClient interface {
 	CreateRepository(context.Context, *connect_go.Request[v1beta1.CreateRepositoryRequest]) (*connect_go.Response[v1beta1.CreateRepositoryResponse], error)
 	DeleteRepository(context.Context, *connect_go.Request[v1beta1.DeleteRepositoryRequest]) (*connect_go.Response[v1beta1.DeleteRepositoryResponse], error)
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
+	// Namespace & feature management
+	// Deprecated going forward, use ListRepositoryContents instead.
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
-	// Lists all the features within a repository (and optionally, namespace)
+	// Lists all the features within a repository (and optionally, namespace).
+	// Deprecated going forward, use ListRepositoryContents instead.
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
+	// Lists all of the namespaces and features in a repository, meant to serve the
+	// sidebar of the lekko web app.
 	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
@@ -494,9 +499,14 @@ type BFFServiceHandler interface {
 	CreateRepository(context.Context, *connect_go.Request[v1beta1.CreateRepositoryRequest]) (*connect_go.Response[v1beta1.CreateRepositoryResponse], error)
 	DeleteRepository(context.Context, *connect_go.Request[v1beta1.DeleteRepositoryRequest]) (*connect_go.Response[v1beta1.DeleteRepositoryResponse], error)
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
+	// Namespace & feature management
+	// Deprecated going forward, use ListRepositoryContents instead.
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
-	// Lists all the features within a repository (and optionally, namespace)
+	// Lists all the features within a repository (and optionally, namespace).
+	// Deprecated going forward, use ListRepositoryContents instead.
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
+	// Lists all of the namespaces and features in a repository, meant to serve the
+	// sidebar of the lekko web app.
 	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
 	// Get info about multiple PRs in a repository
