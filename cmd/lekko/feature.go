@@ -132,6 +132,7 @@ func featureAdd() *cobra.Command {
 				return errors.Wrap(err, "add feature")
 			} else {
 				fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
+				fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
 			}
 			return nil
 		},

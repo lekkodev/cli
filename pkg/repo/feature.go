@@ -375,7 +375,7 @@ func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType fea
 		}
 	}
 
-	featurePath := filepath.Join(r.path, ns, fmt.Sprintf("%s.star", featureName))
+	featurePath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
 	template, err := star.GetTemplate(fType)
 	if err != nil {
 		return "", errors.Wrap(err, "get template")
@@ -389,7 +389,7 @@ func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType fea
 // Removes the given feature. If the namespace or feature doesn't exist, returns
 // an error.
 func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error {
-	_, err := metadata.ParseNamespaceMetadataStrict(ctx, r.path, ns, r)
+	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
 	if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
 	}
@@ -400,7 +400,7 @@ func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error 
 		filepath.Join(metadata.GenFolderPathJSON, fmt.Sprintf("%s.json", featureName)),
 		filepath.Join(metadata.GenFolderPathProto, fmt.Sprintf("%s.proto.bin", featureName)),
 	} {
-		ok, err := r.RemoveIfExists(filepath.Join(r.path, ns, file))
+		ok, err := r.RemoveIfExists(filepath.Join(ns, file))
 		if err != nil {
 			return fmt.Errorf("remove if exists failed to remove %s: %v", file, err)
 		}
@@ -421,10 +421,10 @@ func (r *Repo) AddNamespace(ctx context.Context, name string) error {
 		return errors.Wrap(ErrInvalidName, "namespace")
 	}
 	// First, try to find the namespace we wish to create
-	_, err := metadata.ParseNamespaceMetadataStrict(ctx, r.path, name, r)
+	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", name, r)
 	if errors.Is(err, os.ErrNotExist) {
 		// if it doesn't exist, create it and exit.
-		if err := metadata.CreateNamespaceMetadata(ctx, r.path, name, r); err != nil {
+		if err := metadata.CreateNamespaceMetadata(ctx, "", name, r); err != nil {
 			return errors.Wrap(err, "create ns meta")
 		}
 		return nil
@@ -567,6 +567,7 @@ var (
 // Only allows alphanumeric lowercase characters, plus ',-_'
 // Cannot be too long, and cannot start or end with any special characters.
 // See feature_test.go for examples.
+// TODO: there is probably a way to do this in a single regexp.
 func isValidName(name string) bool {
 	return allchars.MatchString(name) &&
 		len(name) <= 128 &&
