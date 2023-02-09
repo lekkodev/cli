@@ -60,9 +60,13 @@ type BFFServiceClient interface {
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
 	// Namespace & feature management
 	// Deprecated going forward, use ListRepositoryContents instead.
+	//
+	// Deprecated: do not use.
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
 	// Lists all the features within a repository (and optionally, namespace).
 	// Deprecated going forward, use ListRepositoryContents instead.
+	//
+	// Deprecated: do not use.
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	// Lists all of the namespaces and features in a repository, meant to serve the
 	// sidebar of the lekko web app.
@@ -387,11 +391,15 @@ func (c *bFFServiceClient) ListRepositories(ctx context.Context, req *connect_go
 }
 
 // ListNamespaces calls lekko.bff.v1beta1.BFFService.ListNamespaces.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) ListNamespaces(ctx context.Context, req *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error) {
 	return c.listNamespaces.CallUnary(ctx, req)
 }
 
 // ListFeatures calls lekko.bff.v1beta1.BFFService.ListFeatures.
+//
+// Deprecated: do not use.
 func (c *bFFServiceClient) ListFeatures(ctx context.Context, req *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error) {
 	return c.listFeatures.CallUnary(ctx, req)
 }
@@ -501,9 +509,13 @@ type BFFServiceHandler interface {
 	ListRepositories(context.Context, *connect_go.Request[v1beta1.ListRepositoriesRequest]) (*connect_go.Response[v1beta1.ListRepositoriesResponse], error)
 	// Namespace & feature management
 	// Deprecated going forward, use ListRepositoryContents instead.
+	//
+	// Deprecated: do not use.
 	ListNamespaces(context.Context, *connect_go.Request[v1beta1.ListNamespacesRequest]) (*connect_go.Response[v1beta1.ListNamespacesResponse], error)
 	// Lists all the features within a repository (and optionally, namespace).
 	// Deprecated going forward, use ListRepositoryContents instead.
+	//
+	// Deprecated: do not use.
 	ListFeatures(context.Context, *connect_go.Request[v1beta1.ListFeaturesRequest]) (*connect_go.Response[v1beta1.ListFeaturesResponse], error)
 	// Lists all of the namespaces and features in a repository, meant to serve the
 	// sidebar of the lekko web app.

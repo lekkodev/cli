@@ -52,10 +52,14 @@ service BFFService {
 
   // Namespace & feature management
   // Deprecated going forward, use ListRepositoryContents instead.
-  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse) {}
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse) {
+    option deprecated = true;
+  }
   // Lists all the features within a repository (and optionally, namespace).
   // Deprecated going forward, use ListRepositoryContents instead.
-  rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {}
+  rpc ListFeatures(ListFeaturesRequest) returns (ListFeaturesResponse) {
+    option deprecated = true;
+  }
   // Lists all of the namespaces and features in a repository, meant to serve the
   // sidebar of the lekko web app.
   rpc ListRepositoryContents(ListRepositoryContentsRequest) returns (ListRepositoryContentsResponse) {}
@@ -244,6 +248,7 @@ message ListRepositoryContentsResponse {
 
   message NamespaceListItem {
     string name = 1;
+    // version of the namespace in lekko, e.g. 'v1beta3'
     string version = 2;
     repeated FeatureListItem features = 3;
   }
