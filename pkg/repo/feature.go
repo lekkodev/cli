@@ -557,6 +557,8 @@ func (r *Repo) ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigR
 	return ret, nil
 }
 
+const maxNameLength = 64
+
 var (
 	allchars       = regexp.MustCompile(`^[a-z0-9_\-.]+$`)
 	boundary       = regexp.MustCompile(`^[a-z0-9]+$`)
@@ -570,7 +572,7 @@ var (
 // TODO: there is probably a way to do this in a single regexp.
 func isValidName(name string) bool {
 	return allchars.MatchString(name) &&
-		len(name) <= 128 &&
+		len(name) <= maxNameLength &&
 		boundary.MatchString(string(name[0])) &&
 		boundary.MatchString(string(name[len(name)-1]))
 }
