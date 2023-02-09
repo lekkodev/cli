@@ -44,6 +44,21 @@ const (
 	FeatureTypeJSON   FeatureType = "json"
 )
 
+func FeatureTypes() []string {
+	var ret []string
+	for _, ftype := range []FeatureType{
+		FeatureTypeBool,
+		FeatureTypeString,
+		FeatureTypeInt,
+		FeatureTypeFloat,
+		FeatureTypeJSON,
+		FeatureTypeProto,
+	} {
+		ret = append(ret, string(ftype))
+	}
+	return ret
+}
+
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
 
 type Rule struct {

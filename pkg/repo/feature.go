@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -35,56 +36,13 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-// func (r *Repo) Compile(ctx context.Context, registry *protoregistry.Types, force bool) error {
-// 	var err error
-// 	if registry == nil {
-// 		rootMD, _, err := r.ParseMetadata(ctx)
-// 		if err != nil {
-// 			return errors.Wrap(err, "parse metadata")
-// 		}
-// 		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-// 		if err != nil {
-// 			return errors.Wrap(err, "build dynamic type registry")
-// 		}
-// 	}
-// 	contents, err := r.GetContents(ctx)
-// 	if err != nil {
-// 		return errors.Wrap(err, "get contents")
-// 	}
-// 	for nsMD, ffs := range contents {
-// 		for _, ff := range ffs {
-// 			if _, err := r.CompileFeature(ctx, registry, nsMD.Name, ff.Name, true, force); err != nil {
-// 				return errors.Wrap(err, "compile feature")
-// 			}
-// 		}
-// 	}
-// 	return nil
-// }
-
-// func (r *Repo) CompileNamespace(ctx context.Context, registry *protoregistry.Types, namespace string, force bool) error {
-// 	ffs, err := r.GetFeatureFiles(ctx, namespace)
-// 	if err != nil {
-// 		return errors.Wrap(err, "get feature files")
-// 	}
-// 	if registry == nil {
-// 		rootMD, _, err := r.ParseMetadata(ctx)
-// 		if err != nil {
-// 			return errors.Wrap(err, "parse metadata")
-// 		}
-// 		registry, err = r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-// 		if err != nil {
-// 			return errors.Wrap(err, "build dynamic type registry")
-// 		}
-// 	}
-// 	for _, ff := range ffs {
-// 		if _, err := r.CompileFeature(ctx, registry, namespace, ff.Name, true, force); err != nil {
-// 			return errors.Wrap(err, "compile feature")
-// 		}
-// 	}
-// 	return nil
-// }
-
 func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
+	if !isValidName(namespace) {
+		return nil, errors.Errorf("invalid name '%s'", namespace)
+	}
+	if !isValidName(featureName) {
+		return nil, errors.Errorf("invalid name '%s'", featureName)
+	}
 	ff := feature.NewFeatureFile(namespace, featureName)
 	registry, err := r.registry(ctx, registry)
 	if err != nil {
@@ -404,50 +362,44 @@ func (r *Repo) FormatFeature(ctx context.Context, ff feature.FeatureFile) error 
 	return nil
 }
 
-func (r *Repo) Add(ctx context.Context, ns, featureName string, fType feature.FeatureType) error {
-	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
-	if err != nil && errors.Is(err, os.ErrNotExist) {
-		if err := metadata.CreateNamespaceMetadata(ctx, "", ns, r); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return fmt.Errorf("error parsing namespace metadata: %v", err)
+// Adds a new feature to the given namespace using the given type.
+// Returns an error if:
+// 		- the namespace doesn't exist, or
+// 		- a feature named featureName already exists
+// Returns the path to the feature file that was written to disk.
+func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error) {
+	if !isValidName(featureName) {
+		return "", errors.Wrap(ErrInvalidName, "feature")
 	}
-	if featureName == "" {
-		r.Logf("Your new namespace has been created: %s\n", ns)
-		return nil
-	}
-	ffs, err := r.GetFeatureFiles(ctx, ns)
+	ffs, err := r.GetFeatureFiles(ctx, ns) // returns err if ns doesn't exist
 	if err != nil {
-		return fmt.Errorf("failed to get feature files: %v", err)
+		return "", fmt.Errorf("failed to get feature files: %v", err)
 	}
 	for _, ff := range ffs {
-		if err := feature.ComplianceCheck(ff, nsMD); err != nil {
-			return fmt.Errorf("compliance check for feature %s: %w", ff.Name, err)
-		}
 		if ff.Name == featureName {
-			return fmt.Errorf("feature named %s already exists", featureName)
+			return "", fmt.Errorf("feature named %s already exists", featureName)
 		}
 	}
 
 	featurePath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
 	template, err := star.GetTemplate(fType)
 	if err != nil {
-		return errors.Wrap(err, "get template")
+		return "", errors.Wrap(err, "get template")
 	}
 	if err := r.WriteFile(featurePath, template, 0600); err != nil {
-		return fmt.Errorf("failed to add feature: %v", err)
+		return "", fmt.Errorf("failed to add feature: %v", err)
 	}
-	r.Logf("Your new feature has been written to %s\n", featurePath)
-	r.Logf("Make your changes, and run 'lekko compile'.\n")
-	return nil
+	return featurePath, nil
 }
 
+// Removes the given feature. If the namespace or feature doesn't exist, returns
+// an error.
 func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error {
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
 	if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
 	}
+
 	var removed bool
 	for _, file := range []string{
 		fmt.Sprintf("%s.star", featureName),
@@ -462,14 +414,34 @@ func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error 
 			removed = true
 		}
 	}
-	if removed {
-		r.Logf("Feature %s has been removed\n", featureName)
-	} else {
-		r.Logf("Feature %s does not exist\n", featureName)
+	if !removed {
+		return errors.Errorf("feature %s does not exist", featureName)
 	}
 	return nil
 }
 
+// Adds the given namespace by adding it to lekko.root.yaml, and creating the
+// directory structure for it.
+func (r *Repo) AddNamespace(ctx context.Context, name string) error {
+	if !isValidName(name) {
+		return errors.Wrap(ErrInvalidName, "namespace")
+	}
+	// First, try to find the namespace we wish to create
+	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", name, r)
+	if errors.Is(err, os.ErrNotExist) {
+		// if it doesn't exist, create it and exit.
+		if err := metadata.CreateNamespaceMetadata(ctx, "", name, r); err != nil {
+			return errors.Wrap(err, "create ns meta")
+		}
+		return nil
+	}
+	if err != nil {
+		return errors.Wrap(err, "parse ns meta")
+	}
+	return errors.New("ns already exists")
+}
+
+// Removes the given namespace from the repo, as well as from lekko.root.yaml.
 func (r *Repo) RemoveNamespace(ctx context.Context, ns string) error {
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
 	if err != nil {
@@ -493,7 +465,6 @@ func (r *Repo) RemoveNamespace(ctx context.Context, ns string) error {
 	}); err != nil {
 		return fmt.Errorf("failed to update root config md: %v", err)
 	}
-	r.Logf("Namespace %s has been removed\n", ns)
 	return nil
 }
 
@@ -575,6 +546,41 @@ func (r *Repo) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRep
 		ret[*nsMD] = ffs
 	}
 	return ret, nil
+}
+
+func (r *Repo) ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error) {
+	_, nsMDs, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse md")
+	}
+	var ret []*metadata.NamespaceConfigRepoMetadata
+	for _, v := range nsMDs {
+		ret = append(ret, v)
+	}
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].Name < ret[j].Name
+	})
+	return ret, nil
+}
+
+const maxNameLength = 64
+
+var (
+	allchars       = regexp.MustCompile(`^[a-z0-9_\-.]+$`)
+	boundary       = regexp.MustCompile(`^[a-z0-9]+$`)
+	ErrInvalidName = errors.New("invalid name")
+)
+
+// Simple rules for how to name namespaces and features.
+// Only allows alphanumeric lowercase characters, plus '.-_'
+// Cannot be too long, and cannot start or end with any special characters.
+// See feature_test.go for examples.
+// TODO: there is probably a way to do this in a single regexp.
+func isValidName(name string) bool {
+	return allchars.MatchString(name) &&
+		len(name) <= maxNameLength &&
+		boundary.MatchString(string(name[0])) &&
+		boundary.MatchString(string(name[len(name)-1]))
 }
 
 func (r *Repo) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {

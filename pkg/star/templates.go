@@ -20,42 +20,36 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 )
 
-const simpleStar = `result=feature(
+const starFmt = `result=feature(
 	description="my feature description",
-	default=False
+	default=%s
 )
 `
 
-const complexStar = `load("assert.star", "assert")
+const protoStar = `load("assert.star", "assert")
 
 pb = proto.package("google.protobuf")
 
-description = "my feature description"
-default = pb.BoolValue(value=False)
-# Provide a list of rules/conditions/exceptions for this feature flag.
-# Rules are evaluated in order from start to end.
-rules = [("age > 12", pb.BoolValue(value=True))]
-# The validator allows you to define invariants. It is a function that takes 
-# your feature value and raises errors with the help of the starlarktest module:
-# https://github.com/google/starlark-go/blob/master/starlarktest/assert.go
-# The validator is run on the default value as well as every rule value.
-def validator(val):
-	assert.true(val.value or not val.value)
-
 result=feature(
-	description=description,
-	default=default,
-	rules=rules,
-	validator=validator
+	description="my feature description",
+	default=pb.BoolValue(value=False)
 )
 `
 
 func GetTemplate(fType feature.FeatureType) ([]byte, error) {
 	switch fType {
 	case feature.FeatureTypeBool:
-		return []byte(simpleStar), nil
+		return []byte(fmt.Sprintf(starFmt, "False")), nil
+	case feature.FeatureTypeInt:
+		return []byte(fmt.Sprintf(starFmt, "1")), nil
+	case feature.FeatureTypeFloat:
+		return []byte(fmt.Sprintf(starFmt, "1.0")), nil
+	case feature.FeatureTypeString:
+		return []byte(fmt.Sprintf(starFmt, "''")), nil
+	case feature.FeatureTypeJSON:
+		return []byte(fmt.Sprintf(starFmt, "{}")), nil
 	case feature.FeatureTypeProto:
-		return []byte(complexStar), nil
+		return []byte(protoStar), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)
 	}
