@@ -45,7 +45,6 @@ import (
 func main() {
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(evalCmd)
-	rootCmd.AddCommand(addCmd())
 	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(commitCmd())
 	rootCmd.AddCommand(reviewCmd())
@@ -53,6 +52,8 @@ func main() {
 	rootCmd.AddCommand(restoreCmd())
 	rootCmd.AddCommand(teamCmd())
 	rootCmd.AddCommand(repoCmd())
+	rootCmd.AddCommand(featureCmd())
+	rootCmd.AddCommand(namespaceCmd())
 	// auth
 	authCmd.AddCommand(loginCmd())
 	authCmd.AddCommand(logoutCmd())
@@ -443,33 +444,6 @@ var evalCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func addCmd() *cobra.Command {
-	var fType string
-	ret := &cobra.Command{
-		Use:   "add namespace[/feature]",
-		Short: "Adds a new feature flag or namespace",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			namespace, featureName, err := feature.ParseFeaturePath(args[0])
-			if err != nil {
-				return errors.Wrap(err, "parse feature path")
-			}
-			return r.Add(cmd.Context(), namespace, featureName, feature.FeatureType(fType))
-		},
-	}
-	ret.Flags().StringVarP(&fType, "type", "t", string(feature.FeatureTypeBool), "feature type to add")
-	return ret
 }
 
 func removeCmd() *cobra.Command {

@@ -55,6 +55,7 @@ type Repo struct {
 
 	Auth                       AuthProvider
 	loggingEnabled, bufEnabled bool
+	path                       string // path to the root of the repository
 
 	fs.Provider
 	fs.ConfigWriter
@@ -84,6 +85,7 @@ func NewLocal(path string, auth AuthProvider) (*Repo, error) {
 		Wt:             wt,
 		Fs:             wt.Filesystem,
 		Auth:           auth,
+		path:           path,
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
@@ -113,6 +115,7 @@ func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
 		Wt:             wt,
 		Fs:             wt.Filesystem,
 		Auth:           auth,
+		path:           path,
 		loggingEnabled: true,
 		bufEnabled:     true,
 	}
