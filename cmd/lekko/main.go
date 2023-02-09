@@ -45,7 +45,6 @@ import (
 func main() {
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(evalCmd)
-	rootCmd.AddCommand(removeCmd())
 	rootCmd.AddCommand(commitCmd())
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
@@ -444,35 +443,6 @@ var evalCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func removeCmd() *cobra.Command {
-	ret := &cobra.Command{
-		Use:   "remove namespace[/feature]",
-		Short: "Removes an existing feature flag or namespace",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			namespace, featureName, err := feature.ParseFeaturePath(args[0])
-			if err != nil {
-				return errors.Wrap(err, "parse feature path")
-			}
-			ctx := cmd.Context()
-			if featureName == "" {
-				return r.RemoveNamespace(ctx, namespace)
-			}
-			return r.RemoveFeature(ctx, namespace, featureName)
-		},
-	}
-	return ret
 }
 
 var k8sCmd = &cobra.Command{
