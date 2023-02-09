@@ -37,6 +37,12 @@ import (
 )
 
 func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
+	if !isValidName(namespace) {
+		return nil, errors.Errorf("invalid name '%s'", namespace)
+	}
+	if !isValidName(featureName) {
+		return nil, errors.Errorf("invalid name '%s'", featureName)
+	}
 	ff := feature.NewFeatureFile(namespace, featureName)
 	registry, err := r.registry(ctx, registry)
 	if err != nil {
@@ -566,7 +572,7 @@ var (
 )
 
 // Simple rules for how to name namespaces and features.
-// Only allows alphanumeric lowercase characters, plus ',-_'
+// Only allows alphanumeric lowercase characters, plus '.-_'
 // Cannot be too long, and cannot start or end with any special characters.
 // See feature_test.go for examples.
 // TODO: there is probably a way to do this in a single regexp.
