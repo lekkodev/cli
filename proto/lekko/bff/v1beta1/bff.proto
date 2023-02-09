@@ -64,6 +64,10 @@ service BFFService {
   // sidebar of the lekko web app.
   rpc ListRepositoryContents(ListRepositoryContentsRequest) returns (ListRepositoryContentsResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
+  rpc AddNamespace(AddNamespaceRequest) returns (AddNamespaceResponse) {}
+  rpc RemoveNamespace(RemoveNamespaceRequest) returns (RemoveNamespaceResponse) {}
+  rpc AddFeature(AddFeatureRequest) returns (AddFeatureResponse) {}
+  rpc RemoveFeature(RemoveFeatureRequest) returns (RemoveFeatureResponse) {}
 
   // Get info about multiple PRs in a repository
   rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
@@ -280,6 +284,47 @@ message Feature {
   // the blob sha of the proto bin file according to git
   string sha = 6;
 }
+
+message AddNamespaceRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+}
+
+message AddNamespaceResponse {}
+
+message RemoveNamespaceRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+}
+
+message RemoveNamespaceResponse {}
+
+enum FeatureType {
+  FEATURE_TYPE_UNSPECIFIED = 0;
+  FEATURE_TYPE_BOOL = 1;
+  FEATURE_TYPE_INT = 2;
+  FEATURE_TYPE_FLOAT = 3;
+  FEATURE_TYPE_STRING = 4;
+  FEATURE_TYPE_JSON = 5;
+  FEATURE_TYPE_PROTO = 6;
+}
+
+message AddFeatureRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+  FeatureType type = 4;
+}
+
+message AddFeatureResponse {}
+
+message RemoveFeatureRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+}
+
+message RemoveFeatureResponse {}
 
 message OAuthUserRequest {
   // oauth code obtained from the provider (assuming github for now)
