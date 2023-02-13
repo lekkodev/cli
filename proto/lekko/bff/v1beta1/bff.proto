@@ -37,6 +37,8 @@ service BFFService {
   rpc GenerateAPIKey(GenerateAPIKeyRequest) returns (GenerateAPIKeyResponse) {}
   rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse) {}
   rpc DeleteAPIKey(DeleteAPIKeyRequest) returns (DeleteAPIKeyResponse) {}
+  // Verifies that the given api key is valid.
+  rpc CheckAPIKey(CheckAPIKeyRequest) returns (CheckAPIKeyResponse) {}
 
   // Team management
 
@@ -132,10 +134,11 @@ message GenerateAPIKeyResponse {
 }
 
 message APIKey {
-  string nickname = 1;
+  string team_name = 1;
+  string nickname = 2;
   // Lekko username of the user who created the api key
-  string created_by = 2;
-  google.protobuf.Timestamp created_at = 3;
+  string created_by = 3;
+  google.protobuf.Timestamp created_at = 4;
 }
 
 message ListAPIKeysRequest {}
@@ -149,6 +152,14 @@ message DeleteAPIKeyRequest {
 }
 
 message DeleteAPIKeyResponse {}
+
+message CheckAPIKeyRequest {
+  string api_key = 1;
+}
+
+message CheckAPIKeyResponse {
+  APIKey key = 1;
+}
 
 message CreateTeamRequest {
   string name = 1;
