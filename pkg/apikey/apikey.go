@@ -24,15 +24,15 @@ import (
 )
 
 // Provides functionality around interacting with api keys.
-type APIKey struct {
+type APIKeyManager struct {
 	bff bffv1beta1connect.BFFServiceClient
 }
 
-func NewAPIKey(bff bffv1beta1connect.BFFServiceClient) *APIKey {
-	return &APIKey{bff: bff}
+func NewAPIKey(bff bffv1beta1connect.BFFServiceClient) *APIKeyManager {
+	return &APIKeyManager{bff: bff}
 }
 
-func (a *APIKey) Create(ctx context.Context, nickname string) (string, error) {
+func (a *APIKeyManager) Create(ctx context.Context, nickname string) (string, error) {
 	resp, err := a.bff.GenerateAPIKey(ctx, connect.NewRequest(&bffv1beta1.GenerateAPIKeyRequest{
 		Nickname: nickname,
 	}))
@@ -42,7 +42,7 @@ func (a *APIKey) Create(ctx context.Context, nickname string) (string, error) {
 	return resp.Msg.GetApiKey(), nil
 }
 
-func (a *APIKey) List(ctx context.Context) ([]*bffv1beta1.APIKey, error) {
+func (a *APIKeyManager) List(ctx context.Context) ([]*bffv1beta1.APIKey, error) {
 	resp, err := a.bff.ListAPIKeys(ctx, connect.NewRequest(&bffv1beta1.ListAPIKeysRequest{}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list api keys")
@@ -50,7 +50,7 @@ func (a *APIKey) List(ctx context.Context) ([]*bffv1beta1.APIKey, error) {
 	return resp.Msg.GetApiKeys(), nil
 }
 
-func (a *APIKey) Check(ctx context.Context, apikey string) (*bffv1beta1.APIKey, error) {
+func (a *APIKeyManager) Check(ctx context.Context, apikey string) (*bffv1beta1.APIKey, error) {
 	resp, err := a.bff.CheckAPIKey(ctx, connect.NewRequest(&bffv1beta1.CheckAPIKeyRequest{
 		ApiKey: apikey,
 	}))
@@ -60,7 +60,7 @@ func (a *APIKey) Check(ctx context.Context, apikey string) (*bffv1beta1.APIKey, 
 	return resp.Msg.GetKey(), nil
 }
 
-func (a *APIKey) Delete(ctx context.Context, nickname string) error {
+func (a *APIKeyManager) Delete(ctx context.Context, nickname string) error {
 	_, err := a.bff.DeleteAPIKey(ctx, connect.NewRequest(&bffv1beta1.DeleteAPIKeyRequest{
 		Nickname: nickname,
 	}))

@@ -26,12 +26,12 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/lekkodev/cli/lekko"
-	"github.com/lekkodev/cli/logging"
-	"github.com/lekkodev/cli/oauth"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
+	"github.com/lekkodev/cli/pkg/lekko"
+	"github.com/lekkodev/cli/pkg/logging"
+	"github.com/lekkodev/cli/pkg/oauth"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/mitchellh/go-homedir"
@@ -81,7 +81,7 @@ func main() {
 var rootCmd = &cobra.Command{
 	Use:           "lekko",
 	Short:         "lekko - dynamic configuration helper",
-	Version:       "v0.2.0", // TODO: autoupdate this when releasing a new tag
+	Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
 	SilenceUsage:  true,
 	SilenceErrors: true,
 }

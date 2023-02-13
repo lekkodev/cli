@@ -20,10 +20,10 @@ import (
 	"text/tabwriter"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/lekkodev/cli/lekko"
-	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/apikey"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
+	"github.com/lekkodev/cli/pkg/lekko"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"

@@ -25,9 +25,9 @@ import (
 	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"

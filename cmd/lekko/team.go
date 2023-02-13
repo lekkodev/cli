@@ -21,9 +21,9 @@ import (
 	"text/tabwriter"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/lekkodev/cli/lekko"
+	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/secrets"
-	"github.com/lekkodev/cli/team"
+	"github.com/lekkodev/cli/pkg/team"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

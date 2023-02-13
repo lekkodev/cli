@@ -24,11 +24,11 @@ import (
 
 	"github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
-	"github.com/lekkodev/cli/lekko"
-	"github.com/lekkodev/cli/logging"
 	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/lekko"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 )
