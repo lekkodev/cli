@@ -48,6 +48,10 @@ type BFFServiceClient interface {
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
 	AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error)
+	// Generate an API used by SDKs to authenticate with Lekko.
+	GenerateAPIKey(context.Context, *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error)
+	ListAPIKeys(context.Context, *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error)
+	DeleteAPIKey(context.Context, *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
 	UseTeam(context.Context, *connect_go.Request[v1beta1.UseTeamRequest]) (*connect_go.Response[v1beta1.UseTeamResponse], error)
@@ -137,6 +141,21 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		authorizeDevice: connect_go.NewClient[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/AuthorizeDevice",
+			opts...,
+		),
+		generateAPIKey: connect_go.NewClient[v1beta1.GenerateAPIKeyRequest, v1beta1.GenerateAPIKeyResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/GenerateAPIKey",
+			opts...,
+		),
+		listAPIKeys: connect_go.NewClient[v1beta1.ListAPIKeysRequest, v1beta1.ListAPIKeysResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/ListAPIKeys",
+			opts...,
+		),
+		deleteAPIKey: connect_go.NewClient[v1beta1.DeleteAPIKeyRequest, v1beta1.DeleteAPIKeyResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/DeleteAPIKey",
 			opts...,
 		),
 		createTeam: connect_go.NewClient[v1beta1.CreateTeamRequest, v1beta1.CreateTeamResponse](
@@ -309,6 +328,9 @@ type bFFServiceClient struct {
 	oAuthUser                *connect_go.Client[v1beta1.OAuthUserRequest, v1beta1.OAuthUserResponse]
 	getUserOAuth             *connect_go.Client[v1beta1.GetUserOAuthRequest, v1beta1.GetUserOAuthResponse]
 	authorizeDevice          *connect_go.Client[v1beta1.AuthorizeDeviceRequest, v1beta1.AuthorizeDeviceResponse]
+	generateAPIKey           *connect_go.Client[v1beta1.GenerateAPIKeyRequest, v1beta1.GenerateAPIKeyResponse]
+	listAPIKeys              *connect_go.Client[v1beta1.ListAPIKeysRequest, v1beta1.ListAPIKeysResponse]
+	deleteAPIKey             *connect_go.Client[v1beta1.DeleteAPIKeyRequest, v1beta1.DeleteAPIKeyResponse]
 	createTeam               *connect_go.Client[v1beta1.CreateTeamRequest, v1beta1.CreateTeamResponse]
 	deleteTeam               *connect_go.Client[v1beta1.DeleteTeamRequest, v1beta1.DeleteTeamResponse]
 	useTeam                  *connect_go.Client[v1beta1.UseTeamRequest, v1beta1.UseTeamResponse]
@@ -366,6 +388,21 @@ func (c *bFFServiceClient) GetUserOAuth(ctx context.Context, req *connect_go.Req
 // AuthorizeDevice calls lekko.bff.v1beta1.BFFService.AuthorizeDevice.
 func (c *bFFServiceClient) AuthorizeDevice(ctx context.Context, req *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error) {
 	return c.authorizeDevice.CallUnary(ctx, req)
+}
+
+// GenerateAPIKey calls lekko.bff.v1beta1.BFFService.GenerateAPIKey.
+func (c *bFFServiceClient) GenerateAPIKey(ctx context.Context, req *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error) {
+	return c.generateAPIKey.CallUnary(ctx, req)
+}
+
+// ListAPIKeys calls lekko.bff.v1beta1.BFFService.ListAPIKeys.
+func (c *bFFServiceClient) ListAPIKeys(ctx context.Context, req *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error) {
+	return c.listAPIKeys.CallUnary(ctx, req)
+}
+
+// DeleteAPIKey calls lekko.bff.v1beta1.BFFService.DeleteAPIKey.
+func (c *bFFServiceClient) DeleteAPIKey(ctx context.Context, req *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error) {
+	return c.deleteAPIKey.CallUnary(ctx, req)
 }
 
 // CreateTeam calls lekko.bff.v1beta1.BFFService.CreateTeam.
@@ -545,6 +582,10 @@ type BFFServiceHandler interface {
 	OAuthUser(context.Context, *connect_go.Request[v1beta1.OAuthUserRequest]) (*connect_go.Response[v1beta1.OAuthUserResponse], error)
 	GetUserOAuth(context.Context, *connect_go.Request[v1beta1.GetUserOAuthRequest]) (*connect_go.Response[v1beta1.GetUserOAuthResponse], error)
 	AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error)
+	// Generate an API used by SDKs to authenticate with Lekko.
+	GenerateAPIKey(context.Context, *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error)
+	ListAPIKeys(context.Context, *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error)
+	DeleteAPIKey(context.Context, *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
 	UseTeam(context.Context, *connect_go.Request[v1beta1.UseTeamRequest]) (*connect_go.Response[v1beta1.UseTeamResponse], error)
@@ -631,6 +672,21 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/AuthorizeDevice", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/AuthorizeDevice",
 		svc.AuthorizeDevice,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/GenerateAPIKey", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/GenerateAPIKey",
+		svc.GenerateAPIKey,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/ListAPIKeys", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/ListAPIKeys",
+		svc.ListAPIKeys,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/DeleteAPIKey", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/DeleteAPIKey",
+		svc.DeleteAPIKey,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/CreateTeam", connect_go.NewUnaryHandler(
@@ -817,6 +873,18 @@ func (UnimplementedBFFServiceHandler) GetUserOAuth(context.Context, *connect_go.
 
 func (UnimplementedBFFServiceHandler) AuthorizeDevice(context.Context, *connect_go.Request[v1beta1.AuthorizeDeviceRequest]) (*connect_go.Response[v1beta1.AuthorizeDeviceResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.AuthorizeDevice is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) GenerateAPIKey(context.Context, *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GenerateAPIKey is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) ListAPIKeys(context.Context, *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ListAPIKeys is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) DeleteAPIKey(context.Context, *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.DeleteAPIKey is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error) {
