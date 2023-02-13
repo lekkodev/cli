@@ -29,8 +29,7 @@ const (
 	GithubOAuthHeaderKey   string = "X-Github-Token"
 	GithubUserHeaderKey    string = "X-Github-User"
 	AuthorizationHeaderKey string = "Authorization"
-	// URL                    string = "https://prod.api.lekko.dev"
-	URL string = "http://localhost:8080"
+	URL                    string = "https://prod.api.lekko.dev"
 )
 
 type AuthCredentials interface {
