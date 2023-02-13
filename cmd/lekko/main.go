@@ -53,6 +53,7 @@ func main() {
 	rootCmd.AddCommand(repoCmd())
 	rootCmd.AddCommand(featureCmd())
 	rootCmd.AddCommand(namespaceCmd())
+	rootCmd.AddCommand(apikeyCmd())
 	// auth
 	authCmd.AddCommand(loginCmd())
 	authCmd.AddCommand(logoutCmd())
