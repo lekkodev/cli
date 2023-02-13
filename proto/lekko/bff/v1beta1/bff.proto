@@ -37,7 +37,9 @@ service BFFService {
   rpc GenerateAPIKey(GenerateAPIKeyRequest) returns (GenerateAPIKeyResponse) {}
   rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse) {}
   rpc DeleteAPIKey(DeleteAPIKeyRequest) returns (DeleteAPIKeyResponse) {}
-  // Verifies that the given api key is valid.
+  // Verifies that the given api key is valid. Note: this is a convenience
+  // method. For safety reasons you're only able to check an api key for
+  // your currently active team.
   rpc CheckAPIKey(CheckAPIKeyRequest) returns (CheckAPIKeyResponse) {}
 
   // Team management

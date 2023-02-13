@@ -52,7 +52,9 @@ type BFFServiceClient interface {
 	GenerateAPIKey(context.Context, *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error)
 	ListAPIKeys(context.Context, *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error)
 	DeleteAPIKey(context.Context, *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error)
-	// Verifies that the given api key is valid.
+	// Verifies that the given api key is valid. Note: this is a convenience
+	// method. For safety reasons you're only able to check an api key for
+	// your currently active team.
 	CheckAPIKey(context.Context, *connect_go.Request[v1beta1.CheckAPIKeyRequest]) (*connect_go.Response[v1beta1.CheckAPIKeyResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
@@ -599,7 +601,9 @@ type BFFServiceHandler interface {
 	GenerateAPIKey(context.Context, *connect_go.Request[v1beta1.GenerateAPIKeyRequest]) (*connect_go.Response[v1beta1.GenerateAPIKeyResponse], error)
 	ListAPIKeys(context.Context, *connect_go.Request[v1beta1.ListAPIKeysRequest]) (*connect_go.Response[v1beta1.ListAPIKeysResponse], error)
 	DeleteAPIKey(context.Context, *connect_go.Request[v1beta1.DeleteAPIKeyRequest]) (*connect_go.Response[v1beta1.DeleteAPIKeyResponse], error)
-	// Verifies that the given api key is valid.
+	// Verifies that the given api key is valid. Note: this is a convenience
+	// method. For safety reasons you're only able to check an api key for
+	// your currently active team.
 	CheckAPIKey(context.Context, *connect_go.Request[v1beta1.CheckAPIKeyRequest]) (*connect_go.Response[v1beta1.CheckAPIKeyResponse], error)
 	CreateTeam(context.Context, *connect_go.Request[v1beta1.CreateTeamRequest]) (*connect_go.Response[v1beta1.CreateTeamResponse], error)
 	DeleteTeam(context.Context, *connect_go.Request[v1beta1.DeleteTeamRequest]) (*connect_go.Response[v1beta1.DeleteTeamResponse], error)
