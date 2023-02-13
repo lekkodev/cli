@@ -33,6 +33,14 @@ service BFFService {
   rpc OAuthUser(OAuthUserRequest) returns (OAuthUserResponse) {}
   rpc GetUserOAuth(GetUserOAuthRequest) returns (GetUserOAuthResponse) {}
   rpc AuthorizeDevice(AuthorizeDeviceRequest) returns (AuthorizeDeviceResponse) {}
+  // Generate an API used by SDKs to authenticate with Lekko.
+  rpc GenerateAPIKey(GenerateAPIKeyRequest) returns (GenerateAPIKeyResponse) {}
+  rpc ListAPIKeys(ListAPIKeysRequest) returns (ListAPIKeysResponse) {}
+  rpc DeleteAPIKey(DeleteAPIKeyRequest) returns (DeleteAPIKeyResponse) {}
+  // Verifies that the given api key is valid. Note: this is a convenience
+  // method. For safety reasons you're only able to check an api key for
+  // your currently active team.
+  rpc CheckAPIKey(CheckAPIKeyRequest) returns (CheckAPIKeyResponse) {}
 
   // Team management
 
@@ -117,6 +125,43 @@ message ChangePasswordRequest {
 }
 
 message ChangePasswordResponse {}
+
+message GenerateAPIKeyRequest {
+  // String to be associated with this api key.
+  string nickname = 1;
+}
+
+message GenerateAPIKeyResponse {
+  string api_key = 1;
+}
+
+message APIKey {
+  string team_name = 1;
+  string nickname = 2;
+  // Lekko username of the user who created the api key
+  string created_by = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message ListAPIKeysRequest {}
+
+message ListAPIKeysResponse {
+  repeated APIKey api_keys = 1;
+}
+
+message DeleteAPIKeyRequest {
+  string nickname = 1;
+}
+
+message DeleteAPIKeyResponse {}
+
+message CheckAPIKeyRequest {
+  string api_key = 1;
+}
+
+message CheckAPIKeyResponse {
+  APIKey key = 1;
+}
 
 message CreateTeamRequest {
   string name = 1;

@@ -23,8 +23,8 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/lekkodev/cli/lekko"
-	"github.com/lekkodev/cli/logging"
+	"github.com/lekkodev/cli/pkg/lekko"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
