@@ -260,8 +260,40 @@ var mergeCmd = &cobra.Command{
 		if _, err := ghCli.GetUser(ctx); err != nil {
 			return errors.Wrap(err, "github auth fail")
 		}
-		return r.Merge(ctx, prNum, ghCli)
+		if err := r.Merge(ctx, prNum, ghCli); err != nil {
+			return errors.Wrap(err, "merge")
+		}
+		fmt.Printf("PR merged.\n")
+		if len(rs.GetLekkoTeam()) > 0 {
+			u, err := r.GetRemoteURL()
+			if err != nil {
+				return errors.Wrap(err, "get remote url")
+			}
+			owner, repo, err := parseOwnerRepo(u)
+			if err != nil {
+				return errors.Wrap(err, "parse owner repo")
+			}
+			fmt.Printf("Visit %s to monitor your rollout.\n", rolloutsURL(rs.GetLekkoTeam(), owner, repo))
+		}
+		return nil
 	},
+}
+
+func parseOwnerRepo(githubURL string) (string, string, error) {
+	parts := strings.Split(githubURL, "/")
+	n := len(parts)
+	if n < 3 {
+		return "", "", errors.New("invalid github repo url")
+	}
+	owner, repo := parts[n-2], parts[n-1]
+	if idx := strings.Index(repo, ".git"); idx >= 0 {
+		repo = repo[0:idx]
+	}
+	return owner, repo, nil
+}
+
+func rolloutsURL(team, owner, repo string) string {
+	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/commits", team, owner, repo)
 }
 
 var authCmd = &cobra.Command{
