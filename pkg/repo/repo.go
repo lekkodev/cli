@@ -263,6 +263,21 @@ func (r *Repo) CredentialsExist() error {
 	return nil
 }
 
+func (r *Repo) GetRemoteURL() (string, error) {
+	cfg, err := r.Repo.Config()
+	if err != nil {
+		return "", errors.Wrap(err, "config")
+	}
+	remote, ok := cfg.Remotes[RemoteName]
+	if !ok {
+		return "", errors.Errorf("could not find remote %s in config", RemoteName)
+	}
+	if len(remote.URLs) == 0 {
+		return "", errors.Errorf("remote %s has no urls", RemoteName)
+	}
+	return remote.URLs[0], nil
+}
+
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
 func (r *Repo) Commit(ctx context.Context, message string) (string, error) {
