@@ -26,9 +26,7 @@ const starFmt = `result=feature(
 )
 `
 
-const protoStar = `load("assert.star", "assert")
-
-pb = proto.package("google.protobuf")
+const protoStar = `pb = proto.package("google.protobuf")
 
 result=feature(
 	description="my feature description",
