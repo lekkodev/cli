@@ -21,6 +21,9 @@ import "google/protobuf/any.proto";
 // Initial implementation of a feature flagging service.
 service ConfigurationService {
   rpc GetBoolValue(GetBoolValueRequest) returns (GetBoolValueResponse) {}
+  rpc GetIntValue(GetIntValueRequest) returns (GetIntValueResponse) {}
+  rpc GetFloatValue(GetFloatValueRequest) returns (GetFloatValueResponse) {}
+  rpc GetStringValue(GetStringValueRequest) returns (GetStringValueResponse) {}
   rpc GetProtoValue(GetProtoValueRequest) returns (GetProtoValueResponse) {}
   rpc GetJSONValue(GetJSONValueRequest) returns (GetJSONValueResponse) {}
   // Register is used to denote a RepositoryKey and namespaces within it
@@ -42,6 +45,39 @@ message GetBoolValueRequest {
 
 message GetBoolValueResponse {
   bool value = 1;
+}
+
+message GetIntValueRequest {
+  string key = 1;
+  map<string, Value> context = 2;
+  string namespace = 3;
+  RepositoryKey repo_key = 4;
+}
+
+message GetIntValueResponse {
+  int64 value = 1;
+}
+
+message GetFloatValueRequest {
+  string key = 1;
+  map<string, Value> context = 2;
+  string namespace = 3;
+  RepositoryKey repo_key = 4;
+}
+
+message GetFloatValueResponse {
+  double value = 1;
+}
+
+message GetStringValueRequest {
+  string key = 1;
+  map<string, Value> context = 2;
+  string namespace = 3;
+  RepositoryKey repo_key = 4;
+}
+
+message GetStringValueResponse {
+  string value = 1;
 }
 
 message GetProtoValueRequest {
