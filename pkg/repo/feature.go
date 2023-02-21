@@ -68,7 +68,7 @@ func (r *Repo) PersistFeature(ctx context.Context, registry *protoregistry.Types
 		return errors.Wrap(err, "persist")
 	}
 	if persisted {
-		r.Logf("Generated diff for %s/%s", namespace, f.Key)
+		r.Logf("Generated diff for %s/%s\n", namespace, f.Key)
 	}
 	if err := r.FormatFeature(ctx, ff); err != nil {
 		return errors.Wrap(err, "format")
