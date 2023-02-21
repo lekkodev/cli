@@ -128,9 +128,13 @@ func createCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, ws)
-			}, secrets.RequireLekkoToken())
+			}, secrets.RequireLekkoToken()); err != nil {
+				return err
+			}
+			fmt.Printf("Successfully created team %s, and switched to it", name)
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "name of team to create")

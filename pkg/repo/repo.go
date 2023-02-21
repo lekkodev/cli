@@ -335,7 +335,7 @@ func (r *Repo) Cleanup(ctx context.Context, branchName *string) error {
 	if err := r.CleanupBranch(ctx, branchName); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
-	if err := r.Pull(); err != nil {
+	if err := r.ensureMainBranch(); err != nil {
 		return errors.Wrap(err, "pull main")
 	}
 	r.Logf("Pulled from remote. Local branch %s is up to date.\n", MainBranchName)
