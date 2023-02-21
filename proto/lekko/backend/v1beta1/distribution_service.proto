@@ -32,6 +32,8 @@ service DistributionService {
   rpc SendFlagEvaluationMetrics(SendFlagEvaluationMetricsRequest) returns (SendFlagEvaluationMetricsResponse) {}
   // Registers a client and returns a session key.
   rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse) {}
+  // Deregisters a client using a session key.
+  rpc DeregisterClient(DeregisterClientRequest) returns (DeregisterClientResponse) {}
 }
 
 message GetRepositoryVersionRequest {
@@ -109,5 +111,12 @@ message RegisterClientRequest {
 }
 
 message RegisterClientResponse {
+  // TODO make this field 1 if we rewrite the API.
   string session_key = 4;
 }
+
+message DeregisterClientRequest {
+  string session_key = 1;
+}
+
+message DeregisterClientResponse {}
