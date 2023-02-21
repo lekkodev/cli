@@ -81,6 +81,14 @@ func repoCreateCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			if len(owner) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Github Owner:",
+					Help:    "Name of the GitHub organization the create the repository under. If left empty, defaults to personal account.",
+				}, &owner); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+			if len(owner) == 0 {
 				owner = rs.GetGithubUser()
 			}
 			if len(repoName) == 0 {
@@ -91,7 +99,7 @@ func repoCreateCmd() *cobra.Command {
 				}
 			}
 			fmt.Printf("Attempting to create a new configuration repository %s[%s/%s]%s in team %s.\n", logging.Bold, owner, repoName, logging.Reset, rs.GetLekkoTeam())
-			fmt.Printf("First, ensure that the github owner %s has installed Lekko App by visiting:\n\t%s\n", owner, lekkoAppInstallURL)
+			fmt.Printf("First, ensure that the github owner '%s' has installed Lekko App by visiting:\n\t%s\n", owner, lekkoAppInstallURL)
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)
 
