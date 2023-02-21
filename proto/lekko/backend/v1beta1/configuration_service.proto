@@ -29,6 +29,10 @@ service ConfigurationService {
   // Register is used to denote a RepositoryKey and namespaces within it
   // that a client is interested in so the server can cache and keep up to date.
   rpc Register(RegisterRequest) returns (RegisterResponse) {}
+  // Deregister is used to tell the server that a client is shutting down. It is not
+  // required but preferable to have implementations call this once their lifecycle
+  // has completed.
+  rpc Deregister(DeregisterRequest) returns (DeregisterResponse) {}
 }
 
 message RepositoryKey {
@@ -119,3 +123,6 @@ message RegisterRequest {
 }
 
 message RegisterResponse {}
+
+message DeregisterRequest {}
+message DeregisterResponse {}

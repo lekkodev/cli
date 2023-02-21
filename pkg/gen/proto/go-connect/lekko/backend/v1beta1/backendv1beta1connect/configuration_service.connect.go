@@ -51,6 +51,10 @@ type ConfigurationServiceClient interface {
 	// Register is used to denote a RepositoryKey and namespaces within it
 	// that a client is interested in so the server can cache and keep up to date.
 	Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error)
+	// Deregister is used to tell the server that a client is shutting down. It is not
+	// required but preferable to have implementations call this once their lifecycle
+	// has completed.
+	Deregister(context.Context, *connect_go.Request[v1beta1.DeregisterRequest]) (*connect_go.Response[v1beta1.DeregisterResponse], error)
 }
 
 // NewConfigurationServiceClient constructs a client for the
@@ -98,6 +102,11 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 			baseURL+"/lekko.backend.v1beta1.ConfigurationService/Register",
 			opts...,
 		),
+		deregister: connect_go.NewClient[v1beta1.DeregisterRequest, v1beta1.DeregisterResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/Deregister",
+			opts...,
+		),
 	}
 }
 
@@ -110,6 +119,7 @@ type configurationServiceClient struct {
 	getProtoValue  *connect_go.Client[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse]
 	getJSONValue   *connect_go.Client[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse]
 	register       *connect_go.Client[v1beta1.RegisterRequest, v1beta1.RegisterResponse]
+	deregister     *connect_go.Client[v1beta1.DeregisterRequest, v1beta1.DeregisterResponse]
 }
 
 // GetBoolValue calls lekko.backend.v1beta1.ConfigurationService.GetBoolValue.
@@ -147,6 +157,11 @@ func (c *configurationServiceClient) Register(ctx context.Context, req *connect_
 	return c.register.CallUnary(ctx, req)
 }
 
+// Deregister calls lekko.backend.v1beta1.ConfigurationService.Deregister.
+func (c *configurationServiceClient) Deregister(ctx context.Context, req *connect_go.Request[v1beta1.DeregisterRequest]) (*connect_go.Response[v1beta1.DeregisterResponse], error) {
+	return c.deregister.CallUnary(ctx, req)
+}
+
 // ConfigurationServiceHandler is an implementation of the
 // lekko.backend.v1beta1.ConfigurationService service.
 type ConfigurationServiceHandler interface {
@@ -159,6 +174,10 @@ type ConfigurationServiceHandler interface {
 	// Register is used to denote a RepositoryKey and namespaces within it
 	// that a client is interested in so the server can cache and keep up to date.
 	Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error)
+	// Deregister is used to tell the server that a client is shutting down. It is not
+	// required but preferable to have implementations call this once their lifecycle
+	// has completed.
+	Deregister(context.Context, *connect_go.Request[v1beta1.DeregisterRequest]) (*connect_go.Response[v1beta1.DeregisterResponse], error)
 }
 
 // NewConfigurationServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -203,6 +222,11 @@ func NewConfigurationServiceHandler(svc ConfigurationServiceHandler, opts ...con
 		svc.Register,
 		opts...,
 	))
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/Deregister", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/Deregister",
+		svc.Deregister,
+		opts...,
+	))
 	return "/lekko.backend.v1beta1.ConfigurationService/", mux
 }
 
@@ -235,4 +259,8 @@ func (UnimplementedConfigurationServiceHandler) GetJSONValue(context.Context, *c
 
 func (UnimplementedConfigurationServiceHandler) Register(context.Context, *connect_go.Request[v1beta1.RegisterRequest]) (*connect_go.Response[v1beta1.RegisterResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.Register is not implemented"))
+}
+
+func (UnimplementedConfigurationServiceHandler) Deregister(context.Context, *connect_go.Request[v1beta1.DeregisterRequest]) (*connect_go.Response[v1beta1.DeregisterResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.Deregister is not implemented"))
 }
