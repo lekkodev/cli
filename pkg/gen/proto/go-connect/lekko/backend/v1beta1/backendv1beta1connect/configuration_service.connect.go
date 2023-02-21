@@ -43,6 +43,9 @@ const (
 // service.
 type ConfigurationServiceClient interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
+	GetIntValue(context.Context, *connect_go.Request[v1beta1.GetIntValueRequest]) (*connect_go.Response[v1beta1.GetIntValueResponse], error)
+	GetFloatValue(context.Context, *connect_go.Request[v1beta1.GetFloatValueRequest]) (*connect_go.Response[v1beta1.GetFloatValueResponse], error)
+	GetStringValue(context.Context, *connect_go.Request[v1beta1.GetStringValueRequest]) (*connect_go.Response[v1beta1.GetStringValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
 	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
 	// Register is used to denote a RepositoryKey and namespaces within it
@@ -65,6 +68,21 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetBoolValue",
 			opts...,
 		),
+		getIntValue: connect_go.NewClient[v1beta1.GetIntValueRequest, v1beta1.GetIntValueResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetIntValue",
+			opts...,
+		),
+		getFloatValue: connect_go.NewClient[v1beta1.GetFloatValueRequest, v1beta1.GetFloatValueResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetFloatValue",
+			opts...,
+		),
+		getStringValue: connect_go.NewClient[v1beta1.GetStringValueRequest, v1beta1.GetStringValueResponse](
+			httpClient,
+			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetStringValue",
+			opts...,
+		),
 		getProtoValue: connect_go.NewClient[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse](
 			httpClient,
 			baseURL+"/lekko.backend.v1beta1.ConfigurationService/GetProtoValue",
@@ -85,15 +103,33 @@ func NewConfigurationServiceClient(httpClient connect_go.HTTPClient, baseURL str
 
 // configurationServiceClient implements ConfigurationServiceClient.
 type configurationServiceClient struct {
-	getBoolValue  *connect_go.Client[v1beta1.GetBoolValueRequest, v1beta1.GetBoolValueResponse]
-	getProtoValue *connect_go.Client[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse]
-	getJSONValue  *connect_go.Client[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse]
-	register      *connect_go.Client[v1beta1.RegisterRequest, v1beta1.RegisterResponse]
+	getBoolValue   *connect_go.Client[v1beta1.GetBoolValueRequest, v1beta1.GetBoolValueResponse]
+	getIntValue    *connect_go.Client[v1beta1.GetIntValueRequest, v1beta1.GetIntValueResponse]
+	getFloatValue  *connect_go.Client[v1beta1.GetFloatValueRequest, v1beta1.GetFloatValueResponse]
+	getStringValue *connect_go.Client[v1beta1.GetStringValueRequest, v1beta1.GetStringValueResponse]
+	getProtoValue  *connect_go.Client[v1beta1.GetProtoValueRequest, v1beta1.GetProtoValueResponse]
+	getJSONValue   *connect_go.Client[v1beta1.GetJSONValueRequest, v1beta1.GetJSONValueResponse]
+	register       *connect_go.Client[v1beta1.RegisterRequest, v1beta1.RegisterResponse]
 }
 
 // GetBoolValue calls lekko.backend.v1beta1.ConfigurationService.GetBoolValue.
 func (c *configurationServiceClient) GetBoolValue(ctx context.Context, req *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error) {
 	return c.getBoolValue.CallUnary(ctx, req)
+}
+
+// GetIntValue calls lekko.backend.v1beta1.ConfigurationService.GetIntValue.
+func (c *configurationServiceClient) GetIntValue(ctx context.Context, req *connect_go.Request[v1beta1.GetIntValueRequest]) (*connect_go.Response[v1beta1.GetIntValueResponse], error) {
+	return c.getIntValue.CallUnary(ctx, req)
+}
+
+// GetFloatValue calls lekko.backend.v1beta1.ConfigurationService.GetFloatValue.
+func (c *configurationServiceClient) GetFloatValue(ctx context.Context, req *connect_go.Request[v1beta1.GetFloatValueRequest]) (*connect_go.Response[v1beta1.GetFloatValueResponse], error) {
+	return c.getFloatValue.CallUnary(ctx, req)
+}
+
+// GetStringValue calls lekko.backend.v1beta1.ConfigurationService.GetStringValue.
+func (c *configurationServiceClient) GetStringValue(ctx context.Context, req *connect_go.Request[v1beta1.GetStringValueRequest]) (*connect_go.Response[v1beta1.GetStringValueResponse], error) {
+	return c.getStringValue.CallUnary(ctx, req)
 }
 
 // GetProtoValue calls lekko.backend.v1beta1.ConfigurationService.GetProtoValue.
@@ -115,6 +151,9 @@ func (c *configurationServiceClient) Register(ctx context.Context, req *connect_
 // lekko.backend.v1beta1.ConfigurationService service.
 type ConfigurationServiceHandler interface {
 	GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error)
+	GetIntValue(context.Context, *connect_go.Request[v1beta1.GetIntValueRequest]) (*connect_go.Response[v1beta1.GetIntValueResponse], error)
+	GetFloatValue(context.Context, *connect_go.Request[v1beta1.GetFloatValueRequest]) (*connect_go.Response[v1beta1.GetFloatValueResponse], error)
+	GetStringValue(context.Context, *connect_go.Request[v1beta1.GetStringValueRequest]) (*connect_go.Response[v1beta1.GetStringValueResponse], error)
 	GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error)
 	GetJSONValue(context.Context, *connect_go.Request[v1beta1.GetJSONValueRequest]) (*connect_go.Response[v1beta1.GetJSONValueResponse], error)
 	// Register is used to denote a RepositoryKey and namespaces within it
@@ -132,6 +171,21 @@ func NewConfigurationServiceHandler(svc ConfigurationServiceHandler, opts ...con
 	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetBoolValue", connect_go.NewUnaryHandler(
 		"/lekko.backend.v1beta1.ConfigurationService/GetBoolValue",
 		svc.GetBoolValue,
+		opts...,
+	))
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetIntValue", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/GetIntValue",
+		svc.GetIntValue,
+		opts...,
+	))
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetFloatValue", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/GetFloatValue",
+		svc.GetFloatValue,
+		opts...,
+	))
+	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetStringValue", connect_go.NewUnaryHandler(
+		"/lekko.backend.v1beta1.ConfigurationService/GetStringValue",
+		svc.GetStringValue,
 		opts...,
 	))
 	mux.Handle("/lekko.backend.v1beta1.ConfigurationService/GetProtoValue", connect_go.NewUnaryHandler(
@@ -157,6 +211,18 @@ type UnimplementedConfigurationServiceHandler struct{}
 
 func (UnimplementedConfigurationServiceHandler) GetBoolValue(context.Context, *connect_go.Request[v1beta1.GetBoolValueRequest]) (*connect_go.Response[v1beta1.GetBoolValueResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetBoolValue is not implemented"))
+}
+
+func (UnimplementedConfigurationServiceHandler) GetIntValue(context.Context, *connect_go.Request[v1beta1.GetIntValueRequest]) (*connect_go.Response[v1beta1.GetIntValueResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetIntValue is not implemented"))
+}
+
+func (UnimplementedConfigurationServiceHandler) GetFloatValue(context.Context, *connect_go.Request[v1beta1.GetFloatValueRequest]) (*connect_go.Response[v1beta1.GetFloatValueResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetFloatValue is not implemented"))
+}
+
+func (UnimplementedConfigurationServiceHandler) GetStringValue(context.Context, *connect_go.Request[v1beta1.GetStringValueRequest]) (*connect_go.Response[v1beta1.GetStringValueResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.backend.v1beta1.ConfigurationService.GetStringValue is not implemented"))
 }
 
 func (UnimplementedConfigurationServiceHandler) GetProtoValue(context.Context, *connect_go.Request[v1beta1.GetProtoValueRequest]) (*connect_go.Response[v1beta1.GetProtoValueResponse], error) {
