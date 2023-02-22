@@ -158,14 +158,8 @@ func deleteAPIKeyCmd() *cobra.Command {
 				}
 			}
 			fmt.Printf("Deleting api key '%s' in team '%s'...\n", name, rs.GetLekkoTeam())
-			var inputName string
-			if err := survey.AskOne(&survey.Input{
-				Message: fmt.Sprintf("Enter '%s' to continue:", name),
-			}, &inputName); err != nil {
-				return errors.Wrap(err, "prompt")
-			}
-			if name != inputName {
-				return errors.New("incorrect api key name input")
+			if err := confirmInput(name); err != nil {
+				return err
 			}
 			if err := a.Delete(cmd.Context(), name); err != nil {
 				return err

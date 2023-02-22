@@ -468,32 +468,32 @@ func (r *Repo) RemoveNamespace(ctx context.Context, ns string) error {
 	return nil
 }
 
-func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, error) {
+func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse metadata")
+		return nil, "", errors.Wrap(err, "parse metadata")
 	}
 	nsMD, ok := nsMDs[ns]
 	if !ok {
-		return nil, fmt.Errorf("invalid namespace: %s", ns)
+		return nil, "", fmt.Errorf("invalid namespace: %s", ns)
 	}
 
 	ff, err := r.GetFeatureFile(ctx, ns, featureName)
 	if err != nil {
-		return nil, errors.Wrap(err, "get feature file")
+		return nil, "", errors.Wrap(err, "get feature file")
 	}
 
 	if err := feature.ComplianceCheck(*ff, nsMD); err != nil {
-		return nil, errors.Wrap(err, "compliance check")
+		return nil, "", errors.Wrap(err, "compliance check")
 	}
 
 	evalF, err := encoding.ParseFeature(ctx, "", *ff, nsMD, r)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	ret, _, err := evalF.Evaluate(iCtx)
-	return ret, err
+	return ret, evalF.Type(), err
 }
 
 func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {

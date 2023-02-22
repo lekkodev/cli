@@ -26,7 +26,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -231,8 +230,9 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 }
 
 // Translates the pb any object to a go-native object based on the
-// given type.
-func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
+// given type. Also takes an optional protbuf type registry, in case the
+// value depends on a user-defined protobuf type.
+func AnyToVal(a *anypb.Any, fType FeatureType, registry *protoregistry.Types) (interface{}, error) {
 	switch fType {
 	case FeatureTypeBool:
 		b := wrapperspb.BoolValue{}
@@ -265,11 +265,13 @@ func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
 		}
 		return &v, nil
 	case FeatureTypeProto:
-		p := dynamicpb.Message{}
-		if err := a.UnmarshalTo(&p); err != nil {
+		p, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
+			Resolver: registry,
+		})
+		if err != nil {
 			return nil, errors.Wrap(err, "unmarshal to proto")
 		}
-		return &p, nil
+		return p.ProtoReflect(), nil
 	default:
 		return nil, fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 	}
@@ -380,7 +382,10 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 	return ret, nil
 }
 
-func FromProto(fProto *featurev1beta1.Feature) (*Feature, error) {
+// Converts a feature from its protobuf representation into a go-native
+// representation. Takes an optional proto registry in case we require
+// user-defined types in order to parse the feature.
+func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*Feature, error) {
 	ret := &Feature{
 		Key:         fProto.Key,
 		Description: fProto.Description,
@@ -390,12 +395,13 @@ func FromProto(fProto *featurev1beta1.Feature) (*Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "type from proto")
 	}
-	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType)
+	// todo: pass in type registry here
+	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
 		return nil, errors.Wrap(err, "any to val")
 	}
 	for _, constraint := range fProto.GetTree().GetConstraints() {
-		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType)
+		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType, registry)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule any to val")
 		}

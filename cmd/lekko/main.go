@@ -15,9 +15,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/mail"
 	"os"
@@ -38,13 +36,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func main() {
 	rootCmd.AddCommand(compileCmd())
-	rootCmd.AddCommand(evalCmd)
 	rootCmd.AddCommand(commitCmd())
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
@@ -411,69 +406,6 @@ var statusCmd = &cobra.Command{
 		rs := secrets.NewSecretsOrFail()
 		auth := oauth.NewOAuth(lekko.NewBFFClient(rs))
 		auth.Status(cmd.Context(), false, rs)
-		return nil
-	},
-}
-
-var evalCmd = &cobra.Command{
-	Use:   "eval namespace/feature '{\"context_key\": 123}'",
-	Short: "Evaluates a specified feature based on the provided context",
-	Args:  cobra.ExactArgs(2),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		rs := secrets.NewSecretsOrFail()
-		r, err := repo.NewLocal(wd, rs)
-		if err != nil {
-			return errors.Wrap(err, "new repo")
-		}
-
-		ctxMap := make(map[string]interface{})
-		if err := json.Unmarshal([]byte(args[1]), &ctxMap); err != nil {
-			return err
-		}
-		ctx := cmd.Context()
-		rootMD, _, err := r.ParseMetadata(ctx)
-		if err != nil {
-			return errors.Wrap(err, "failed to parse config repo metadata")
-		}
-
-		registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-		if err != nil {
-			return errors.Wrap(err, "failed to build dynamic type registry")
-		}
-		namespace, featureName, err := feature.ParseFeaturePath(args[0])
-		if err != nil {
-			return errors.Wrap(err, "parse feature path")
-		}
-
-		res, err := r.Eval(ctx, namespace, featureName, ctxMap)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Correctly evaluated to an any of type: %v\n", res.TypeUrl)
-		boolVal := new(wrapperspb.BoolValue)
-		if res.MessageIs(boolVal) {
-			if err := res.UnmarshalTo(boolVal); err != nil {
-				return err
-			}
-			fmt.Printf("Resulting value: %t\n", boolVal.Value)
-		} else { // TODO: Handle other types
-			jBytes, err := protojson.MarshalOptions{
-				Resolver: registry,
-			}.Marshal(res)
-			if err != nil {
-				return errors.Wrap(err, "failed to marshal proto to json")
-			}
-			indentedJBytes := bytes.NewBuffer(nil)
-			if err := json.Indent(indentedJBytes, jBytes, "", "  "); err != nil {
-				return errors.Wrap(err, "failed to indent json")
-			}
-			fmt.Printf("%v\n", indentedJBytes)
-		}
 		return nil
 	},
 }

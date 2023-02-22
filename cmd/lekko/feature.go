@@ -15,17 +15,22 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func featureCmd() *cobra.Command {
@@ -37,6 +42,7 @@ func featureCmd() *cobra.Command {
 		featureList(),
 		featureAdd(),
 		featureRemove(),
+		featureEval(),
 	)
 	return cmd
 }
@@ -143,6 +149,41 @@ func featureAdd() *cobra.Command {
 	return cmd
 }
 
+func featureSelect(ctx context.Context, r *repo.Repo, ns, feature string) (string, string, error) {
+	if len(ns) > 0 && len(feature) > 0 {
+		// namespace and feature already populated
+		return ns, feature, nil
+	}
+	nsMDs, err := r.ListNamespaces(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	var options []string
+	for _, nsMD := range nsMDs {
+		if len(ns) == 0 || ns == nsMD.Name {
+			ffs, err := r.GetFeatureFiles(ctx, nsMD.Name)
+			if err != nil {
+				return "", "", errors.Wrap(err, "get feature files")
+			}
+			for _, ff := range ffs {
+				options = append(options, fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))
+			}
+		}
+	}
+	var fPath string
+	if err := survey.AskOne(&survey.Select{
+		Message: "Feature:",
+		Options: options,
+	}, &fPath); err != nil {
+		return "", "", errors.Wrap(err, "prompt")
+	}
+	parts := strings.Split(fPath, "/")
+	if len(parts) != 2 {
+		return "", "", errors.Errorf("invalid input: %s", fPath)
+	}
+	return parts[0], parts[1], nil
+}
+
 func featureRemove() *cobra.Command {
 	var ns, featureName string
 	cmd := &cobra.Command{
@@ -157,37 +198,15 @@ func featureRemove() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(ns) == 0 {
-				nss, err := r.ListNamespaces(cmd.Context())
-				if err != nil {
-					return errors.Wrap(err, "list namespaces")
-				}
-				var options []string
-				for _, ns := range nss {
-					options = append(options, ns.Name)
-				}
-				if err := survey.AskOne(&survey.Select{
-					Message: "Namespace:",
-					Options: options,
-				}, &ns); err != nil {
-					return errors.Wrap(err, "prompt")
-				}
+			ns, featureName, err := featureSelect(cmd.Context(), r, ns, featureName)
+			if err != nil {
+				return err
 			}
-			if len(featureName) == 0 {
-				ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
-				if err != nil {
-					return errors.Wrap(err, "get feature files")
-				}
-				var options []string
-				for _, ff := range ffs {
-					options = append(options, ff.Name)
-				}
-				if err := survey.AskOne(&survey.Select{
-					Message: "Feature:",
-					Options: options,
-				}, &featureName); err != nil {
-					return errors.Wrap(err, "prompt")
-				}
+			// Confirm
+			featurePair := fmt.Sprintf("%s/%s", ns, featureName)
+			fmt.Printf("Deleting feature %s...\n", featurePair)
+			if err := confirmInput(featurePair); err != nil {
+				return err
 			}
 			if err := r.RemoveFeature(cmd.Context(), ns, featureName); err != nil {
 				return errors.Wrap(err, "remove feature")
@@ -198,6 +217,80 @@ func featureRemove() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
 	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
+	return cmd
+}
+
+func featureEval() *cobra.Command {
+	var ns, featureName, jsonContext string
+	cmd := &cobra.Command{
+		Use:   "eval",
+		Short: "evaluate feature",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			ns, featureName, err := featureSelect(ctx, r, ns, featureName)
+			if err != nil {
+				return err
+			}
+			if len(jsonContext) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Context:",
+					Help:    "Context for rules evaluation in JSON format, e.g. {\"a\": 1}.",
+				}, &jsonContext); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+			if len(jsonContext) == 0 {
+				jsonContext = "{}"
+			}
+			ctxMap := make(map[string]interface{})
+			if err := json.Unmarshal([]byte(jsonContext), &ctxMap); err != nil {
+				return err
+			}
+			fmt.Printf("Evaluating %s%s/%s%s with context %s%s%s\n", logging.Bold, ns, featureName, logging.Reset, logging.Bold, jsonContext, logging.Reset)
+			anyVal, fType, err := r.Eval(ctx, ns, featureName, ctxMap)
+			if err != nil {
+				return err
+			}
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse config repo metadata")
+			}
+			registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "failed to build dynamic type registry")
+			}
+			res, err := feature.AnyToVal(anyVal, fType, registry)
+			if err != nil {
+				return errors.Wrap(err, "any to val")
+			}
+			if fType == feature.FeatureTypeJSON {
+				valueRes, ok := res.(*structpb.Value)
+				if !ok {
+					return errors.Errorf("invalid type for %v", res)
+				}
+				jsonRes, err := valueRes.MarshalJSON()
+				if err != nil {
+					return err
+				}
+				res = string(jsonRes)
+			}
+			fmt.Printf("-------------------\n")
+			fmt.Printf("[%s] %s%v%s\n", fType, logging.Bold, res, logging.Reset)
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
+	cmd.Flags().StringVarP(&jsonContext, "context", "c", "", "context to evaluate with in json format")
 	return cmd
 }
 
@@ -316,14 +409,8 @@ func nsRemove() *cobra.Command {
 			}
 			// Confirm deletion
 			fmt.Printf("Deleting namespace %s...\n", name)
-			var inputName string
-			if err := survey.AskOne(&survey.Input{
-				Message: fmt.Sprintf("Enter '%s' to continue:", name),
-			}, &inputName); err != nil {
-				return errors.Wrap(err, "prompt")
-			}
-			if name != inputName {
-				return errors.New("incorrect namespace input")
+			if err := confirmInput(name); err != nil {
+				return err
 			}
 			// actually delete
 			if err := r.RemoveNamespace(cmd.Context(), name); err != nil {
@@ -335,4 +422,19 @@ func nsRemove() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
 	return cmd
+}
+
+// Helpful method to ask the user to enter a piece of text before
+// doing something irreversible, like deleting something.
+func confirmInput(text string) error {
+	var inputText string
+	if err := survey.AskOne(&survey.Input{
+		Message: fmt.Sprintf("Enter '%s' to continue:", text),
+	}, &inputText); err != nil {
+		return errors.Wrap(err, "prompt")
+	}
+	if text != inputText {
+		return errors.New("incorrect input")
+	}
+	return nil
 }

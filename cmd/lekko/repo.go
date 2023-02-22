@@ -194,14 +194,8 @@ func repoDeleteCmd() *cobra.Command {
 			}
 			owner, repoName := paths[0], paths[1]
 			fmt.Printf("Deleting repository %s...\n", selected)
-			var inputRepoName string
-			if err := survey.AskOne(&survey.Input{
-				Message: fmt.Sprintf("Enter '%s' to continue:", repoName),
-			}, &inputRepoName); err != nil {
-				return errors.Wrap(err, "prompt")
-			}
-			if repoName != inputRepoName {
-				return errors.New("incorrect repo name input")
+			if err := confirmInput(selected); err != nil {
+				return err
 			}
 			if err := repo.Delete(ctx, owner, repoName); err != nil {
 				return errors.Wrap(err, "delete repo")
