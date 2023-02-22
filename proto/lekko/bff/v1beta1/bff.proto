@@ -549,9 +549,8 @@ message EvalRequest {
 }
 
 message EvalResponse {
-  // TODO: infer the feature type, and return a oneof
-  // of {bool/int/float/string/jsonBytes/protoAny}
   google.protobuf.Any result = 1;
+  lekko.feature.v1beta1.FeatureType type = 2;
 }
 
 message GetFlagEvaluationMetricsRequest {

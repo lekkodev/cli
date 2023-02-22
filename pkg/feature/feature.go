@@ -26,7 +26,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -128,7 +127,11 @@ func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "evaluate feature"))
 	}
-	val, err := ValToAny(ut.ExpectedValue)
+	ft, err := eval.Type()
+	if err != nil {
+		return tr.WithError(errors.Wrap(err, "feature type"))
+	}
+	val, err := ValToAny(ut.ExpectedValue, ft)
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "invalid test value"))
 	}
@@ -203,22 +206,48 @@ func NewJSONFeature(value *structpb.Value) *Feature {
 	}
 }
 
-func ValToAny(value interface{}) (*anypb.Any, error) {
-	switch typedVal := value.(type) {
-	case bool:
-		return newAny(wrapperspb.Bool(typedVal))
-	case string:
-		return newAny(wrapperspb.String(typedVal))
-	case int64:
-		return newAny(wrapperspb.Int64(typedVal))
-	case float64:
-		return newAny(wrapperspb.Double(typedVal))
-	case *structpb.Value:
-		return newAny(typedVal)
-	case protoreflect.ProtoMessage:
-		return newAny(typedVal)
+// Takes a go value and an associated type, and converts the
+// value to a language-agnostic protobuf any type.
+func ValToAny(value interface{}, ft FeatureType) (*anypb.Any, error) {
+	switch ft {
+	case FeatureTypeBool:
+		v, ok := value.(bool)
+		if !ok {
+			return nil, errors.Errorf("expecting bool, got %T", value)
+		}
+		return newAny(wrapperspb.Bool(v))
+	case FeatureTypeInt:
+		v, ok := value.(int64)
+		if !ok {
+			return nil, errors.Errorf("expecting int64, got %T", value)
+		}
+		return newAny(wrapperspb.Int64(v))
+	case FeatureTypeFloat:
+		v, ok := value.(float64)
+		if !ok {
+			return nil, errors.Errorf("expecting float64, got %T", value)
+		}
+		return newAny(wrapperspb.Double(v))
+	case FeatureTypeString:
+		v, ok := value.(string)
+		if !ok {
+			return nil, errors.Errorf("expecting string, got %T", value)
+		}
+		return newAny(wrapperspb.String(v))
+	case FeatureTypeJSON:
+		v, ok := value.(*structpb.Value)
+		if !ok {
+			return nil, errors.Errorf("expecting *structpb.Value, got %T", value)
+		}
+		return newAny(v)
+	case FeatureTypeProto:
+		v, ok := value.(protoreflect.ProtoMessage)
+		if !ok {
+			return nil, errors.Errorf("expecting protoreflect.ProtoMessage, got %T", value)
+		}
+		return newAny(v)
 	default:
-		return nil, fmt.Errorf("unsupported feature type %T", typedVal)
+		return nil, fmt.Errorf("unsupported feature type %T", value)
 	}
 }
 
@@ -231,8 +260,9 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 }
 
 // Translates the pb any object to a go-native object based on the
-// given type.
-func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
+// given type. Also takes an optional protbuf type registry, in case the
+// value depends on a user-defined protobuf type.
+func AnyToVal(a *anypb.Any, fType FeatureType, registry *protoregistry.Types) (interface{}, error) {
 	switch fType {
 	case FeatureTypeBool:
 		b := wrapperspb.BoolValue{}
@@ -265,11 +295,13 @@ func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
 		}
 		return &v, nil
 	case FeatureTypeProto:
-		p := dynamicpb.Message{}
-		if err := a.UnmarshalTo(&p); err != nil {
+		p, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
+			Resolver: registry,
+		})
+		if err != nil {
 			return nil, errors.Wrap(err, "unmarshal to proto")
 		}
-		return &p, nil
+		return p.ProtoReflect(), nil
 	default:
 		return nil, fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 	}
@@ -357,7 +389,7 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 		Description: f.Description,
 		Type:        f.FeatureType.ToProto(),
 	}
-	defaultAny, err := ValToAny(f.Value)
+	defaultAny, err := ValToAny(f.Value, f.FeatureType)
 	if err != nil {
 		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
@@ -366,7 +398,7 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
 	for _, rule := range f.Rules {
-		ruleAny, err := ValToAny(rule.Value)
+		ruleAny, err := ValToAny(rule.Value, f.FeatureType)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
@@ -380,7 +412,10 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 	return ret, nil
 }
 
-func FromProto(fProto *featurev1beta1.Feature) (*Feature, error) {
+// Converts a feature from its protobuf representation into a go-native
+// representation. Takes an optional proto registry in case we require
+// user-defined types in order to parse the feature.
+func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*Feature, error) {
 	ret := &Feature{
 		Key:         fProto.Key,
 		Description: fProto.Description,
@@ -390,12 +425,12 @@ func FromProto(fProto *featurev1beta1.Feature) (*Feature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "type from proto")
 	}
-	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType)
+	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
 		return nil, errors.Wrap(err, "any to val")
 	}
 	for _, constraint := range fProto.GetTree().GetConstraints() {
-		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType)
+		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType, registry)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule any to val")
 		}
