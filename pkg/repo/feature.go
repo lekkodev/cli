@@ -491,9 +491,12 @@ func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string
 	if err != nil {
 		return nil, "", err
 	}
-
+	ft, err := evalF.Type()
+	if err != nil {
+		return nil, "", errors.Wrap(err, "feature type")
+	}
 	ret, _, err := evalF.Evaluate(iCtx)
-	return ret, evalF.Type(), err
+	return ret, ft, err
 }
 
 func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {

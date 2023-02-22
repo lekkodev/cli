@@ -127,7 +127,11 @@ func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "evaluate feature"))
 	}
-	val, err := ValToAny(ut.ExpectedValue)
+	ft, err := eval.Type()
+	if err != nil {
+		return tr.WithError(errors.Wrap(err, "feature type"))
+	}
+	val, err := ValToAny(ut.ExpectedValue, ft)
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "invalid test value"))
 	}
@@ -202,22 +206,48 @@ func NewJSONFeature(value *structpb.Value) *Feature {
 	}
 }
 
-func ValToAny(value interface{}) (*anypb.Any, error) {
-	switch typedVal := value.(type) {
-	case bool:
-		return newAny(wrapperspb.Bool(typedVal))
-	case string:
-		return newAny(wrapperspb.String(typedVal))
-	case int64:
-		return newAny(wrapperspb.Int64(typedVal))
-	case float64:
-		return newAny(wrapperspb.Double(typedVal))
-	case *structpb.Value:
-		return newAny(typedVal)
-	case protoreflect.ProtoMessage:
-		return newAny(typedVal)
+// Takes a go value and an associated type, and converts the
+// value to a language-agnostic protobuf any type.
+func ValToAny(value interface{}, ft FeatureType) (*anypb.Any, error) {
+	switch ft {
+	case FeatureTypeBool:
+		v, ok := value.(bool)
+		if !ok {
+			return nil, errors.Errorf("expecting bool, got %T", value)
+		}
+		return newAny(wrapperspb.Bool(v))
+	case FeatureTypeInt:
+		v, ok := value.(int64)
+		if !ok {
+			return nil, errors.Errorf("expecting int64, got %T", value)
+		}
+		return newAny(wrapperspb.Int64(v))
+	case FeatureTypeFloat:
+		v, ok := value.(float64)
+		if !ok {
+			return nil, errors.Errorf("expecting float64, got %T", value)
+		}
+		return newAny(wrapperspb.Double(v))
+	case FeatureTypeString:
+		v, ok := value.(string)
+		if !ok {
+			return nil, errors.Errorf("expecting string, got %T", value)
+		}
+		return newAny(wrapperspb.String(v))
+	case FeatureTypeJSON:
+		v, ok := value.(*structpb.Value)
+		if !ok {
+			return nil, errors.Errorf("expecting *structpb.Value, got %T", value)
+		}
+		return newAny(v)
+	case FeatureTypeProto:
+		v, ok := value.(protoreflect.ProtoMessage)
+		if !ok {
+			return nil, errors.Errorf("expecting protoreflect.ProtoMessage, got %T", value)
+		}
+		return newAny(v)
 	default:
-		return nil, fmt.Errorf("unsupported feature type %T", typedVal)
+		return nil, fmt.Errorf("unsupported feature type %T", value)
 	}
 }
 
@@ -359,7 +389,7 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 		Description: f.Description,
 		Type:        f.FeatureType.ToProto(),
 	}
-	defaultAny, err := ValToAny(f.Value)
+	defaultAny, err := ValToAny(f.Value, f.FeatureType)
 	if err != nil {
 		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
@@ -368,7 +398,7 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
 	for _, rule := range f.Rules {
-		ruleAny, err := ValToAny(rule.Value)
+		ruleAny, err := ValToAny(rule.Value, f.FeatureType)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
@@ -395,7 +425,6 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 	if err != nil {
 		return nil, errors.Wrap(err, "type from proto")
 	}
-	// todo: pass in type registry here
 	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
 		return nil, errors.Wrap(err, "any to val")
