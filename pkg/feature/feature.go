@@ -230,6 +230,8 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 	return ret, nil
 }
 
+// Translates the pb any object to a go-native object based on the
+// given type.
 func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
 	switch fType {
 	case FeatureTypeBool:
