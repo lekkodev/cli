@@ -177,10 +177,10 @@ func (fb *featureBuilder) validate(t feature.ValidatorResultType, index int, val
 }
 
 func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, error) {
-	// check if this is a complex type
+	// check if this is a proto type
 	message, ok := protomodule.AsProtoMessage(defaultVal)
 	if ok {
-		return feature.NewComplexFeature(message), nil
+		return feature.NewProtoFeature(message), nil
 	}
 	// check if this is a supported primitive type
 	switch typedVal := defaultVal.(type) {

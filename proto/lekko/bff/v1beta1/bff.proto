@@ -358,7 +358,8 @@ message AddFeatureRequest {
   BranchKey key = 1;
   string namespace_name = 2;
   string feature_name = 3;
-  FeatureType type = 4;
+  FeatureType type = 4 [deprecated = true];
+  lekko.feature.v1beta1.FeatureType type_new = 5;
 }
 
 message AddFeatureResponse {}

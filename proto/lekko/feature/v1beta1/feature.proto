@@ -28,6 +28,18 @@ message Feature {
   string key = 1;
   string description = 2;
   Tree tree = 3;
+  FeatureType type = 4;
+}
+
+// Enumerates the canonical types that lekko supports
+enum FeatureType {
+  FEATURE_TYPE_UNSPECIFIED = 0;
+  FEATURE_TYPE_BOOL = 1;
+  FEATURE_TYPE_INT = 2;
+  FEATURE_TYPE_FLOAT = 3;
+  FEATURE_TYPE_STRING = 4;
+  FEATURE_TYPE_JSON = 5;
+  FEATURE_TYPE_PROTO = 6;
 }
 
 // When the rules evaluator is traversing the tree, it will keep a local variable

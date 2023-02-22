@@ -111,7 +111,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 	if fcr.CompilationError != nil {
 		subs = append(subs, stylizeStr("Compile", false))
 	} else {
-		subs = append(subs, stylizeStr("Compile", true))
+		subs = append(subs, stylizeStr(fmt.Sprintf("Compile (%s)", fcr.CompiledFeature.Feature.FeatureType), true))
 		if len(fcr.CompiledFeature.ValidatorResults) > 0 {
 			var numPassed int
 			for _, vr := range fcr.CompiledFeature.ValidatorResults {
