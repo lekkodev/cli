@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	lekkov1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -57,6 +57,44 @@ func FeatureTypes() []string {
 		ret = append(ret, string(ftype))
 	}
 	return ret
+}
+
+func (ft FeatureType) ToProto() featurev1beta1.FeatureType {
+	switch ft {
+	case FeatureTypeBool:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_BOOL
+	case FeatureTypeInt:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_INT
+	case FeatureTypeFloat:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT
+	case FeatureTypeString:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_STRING
+	case FeatureTypeJSON:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_JSON
+	case FeatureTypeProto:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
+	default:
+		return featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED
+	}
+}
+
+func FeatureTypeFromProto(ft featurev1beta1.FeatureType) (FeatureType, error) {
+	switch ft {
+	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
+		return FeatureTypeBool, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+		return FeatureTypeInt, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+		return FeatureTypeFloat, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
+		return FeatureTypeString, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
+		return FeatureTypeJSON, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
+		return FeatureTypeProto, nil
+	default:
+		return "", errors.Errorf("unsupported feature type %s", ft)
+	}
 }
 
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
@@ -143,7 +181,7 @@ func NewFloatFeature(value float64) *Feature {
 	}
 }
 
-func NewComplexFeature(value protoreflect.ProtoMessage) *Feature {
+func NewProtoFeature(value protoreflect.ProtoMessage) *Feature {
 	return &Feature{
 		Value:       value,
 		FeatureType: FeatureTypeProto,
@@ -192,32 +230,49 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 	return ret, nil
 }
 
-func AnyToVal(a *anypb.Any) (interface{}, FeatureType, error) {
-	b := wrapperspb.BoolValue{}
-	if err := a.UnmarshalTo(&b); err == nil {
-		return b.Value, FeatureTypeBool, nil // bool type
+// Translates the pb any object to a go-native object based on the
+// given type.
+func AnyToVal(a *anypb.Any, fType FeatureType) (interface{}, error) {
+	switch fType {
+	case FeatureTypeBool:
+		b := wrapperspb.BoolValue{}
+		if err := a.UnmarshalTo(&b); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to bool")
+		}
+		return b.Value, nil
+	case FeatureTypeInt:
+		i := wrapperspb.Int64Value{}
+		if err := a.UnmarshalTo(&i); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to int")
+		}
+		return i.Value, nil
+	case FeatureTypeFloat:
+		f := wrapperspb.DoubleValue{}
+		if err := a.UnmarshalTo(&f); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to float")
+		}
+		return f.Value, nil
+	case FeatureTypeString:
+		s := wrapperspb.StringValue{}
+		if err := a.UnmarshalTo(&s); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to string")
+		}
+		return s.Value, nil
+	case FeatureTypeJSON:
+		v := structpb.Value{}
+		if err := a.UnmarshalTo(&v); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to json")
+		}
+		return &v, nil
+	case FeatureTypeProto:
+		p := dynamicpb.Message{}
+		if err := a.UnmarshalTo(&p); err != nil {
+			return nil, errors.Wrap(err, "unmarshal to proto")
+		}
+		return &p, nil
+	default:
+		return nil, fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 	}
-	s := wrapperspb.StringValue{}
-	if err := a.UnmarshalTo(&s); err == nil {
-		return s.Value, FeatureTypeString, nil // string type
-	}
-	i := wrapperspb.Int64Value{}
-	if err := a.UnmarshalTo(&i); err == nil {
-		return i.Value, FeatureTypeInt, nil // int type
-	}
-	f := wrapperspb.DoubleValue{}
-	if err := a.UnmarshalTo(&f); err == nil {
-		return f.Value, FeatureTypeFloat, nil // float type
-	}
-	v := structpb.Value{}
-	if err := a.UnmarshalTo(&v); err == nil {
-		return &v, FeatureTypeJSON, nil // json type
-	}
-	p := dynamicpb.Message{}
-	if err := a.UnmarshalTo(&p); err == nil {
-		return &p, FeatureTypeProto, nil // proto type.
-	}
-	return nil, "", fmt.Errorf("unsupported feature type %s", a.TypeUrl)
 }
 
 func valFromJSON(encoded []byte) (*structpb.Value, error) {
@@ -296,16 +351,17 @@ func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.
 	return nil
 }
 
-func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
-	ret := &lekkov1beta1.Feature{
+func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
+	ret := &featurev1beta1.Feature{
 		Key:         f.Key,
 		Description: f.Description,
+		Type:        f.FeatureType.ToProto(),
 	}
 	defaultAny, err := ValToAny(f.Value)
 	if err != nil {
 		return nil, fmt.Errorf("default value '%T' to any: %w", f.Value, err)
 	}
-	tree := &lekkov1beta1.Tree{
+	tree := &featurev1beta1.Tree{
 		Default: defaultAny,
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
@@ -314,7 +370,7 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
-		tree.Constraints = append(tree.Constraints, &lekkov1beta1.Constraint{
+		tree.Constraints = append(tree.Constraints, &featurev1beta1.Constraint{
 			Rule:    rule.Condition,
 			RuleAst: rule.ConditionAST,
 			Value:   ruleAny,
@@ -324,23 +380,24 @@ func (f *Feature) ToProto() (*lekkov1beta1.Feature, error) {
 	return ret, nil
 }
 
-func FromProto(fProto *lekkov1beta1.Feature) (*Feature, error) {
+func FromProto(fProto *featurev1beta1.Feature) (*Feature, error) {
 	ret := &Feature{
 		Key:         fProto.Key,
 		Description: fProto.Description,
 	}
 	var err error
-	ret.Value, ret.FeatureType, err = AnyToVal(fProto.GetTree().GetDefault())
+	ret.FeatureType, err = FeatureTypeFromProto(fProto.GetType())
+	if err != nil {
+		return nil, errors.Wrap(err, "type from proto")
+	}
+	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType)
 	if err != nil {
 		return nil, errors.Wrap(err, "any to val")
 	}
 	for _, constraint := range fProto.GetTree().GetConstraints() {
-		ruleVal, fType, err := AnyToVal(constraint.GetValue())
+		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule any to val")
-		}
-		if fType != ret.FeatureType {
-			return nil, fmt.Errorf("expecting rule feature type %s, got %s", ret.FeatureType, fType)
 		}
 		ret.Rules = append(ret.Rules, &Rule{
 			Condition:    constraint.Rule,
@@ -351,7 +408,7 @@ func FromProto(fProto *lekkov1beta1.Feature) (*Feature, error) {
 	return ret, nil
 }
 
-func ProtoToJSON(fProto *lekkov1beta1.Feature, registry *protoregistry.Types) ([]byte, error) {
+func ProtoToJSON(fProto *featurev1beta1.Feature, registry *protoregistry.Types) ([]byte, error) {
 	jBytes, err := protojson.MarshalOptions{
 		Resolver: registry,
 	}.Marshal(fProto)
