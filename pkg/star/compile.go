@@ -44,9 +44,9 @@ type compiler struct {
 }
 
 // Compile takes the following parameters:
-// 		protoDir: path to the proto directory that stores all user-defined proto files
-// 		starfilePath: path to the .star file that defines this feature flag
-// 		featureName: human-readable name of this feature flag. Also matches the starfile name.
+// protoDir: path to the proto directory that stores all user-defined proto files
+// starfilePath: path to the .star file that defines this feature flag
+// featureName: human-readable name of this feature flag. Also matches the starfile name.
 func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.ConfigWriter) Compiler {
 	return &compiler{
 		registry: registry,

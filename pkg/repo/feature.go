@@ -364,8 +364,8 @@ func (r *Repo) FormatFeature(ctx context.Context, ff feature.FeatureFile) error 
 
 // Adds a new feature to the given namespace using the given type.
 // Returns an error if:
-// 		- the namespace doesn't exist, or
-// 		- a feature named featureName already exists
+// the namespace doesn't exist, or
+// a feature named featureName already exists
 // Returns the path to the feature file that was written to disk.
 func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error) {
 	if !isValidName(featureName) {
@@ -491,12 +491,8 @@ func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string
 	if err != nil {
 		return nil, "", err
 	}
-	ft, err := evalF.Type()
-	if err != nil {
-		return nil, "", errors.Wrap(err, "feature type")
-	}
 	ret, _, err := evalF.Evaluate(iCtx)
-	return ret, ft, err
+	return ret, evalF.Type(), err
 }
 
 func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {
