@@ -7,10 +7,6 @@ linters-settings:
     forbid:
       - '^print$'
       - '^println$'
-issues:
-  exclude-rules:
-    - path: pkg/star/feature.go
-      text: "error is not nil"
 linters:
   enable:
     - asciicheck
