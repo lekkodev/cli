@@ -126,7 +126,9 @@ func (t *traverser) parseRules(v build.Expr) error {
 
 // extracts a map of kwargs that are used to construct the resulting
 // feature value. E.g.
-// 		result = feature(description="foo", default=False)
+//
+//	result = feature(description="foo", default=False)
+//
 // has two keys, each with a corresponding build expression.
 func (t *traverser) getFeatureKWArgs() (map[string]*build.Expr, error) {
 	ret := make(map[string]*build.Expr)

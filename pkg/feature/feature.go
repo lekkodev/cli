@@ -77,22 +77,22 @@ func (ft FeatureType) ToProto() featurev1beta1.FeatureType {
 	}
 }
 
-func FeatureTypeFromProto(ft featurev1beta1.FeatureType) (FeatureType, error) {
+func FeatureTypeFromProto(ft featurev1beta1.FeatureType) FeatureType {
 	switch ft {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
-		return FeatureTypeBool, nil
+		return FeatureTypeBool
 	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
-		return FeatureTypeInt, nil
+		return FeatureTypeInt
 	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
-		return FeatureTypeFloat, nil
+		return FeatureTypeFloat
 	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
-		return FeatureTypeString, nil
+		return FeatureTypeString
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
-		return FeatureTypeJSON, nil
+		return FeatureTypeJSON
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-		return FeatureTypeProto, nil
+		return FeatureTypeProto
 	default:
-		return "", errors.Errorf("unsupported feature type %s", ft)
+		return ""
 	}
 }
 
@@ -127,11 +127,7 @@ func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "evaluate feature"))
 	}
-	ft, err := eval.Type()
-	if err != nil {
-		return tr.WithError(errors.Wrap(err, "feature type"))
-	}
-	val, err := ValToAny(ut.ExpectedValue, ft)
+	val, err := ValToAny(ut.ExpectedValue, eval.Type())
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "invalid test value"))
 	}
@@ -420,11 +416,8 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		Key:         fProto.Key,
 		Description: fProto.Description,
 	}
+	ret.FeatureType = FeatureTypeFromProto(fProto.GetType())
 	var err error
-	ret.FeatureType, err = FeatureTypeFromProto(fProto.GetType())
-	if err != nil {
-		return nil, errors.Wrap(err, "type from proto")
-	}
 	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
 		return nil, errors.Wrap(err, "any to val")

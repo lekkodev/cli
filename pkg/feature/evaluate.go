@@ -39,7 +39,8 @@ type EvaluableFeature interface {
 	// safely unmarshal into BoolValue, StringValue, etc.
 	Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error)
 	// Returns the feature type (bool, string, json, proto, etc)
-	Type() (FeatureType, error)
+	// or "" if the type is not supported
+	Type() FeatureType
 }
 
 // Stores the path of the tree node that returned the final value
@@ -54,7 +55,7 @@ func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
 	return &v1beta3{f}
 }
 
-func (v1b3 *v1beta3) Type() (FeatureType, error) {
+func (v1b3 *v1beta3) Type() FeatureType {
 	return FeatureTypeFromProto(v1b3.GetType())
 }
 
