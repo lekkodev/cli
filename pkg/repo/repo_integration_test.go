@@ -78,5 +78,4 @@ func testConstructor(t *testing.T, r *Repo) {
 	remoteRef, err := r.Repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, MainBranchName), false)
 	require.NoError(t, err)
 	assert.Equal(t, remoteRef.Hash(), localRef.Hash(), "local branch must be up to date")
-	t.Fatal("making sure this works")
 }
