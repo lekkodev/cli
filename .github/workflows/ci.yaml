@@ -18,5 +18,7 @@ jobs:
         with:
           go-version: 1.18.0
       - name: ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_PERSONAL_ACCESS_TOKEN }}
         if: success()
         run: make ci

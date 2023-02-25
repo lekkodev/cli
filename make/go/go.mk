@@ -22,6 +22,8 @@ GO_MOD_VERSION ?= 1.18
 GO_ALL_REPO_PKGS ?= ./cmd/... ./internal/...
 # Settable
 SKIP_GOLANGCI_LINT ?=
+# Settable
+GO_INTEGRATION_PKGS ?= ./pkg/repo
 
 # Runtime
 GOPKGS ?= $(GO_ALL_REPO_PKGS)
@@ -57,6 +59,7 @@ shortall: ## Run make shortlint and make shorttest.
 ci:
 	@$(MAKE) lint
 	@$(MAKE) test
+	@$(MAKE) integration
 
 .PHONY: upgradegodeps
 upgradegodeps:
@@ -137,6 +140,10 @@ pretest::
 .PHONY: test
 test: pretest installtest ## Run all go tests.
 	go test $(GO_TEST_FLAGS) $(GOPKGS)
+
+.PHONY: integration
+integration: pretest installtest
+	go test --tags=integration -count=1 $(GO_TEST_FLAGS) $(GO_INTEGRATION_PKGS)
 
 .PHONY: testrace
 testrace: pretest installtest
