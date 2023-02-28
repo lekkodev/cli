@@ -25,14 +25,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/pkg/errors"
 )
 
 // Review will open a pull request. It takes different actions depending on
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
-func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) (string, error) {
-	if err := r.CredentialsExist(); err != nil {
+func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error) {
+	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
 	var main, clean bool
@@ -41,7 +42,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 	if err != nil {
 		return "", errors.Wrap(err, "is main")
 	}
-	clean, err = r.wdClean()
+	clean, err = r.IsClean()
 	if err != nil {
 		return "", errors.Wrap(err, "wd clean")
 	}
@@ -51,7 +52,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", errors.Errorf("nothing to review on main with clean wd")
 		}
 		// dirty working directory on main
-		branchName, err = r.checkoutLocalBranch()
+		branchName, err = r.checkoutLocalBranch(ap)
 		if err != nil {
 			return "", errors.Wrap(err, "checkout new branch")
 		}
@@ -59,7 +60,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 		if err := r.setTrackingConfig(branchName); err != nil {
 			return "", errors.Wrap(err, "push to remote")
 		}
-		if _, err := r.Commit(ctx, title); err != nil {
+		if _, err := r.Commit(ctx, ap, title); err != nil {
 			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
@@ -68,7 +69,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", err
 		}
 		if !clean {
-			if _, err := r.Commit(ctx, title); err != nil {
+			if _, err := r.Commit(ctx, ap, title); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
 		}
@@ -80,8 +81,8 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 	return url, nil
 }
 
-func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) error {
-	if err := r.CredentialsExist(); err != nil {
+func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error {
+	if err := credentialsExist(ap); err != nil {
 		return err
 	}
 	owner, repo, err := r.getOwnerRepo()
@@ -111,41 +112,68 @@ func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) er
 	} else {
 		return errors.New("Failed to merge pull request.")
 	}
-	if err := r.Cleanup(ctx, &branchName); err != nil {
+	if err := r.Cleanup(ctx, &branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup")
 	}
 	return nil
 }
 
-func (r *Repo) wdClean() (bool, error) {
-	st, err := r.Wt.Status()
+// Returns whether or not the working directory is
+// clean (i.e. has no uncommitted changes)
+func (r *Repo) IsClean() (bool, error) {
+	st, err := r.wt.Status()
 	if err != nil {
 		return false, errors.Wrap(err, "status")
 	}
 	return st.IsClean(), nil
 }
 
-func (r *Repo) GenBranchName() (string, error) {
-	user := r.Auth.GetUsername()
-	if user == "" {
+func (r *Repo) GenBranchName(ghUsername string) (string, error) {
+	if ghUsername == "" {
 		cfg, err := config.LoadConfig(config.GlobalScope)
 		if err != nil {
 			return "", errors.Wrap(err, "load global config")
 		}
-		user = strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
+		ghUsername = strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
 	}
-	if user == "" {
-		user = "anon"
+	if ghUsername == "" {
+		ghUsername = "anon"
 	}
-	return fmt.Sprintf("%s-review-%d", user, time.Now().Nanosecond()), nil
+	return fmt.Sprintf("%s-review-%d", ghUsername, time.Now().Nanosecond()), nil
 }
 
-func (r *Repo) checkoutLocalBranch() (string, error) {
-	branchName, err := r.GenBranchName()
+// Creates a new remote branch at the given sha, and checks out the
+// new branch locally, setting up the correct tracking config.
+// branchName must be sufficiently unique.
+func (r *Repo) NewRemoteBranch(branchName string) error {
+	localRef := plumbing.NewBranchReferenceName(branchName)
+	if err := r.wt.Checkout(&git.CheckoutOptions{
+		Branch: localRef,
+		Create: true,
+		Keep:   true,
+	}); err != nil {
+		return errors.Wrap(err, "checkout")
+	}
+	r.Logf("Checked out local branch %s\n", logging.Bold(branchName))
+	// set tracking config
+	if err := r.repo.CreateBranch(&config.Branch{
+		Name:   branchName,
+		Remote: RemoteName,
+		Merge:  localRef,
+	}); err != nil && !errors.Is(err, git.ErrBranchExists) {
+		return errors.Wrap(err, "create branch tracking configuration")
+	}
+	r.Logf("Local branch %s has been set up to track changes from %s\n",
+		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
+	return nil
+}
+
+func (r *Repo) checkoutLocalBranch(ap AuthProvider) (string, error) {
+	branchName, err := r.GenBranchName(ap.GetUsername())
 	if err != nil {
 		return "", errors.Wrap(err, "gen branch name")
 	}
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
+	if err := r.wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(branchName),
 		Create: true,
 		Keep:   true,
@@ -156,19 +184,18 @@ func (r *Repo) checkoutLocalBranch() (string, error) {
 	return branchName, nil
 }
 
-func (r *Repo) pushToRemote(ctx context.Context, branchName string) error {
-	if err := r.Repo.PushContext(ctx, &git.PushOptions{
+func (r *Repo) pushToRemote(ctx context.Context, ap AuthProvider) error {
+	if err := r.repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: RemoteName,
-		Auth:       r.BasicAuth(),
+		Auth:       basicAuth(ap),
 	}); err != nil {
 		return errors.Wrap(err, "push")
 	}
-	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
 	return nil
 }
 
 func (r *Repo) setTrackingConfig(branchName string) error {
-	if err := r.Repo.CreateBranch(&config.Branch{
+	if err := r.repo.CreateBranch(&config.Branch{
 		Name:   branchName,
 		Remote: RemoteName,
 		Merge:  plumbing.NewBranchReferenceName(branchName),

@@ -131,26 +131,26 @@ func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool, rs secrets.ReadS
 
 	authStatus := func(err error) string {
 		if err == nil {
-			return fmt.Sprintf("Authenticated %s✔%s", logging.Green, logging.Reset)
+			return fmt.Sprintf("Authenticated %s", logging.Green("✔"))
 		}
-		return fmt.Sprintf("Unauthenticated %s✖%s | %s", logging.Red, logging.Reset, err.Error())
+		return fmt.Sprintf("Unauthenticated %s | %s", logging.Red("✖"), err.Error())
 	}
 
 	var teamSuffix string
 	if len(rs.GetLekkoTeam()) > 0 {
-		teamSuffix = fmt.Sprintf(", using team %s", logging.Bold+rs.GetLekkoTeam()+logging.Reset)
+		teamSuffix = fmt.Sprintf(", using team %s", logging.Bold(rs.GetLekkoTeam()))
 	}
 
 	lines := []string{
-		fmt.Sprintf(logging.Bold+"lekko.com"+logging.Reset+" %s", authStatus(lekkoAuthErr)),
+		fmt.Sprintf("%s %s", logging.Bold("lekko.com"), authStatus(lekkoAuthErr)),
 	}
 	if lekkoAuthErr == nil {
-		lines = append(lines, fmt.Sprintf("  Logged in to Lekko as %s%s", logging.Bold+rs.GetLekkoUsername()+logging.Reset, teamSuffix))
+		lines = append(lines, fmt.Sprintf("  Logged in to Lekko as %s%s", logging.Bold(rs.GetLekkoUsername()), teamSuffix))
 	}
 	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetLekkoToken())))
-	lines = append(lines, fmt.Sprintf(logging.Bold+"github.com"+logging.Reset+" %s", authStatus(ghAuthErr)))
+	lines = append(lines, fmt.Sprintf("%s %s", logging.Bold("github.com"), authStatus(ghAuthErr)))
 	if ghAuthErr == nil {
-		lines = append(lines, fmt.Sprintf("  Logged in to GitHub as %s", logging.Bold+rs.GetGithubUser()+logging.Reset))
+		lines = append(lines, fmt.Sprintf("  Logged in to GitHub as %s", logging.Bold(rs.GetGithubUser())))
 	}
 	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetGithubToken())))
 

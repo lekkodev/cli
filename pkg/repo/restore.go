@@ -34,7 +34,7 @@ func (r *Repo) RestoreWorkingDirectory(hash string) error {
 	if err != nil {
 		return errors.Wrap(err, "get branch name")
 	}
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
+	if err := r.wt.Checkout(&git.CheckoutOptions{
 		Hash: plumbing.NewHash(hash),
 	}); err != nil {
 		return errors.Wrap(err, "checkout hash to restore")
@@ -52,7 +52,7 @@ func (r *Repo) RestoreWorkingDirectory(hash string) error {
 		return errors.Wrap(err, "get raw contents")
 	}
 
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
+	if err := r.wt.Checkout(&git.CheckoutOptions{
 		Branch: plumbing.NewBranchReferenceName(currentBranchName),
 		Keep:   false,
 		Create: false,
@@ -78,7 +78,7 @@ type rawContent struct {
 }
 
 func (r *Repo) walkContents(path string, shouldWalk func(string) bool, del bool) ([]rawContent, error) {
-	fis, err := r.Fs.ReadDir(path)
+	fis, err := r.fs.ReadDir(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "read dir")
 	}
@@ -105,7 +105,7 @@ func (r *Repo) walkContents(path string, shouldWalk func(string) bool, del bool)
 		}
 
 		if del {
-			if err := r.Fs.Remove(fPath); err != nil {
+			if err := r.fs.Remove(fPath); err != nil {
 				return nil, errors.Wrapf(err, "remove %s", fPath)
 			}
 		}

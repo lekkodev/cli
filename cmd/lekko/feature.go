@@ -254,7 +254,7 @@ func featureEval() *cobra.Command {
 			if err := json.Unmarshal([]byte(jsonContext), &ctxMap); err != nil {
 				return err
 			}
-			fmt.Printf("Evaluating %s%s/%s%s with context %s%s%s\n", logging.Bold, ns, featureName, logging.Reset, logging.Bold, jsonContext, logging.Reset)
+			fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
 			fmt.Printf("-------------------\n")
 			anyVal, fType, err := r.Eval(ctx, ns, featureName, ctxMap)
 			if err != nil {
@@ -263,7 +263,7 @@ func featureEval() *cobra.Command {
 			if len(fType) == 0 {
 				// backwards compatibility. we don't have type information (old behavior),
 				// so we resort to printing the any type instead of erroring out below.
-				fmt.Printf("%s%v%s\n", logging.Bold, anyVal, logging.Reset)
+				fmt.Printf("%s\n", logging.Bold(anyVal))
 				return nil
 			}
 			rootMD, _, err := r.ParseMetadata(ctx)
@@ -290,7 +290,7 @@ func featureEval() *cobra.Command {
 				res = string(jsonRes)
 			}
 
-			fmt.Printf("[%s] %s%v%s\n", fType, logging.Bold, res, logging.Reset)
+			fmt.Printf("[%s] %s\n", fType, logging.Bold(res))
 
 			return nil
 		},

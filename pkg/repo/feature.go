@@ -103,9 +103,9 @@ type FeatureCompilationResult struct {
 func (fcr *FeatureCompilationResult) SummaryString() string {
 	stylizeStr := func(s string, pass bool) string {
 		if pass {
-			return fmt.Sprintf("%s%s %s%s", logging.Green, s, "✔", logging.Reset)
+			return logging.Green(fmt.Sprintf("%s %s", s, "✔"))
 		}
-		return fmt.Sprintf("%s%s %s%s", logging.Red, s, "✖", logging.Reset)
+		return logging.Red(fmt.Sprintf("%s %s", s, "✖"))
 	}
 	var subs []string
 	if fcr.CompilationError != nil {
@@ -131,7 +131,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 		}
 	}
-	return fmt.Sprintf("%s[%s/%s]%s %s", logging.Bold, fcr.NamespaceName, fcr.FeatureName, logging.Reset, strings.Join(subs, " | "))
+	return fmt.Sprintf("%s %s", logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)), strings.Join(subs, " | "))
 }
 
 func (fcr *FeatureCompilationResult) Err() error {
@@ -232,21 +232,21 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 			if fcr.Err() == nil {
 				continue
 			}
-			r.Logf(logging.Bold+"[%s/%s]\n"+logging.Reset, fcr.NamespaceName, fcr.FeatureName)
+			r.Logf(logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)))
 			if fcr.CompilationError != nil {
-				r.Logf(logging.Red+"→"+logging.Reset+" %v\n", fcr.CompilationError)
+				r.Logf(fmt.Sprintf("%s %v\n", logging.Bold("→"), fcr.CompilationError))
 			}
 			if fcr.CompiledFeature == nil {
 				continue
 			}
 			for _, res := range fcr.CompiledFeature.ValidatorResults {
 				if !res.Passed() {
-					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
+					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
 				}
 			}
 			for _, res := range fcr.CompiledFeature.TestResults {
 				if !res.Passed() {
-					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
+					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
 				}
 			}
 		}
@@ -644,11 +644,11 @@ func (r *Repo) GetFeatureHash(ctx context.Context, namespace, featureName string
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature file")
 	}
-	hash, err := r.WorkingDirectoryHash()
+	hash, err := r.headHash()
 	if err != nil {
 		return nil, errors.Wrap(err, "working directory hash")
 	}
-	co, err := r.Repo.CommitObject(*hash)
+	co, err := r.repo.CommitObject(*hash)
 	if err != nil {
 		return nil, errors.Wrapf(err, "commit object of hash %s", hash.String())
 	}

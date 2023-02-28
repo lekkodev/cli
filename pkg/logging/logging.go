@@ -14,20 +14,35 @@
 
 package logging
 
-import "runtime"
+import (
+	"fmt"
+	"runtime"
+)
 
 // Source: https://twin.sh/articles/35/how-to-add-colors-to-your-console-terminal-output-in-go
 
-var Reset = "\033[0m"
-var Red = "\033[31m"
-var Green = "\033[32m"
-var Bold = "\033[1m"
+var reset = "\033[0m"
+var red = "\033[31m"
+var green = "\033[32m"
+var bold = "\033[1m"
 
 func InitColors() {
 	if runtime.GOOS == "windows" {
-		Reset = ""
-		Red = ""
-		Green = ""
-		Bold = ""
+		reset = ""
+		red = ""
+		green = ""
+		bold = ""
 	}
+}
+
+func Bold(v interface{}) string {
+	return fmt.Sprintf("%s%v%s", bold, v, reset)
+}
+
+func Red(v interface{}) string {
+	return fmt.Sprintf("%s%s%s", red, v, reset)
+}
+
+func Green(v interface{}) string {
+	return fmt.Sprintf("%s%s%s", green, v, reset)
 }

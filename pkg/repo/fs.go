@@ -30,7 +30,7 @@ import (
 */
 
 func (r *Repo) Read(path string) ([]byte, error) {
-	f, err := r.Fs.Open(path)
+	f, err := r.fs.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file at path %s: %w", path, err)
 	}
@@ -47,7 +47,7 @@ func (r *Repo) GetFileContents(_ context.Context, path string) ([]byte, error) {
 }
 
 func (r *Repo) GetDirContents(_ context.Context, path string) ([]fs.ProviderFile, error) {
-	fi, err := r.Fs.ReadDir(path)
+	fi, err := r.fs.ReadDir(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "fs read dir")
 	}
@@ -73,7 +73,7 @@ func (r *Repo) IsNotExist(err error) bool {
 // If the file does not exist, WriteFile creates it with permissions perm (before umask);
 // otherwise WriteFile truncates it before writing, without changing permissions.
 func (r *Repo) WriteFile(name string, data []byte, perm os.FileMode) error {
-	f, err := r.Fs.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	f, err := r.fs.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
 	if err != nil {
 		return err
 	}
@@ -85,11 +85,11 @@ func (r *Repo) WriteFile(name string, data []byte, perm os.FileMode) error {
 }
 
 func (r *Repo) MkdirAll(path string, perm os.FileMode) error {
-	return r.Fs.MkdirAll(path, perm)
+	return r.fs.MkdirAll(path, perm)
 }
 
 func (r *Repo) RemoveIfExists(path string) (bool, error) {
-	fi, err := r.Fs.Stat(path)
+	fi, err := r.fs.Stat(path)
 	if err != nil {
 		if r.IsNotExist(err) {
 			return false, nil
@@ -97,7 +97,7 @@ func (r *Repo) RemoveIfExists(path string) (bool, error) {
 		return false, errors.Wrap(err, "fs.Stat")
 	}
 	if fi.IsDir() {
-		fis, err := r.Fs.ReadDir(path)
+		fis, err := r.fs.ReadDir(path)
 		if err != nil {
 			return false, errors.Wrap(err, "read dir")
 		}
@@ -108,7 +108,7 @@ func (r *Repo) RemoveIfExists(path string) (bool, error) {
 			}
 		}
 	}
-	if err := r.Fs.Remove(path); err != nil {
+	if err := r.fs.Remove(path); err != nil {
 		if r.IsNotExist(err) {
 			return false, nil
 		}
