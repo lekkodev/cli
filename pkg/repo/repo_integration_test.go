@@ -69,7 +69,7 @@ func TestRepoIntegration(t *testing.T) {
 	var branchName string
 	t.Run("Review", func(t *testing.T) { branchName = testReview(ctx, t, r, ghCli, ap) })
 	require.NotEmpty(t, branchName)
-	// TODO: create an ephemeral repo and run CheckoutRemoteBranch 
+	// TODO: create an ephemeral repo and run CheckoutRemoteBranch
 	t.Run("Cleanup", func(t *testing.T) { testCleanup(ctx, t, r, ghCli, ap, branchName) })
 }
 
