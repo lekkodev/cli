@@ -27,13 +27,18 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	integrationTestRepoName = "integration-test"
-	integrationTestURL      = "https://github.com/lekkodev/" + integrationTestRepoName
+	integrationTestOwnerName = "lekkodev"
+	integrationTestRepoName  = "integration-test"
+	integrationTestURL       = "https://github.com/" + integrationTestOwnerName + "/" + integrationTestRepoName
+	// https://github.com/lekkodev/integration-test/commit/3954443a24b9053c3fb67ad453c4035e9f5aa4ed
+	restoreCommitHash         = "3954443a24b9053c3fb67ad453c4035e9f5aa4ed"
+	restoreFeatureDescription = "int-test-description"
 )
 
 type authProvider struct {
@@ -51,30 +56,36 @@ func newAuthProvider() *authProvider {
 }
 
 // Performs an end-to-end integration test on the Repo object. This test runs on ci.
+// It can also be run locally, by running `GITHUB_TOKEN=ghu_**** make integration`.
 func TestRepoIntegration(t *testing.T) {
-
-	ap := newAuthProvider()
-	require.NoError(t, credentialsExist(ap))
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	path := filepath.Join(t.TempDir(), integrationTestRepoName)
-	var r *Repo
-	t.Run("Constructor", func(t *testing.T) { r = testConstructor(t, path, ap) })
-	require.NotNil(t, r)
+	// Initialize dependencies
+	ap := newAuthProvider()
+	require.NoError(t, credentialsExist(ap))
+	tmpDir := t.TempDir()
 	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
-	_, err := ghCli.GetUser(ctx)
-	require.NoError(t, err)
+	user, err := ghCli.GetUser(ctx)
+	require.NoError(t, err, "github token should be valid")
+	t.Logf("Running integration test on behalf of '%s'\n", user.GetLogin())
+
+	var r *Repo
+	t.Run("Constructor", func(t *testing.T) { r = testConstructor(t, tmpDir, ap) })
+	require.NotNil(t, r)
 	var branchName string
 	t.Run("Review", func(t *testing.T) { branchName = testReview(ctx, t, r, ghCli, ap) })
 	require.NotEmpty(t, branchName)
-	// TODO: create an ephemeral repo and run CheckoutRemoteBranch
+	t.Run("Ephemeral", func(t *testing.T) { testEphemeral(ctx, t, ap, branchName) })
 	t.Run("Cleanup", func(t *testing.T) { testCleanup(ctx, t, r, ghCli, ap, branchName) })
+	t.Run("Restore", func(t *testing.T) { testRestore(ctx, t, tmpDir, ap) })
 }
 
-func testConstructor(t *testing.T, path string, ap AuthProvider) *Repo {
-	r, err := NewLocalClone(path, integrationTestURL, ap)
+func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *Repo {
+	path := filepath.Join(tmpDir, "test-constructor")
+	cr, err := NewLocalClone(path, integrationTestURL, ap)
+	r, ok := cr.(*Repo)
+	require.True(t, ok)
 	require.NoError(t, err)
 	branch, err := r.BranchName()
 	require.NoError(t, err)
@@ -124,16 +135,29 @@ func testReview(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubClie
 	return branchName
 }
 
+func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchName string) {
+	cr, err := NewEphemeral(integrationTestURL, ap, branchName)
+	r, ok := cr.(*Repo)
+	require.True(t, ok)
+	require.NoError(t, err)
+	currentBranchName, err := r.BranchName()
+	require.NoError(t, err)
+	assert.Equal(t, branchName, currentBranchName)
+	assertUpToDate(t, r, branchName)
+}
+
 func testCleanup(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubClient, ap AuthProvider, branchName string) {
 	require.NoError(t, r.Cleanup(ctx, &branchName, ap))
-	_, resp, err := ghCli.Repositories.GetBranch(ctx, "lekkodev", integrationTestRepoName, branchName, false)
+	_, resp, err := ghCli.Repositories.GetBranch(ctx, integrationTestOwnerName, integrationTestRepoName, branchName, false)
 	require.Error(t, err)
 	assert.Equal(t, 404, resp.StatusCode, "remote branch should be deleted")
 	// check current branch
 	currentBranchName, err := r.BranchName()
 	require.NoError(t, err)
 	assert.Equal(t, MainBranchName, currentBranchName)
-	// TODO: check that local branch ref no longer exists
+	localRef, err := r.repo.Reference(plumbing.NewBranchReferenceName(branchName), false)
+	assert.Error(t, err, "local ref should no longer exist")
+	assert.Nil(t, localRef)
 }
 
 func assertUpToDate(t *testing.T, r *Repo, branchName string) {
@@ -142,4 +166,16 @@ func assertUpToDate(t *testing.T, r *Repo, branchName string) {
 	remoteRef, err := r.repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, branchName), false)
 	require.NoError(t, err)
 	assert.Equal(t, remoteRef.Hash(), localRef.Hash(), "local branch must be up to date")
+}
+
+func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvider) {
+	path := filepath.Join(tmpDir, "test-restore")
+	r, err := NewLocalClone(path, integrationTestURL, ap)
+	require.NoError(t, err)
+	require.NoError(t, r.RestoreWorkingDirectory(restoreCommitHash))
+	fc, err := r.GetFeatureContents(ctx, "default", "example")
+	require.NoError(t, err)
+	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star).Build()
+	require.NoError(t, err)
+	assert.Equal(t, restoreFeatureDescription, f.Description)
 }

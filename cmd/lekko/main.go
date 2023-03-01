@@ -585,7 +585,6 @@ func restoreCmd() *cobra.Command {
 			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
-			fmt.Printf("Successfully compiled.\n")
 			fmt.Printf("Restored hash %s to your working directory. \nRun `lekko review` to create a PR with these changes.\n", args[0])
 			return nil
 		},

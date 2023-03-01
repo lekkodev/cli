@@ -31,6 +31,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
 )
@@ -44,6 +45,39 @@ var (
 	ErrMissingCredentials = fmt.Errorf("missing credentials")
 	ErrNotFound           = fmt.Errorf("not found")
 )
+
+//
+type ConfigurationRepository interface {
+	ConfigurationStore
+	GitRepository
+	fs.Provider
+	fs.ConfigWriter
+}
+
+type GitRepository interface {
+	// Checks out the branch at origin/${branchName}. The remote branch must exist.
+	CheckoutRemoteBranch(branchName string) error
+	// Returns the url of the remote that the local repository is set up to track.
+	GetRemoteURL() (string, error)
+	// Commit will take an optional commit message and push the changes in the
+	// local working directory to the remote branch.
+	Commit(ctx context.Context, ap AuthProvider, message string) (string, error)
+	// Cleans up all resources and references associated with the given branch on
+	// local and remote, if they exist. If branchName is nil, uses the current
+	// (non-master) branch. Will switch the current branch back to main, and
+	// pull from remote to ensure we are on the latest commit.
+	Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error
+	// Pull the latest changes from the branch that HEAD is set up to track.
+	Pull(ap AuthProvider) error
+	// Returns the hash of the current commit that HEAD is pointing to.
+	Hash() (string, error)
+	BranchName() (string, error)
+	IsClean() (bool, error)
+	// Creates new remote branch config at the given sha, and checks out the
+	// new branch locally. branchName must be sufficiently unique.
+	NewRemoteBranch(branchName string) error
+	Read(path string) ([]byte, error)
+}
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
 // This class can be used either by the cli, or by any other system that intends to manage
@@ -83,7 +117,7 @@ func credentialsExist(ap AuthProvider) error {
 }
 
 // Creates a new instance of Repo designed to work with filesystem-based repos.
-func NewLocal(path string, auth AuthProvider) (*Repo, error) {
+func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 	repo, err := git.PlainOpen(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open git repo")
@@ -107,7 +141,7 @@ func NewLocal(path string, auth AuthProvider) (*Repo, error) {
 
 // Creates a local clone of a remote github config repository based on the
 // given url at the provided path.
-func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
+func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository, error) {
 	repo, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
@@ -134,7 +168,7 @@ func NewLocalClone(path, url string, auth AuthProvider) (*Repo, error) {
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
-func NewEphemeral(url string, auth AuthProvider, branchName string) (*Repo, error) {
+func NewEphemeral(url string, auth AuthProvider, branchName string) (ConfigurationRepository, error) {
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
@@ -171,7 +205,7 @@ func (r *Repo) CheckoutRemoteBranch(branchName string) error {
 	if err := r.wt.Checkout(&git.CheckoutOptions{
 		Branch: localRef,
 	}); err != nil {
-		return errors.Wrap(err, "checkout create")
+		return errors.Wrap(err, "checkout")
 	}
 	return nil
 }
@@ -234,8 +268,11 @@ func (r *Repo) Commit(ctx context.Context, ap AuthProvider, message string) (str
 	if err != nil {
 		return "", errors.Wrap(err, "branch name")
 	}
-	if err := r.pushToRemote(ctx, ap); err != nil {
-		return "", errors.Wrap(err, "push to remote")
+	if err := r.repo.PushContext(ctx, &git.PushOptions{
+		RemoteName: RemoteName,
+		Auth:       basicAuth(ap),
+	}); err != nil {
+		return "", errors.Wrap(err, "push")
 	}
 	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
 	return hash.String(), nil
@@ -246,7 +283,7 @@ func (r *Repo) Commit(ctx context.Context, ap AuthProvider, message string) (str
 // (non-master) branch. Will switch the current branch back to main, and
 // pull from remote to ensure we are on the latest commit.
 func (r *Repo) Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error {
-	if err := r.CleanupBranch(ctx, branchName, ap); err != nil {
+	if err := r.cleanupBranch(ctx, branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
 	if err := r.ensureMainBranch(ap); err != nil {
@@ -266,7 +303,7 @@ func (r *Repo) Pull(ap AuthProvider) error {
 	return nil
 }
 
-func (r *Repo) CleanupBranch(ctx context.Context, branchName *string, ap AuthProvider) error {
+func (r *Repo) cleanupBranch(ctx context.Context, branchName *string, ap AuthProvider) error {
 	currentBranch, err := r.BranchName()
 	if err != nil {
 		return errors.Wrap(err, "branch name")
@@ -384,7 +421,7 @@ func (r *Repo) BranchName() (string, error) {
 	return h.Name().Short(), nil
 }
 
-func (r *Repo) GetURL() (*url.URL, error) {
+func (r *Repo) getURL() (*url.URL, error) {
 	rm, err := r.repo.Remote(RemoteName)
 	if err != nil {
 		return nil, errors.Wrap(err, "remote")
@@ -400,7 +437,7 @@ func (r *Repo) GetURL() (*url.URL, error) {
 }
 
 func (r *Repo) getOwnerRepo() (string, string, error) {
-	u, err := r.GetURL()
+	u, err := r.getURL()
 	if err != nil {
 		return "", "", errors.Wrap(err, "get url")
 	}
@@ -409,4 +446,39 @@ func (r *Repo) getOwnerRepo() (string, string, error) {
 		return "", "", fmt.Errorf("invalid path: %s", u.Path)
 	}
 	return parts[0], strings.TrimSuffix(parts[1], ".git"), nil
+}
+
+// Returns whether or not the working directory is
+// clean (i.e. has no uncommitted changes)
+func (r *Repo) IsClean() (bool, error) {
+	st, err := r.wt.Status()
+	if err != nil {
+		return false, errors.Wrap(err, "status")
+	}
+	return st.IsClean(), nil
+}
+
+// Creates new remote branch config at the given sha, and checks out the
+// new branch locally. branchName must be sufficiently unique.
+func (r *Repo) NewRemoteBranch(branchName string) error {
+	localRef := plumbing.NewBranchReferenceName(branchName)
+	if err := r.wt.Checkout(&git.CheckoutOptions{
+		Branch: localRef,
+		Create: true,
+		Keep:   true,
+	}); err != nil {
+		return errors.Wrap(err, "checkout")
+	}
+	r.Logf("Checked out local branch %s\n", logging.Bold(branchName))
+	// set tracking config
+	if err := r.repo.CreateBranch(&config.Branch{
+		Name:   branchName,
+		Remote: RemoteName,
+		Merge:  localRef,
+	}); err != nil && !errors.Is(err, git.ErrBranchExists) {
+		return errors.Wrap(err, "create branch tracking configuration")
+	}
+	r.Logf("Local branch %s has been set up to track changes from %s\n",
+		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
+	return nil
 }

@@ -149,7 +149,7 @@ func featureAdd() *cobra.Command {
 	return cmd
 }
 
-func featureSelect(ctx context.Context, r *repo.Repo, ns, feature string) (string, string, error) {
+func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (string, string, error) {
 	if len(ns) > 0 && len(feature) > 0 {
 		// namespace and feature already populated
 		return ns, feature, nil

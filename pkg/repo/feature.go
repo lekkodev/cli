@@ -27,6 +27,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
@@ -35,6 +36,33 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
+
+type ConfigurationStore interface {
+	CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error)
+	PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error
+	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
+	FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error)
+	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	Format(ctx context.Context) error
+	FormatFeature(ctx context.Context, ff feature.FeatureFile) error
+	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error)
+	RemoveFeature(ctx context.Context, ns, featureName string) error
+	AddNamespace(ctx context.Context, name string) error
+	RemoveNamespace(ctx context.Context, ns string) error
+	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error)
+	Parse(ctx context.Context, ns, featureName string) error
+	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
+	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
+	GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error)
+	GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error)
+	GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error)
+	GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error)
+	ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error)
+	RestoreWorkingDirectory(hash string) error
+	Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error)
+	Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error
+}
 
 func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
 	if !isValidName(namespace) {

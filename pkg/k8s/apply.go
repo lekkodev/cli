@@ -40,13 +40,13 @@ const (
 type kubeClient struct {
 	cs           *kubernetes.Clientset
 	k8sNamespace string
-	r            *repo.Repo
+	r            repo.ConfigurationRepository
 }
 
 // Returns an object that acts as lekko cli's gateway to kubernetes. Handles
 // initializing the client, and operates on the single given namespace.
 // TODO: handle multiple namespaces in the future?
-func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
+func NewKubernetes(kubeConfigPath string, r repo.ConfigurationRepository) (*kubeClient, error) {
 	if kubeConfigPath == "" {
 		return nil, errors.New("kubeConfigPath not provided")
 	}
