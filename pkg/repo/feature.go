@@ -36,7 +36,34 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
-func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
+// Provides functionality needed for accessing and making changes to Lekko configuration.
+// This interface should make no assumptions about where the configuration is stored.
+type ConfigurationStore interface {
+	CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error)
+	PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error
+	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
+	FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error)
+	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	Format(ctx context.Context) error
+	FormatFeature(ctx context.Context, ff feature.FeatureFile) error
+	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error)
+	RemoveFeature(ctx context.Context, ns, featureName string) error
+	AddNamespace(ctx context.Context, name string) error
+	RemoveNamespace(ctx context.Context, ns string) error
+	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error)
+	Parse(ctx context.Context, ns, featureName string) error
+	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
+	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
+	GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error)
+	GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error)
+	GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error)
+	GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error)
+	ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error)
+	RestoreWorkingDirectory(hash string) error
+}
+
+func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
 	if !isValidName(namespace) {
 		return nil, errors.Errorf("invalid name '%s'", namespace)
 	}
@@ -56,7 +83,7 @@ func (r *Repo) CompileFeature(ctx context.Context, registry *protoregistry.Types
 	return f, nil
 }
 
-func (r *Repo) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error {
+func (r *repository) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error {
 	registry, err := r.registry(ctx, registry)
 	if err != nil {
 		return errors.Wrap(err, "registry")
@@ -103,9 +130,9 @@ type FeatureCompilationResult struct {
 func (fcr *FeatureCompilationResult) SummaryString() string {
 	stylizeStr := func(s string, pass bool) string {
 		if pass {
-			return fmt.Sprintf("%s%s %s%s", logging.Green, s, "✔", logging.Reset)
+			return logging.Green(fmt.Sprintf("%s %s", s, "✔"))
 		}
-		return fmt.Sprintf("%s%s %s%s", logging.Red, s, "✖", logging.Reset)
+		return logging.Red(fmt.Sprintf("%s %s", s, "✖"))
 	}
 	var subs []string
 	if fcr.CompilationError != nil {
@@ -131,7 +158,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 		}
 	}
-	return fmt.Sprintf("%s[%s/%s]%s %s", logging.Bold, fcr.NamespaceName, fcr.FeatureName, logging.Reset, strings.Join(subs, " | "))
+	return fmt.Sprintf("%s %s", logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)), strings.Join(subs, " | "))
 }
 
 func (fcr *FeatureCompilationResult) Err() error {
@@ -162,7 +189,7 @@ func (fcrs FeatureCompilationResults) Err() error {
 	return nil
 }
 
-func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
+func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
 	// Step 1: collect. Find all features
 	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
 	if err != nil {
@@ -232,21 +259,21 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 			if fcr.Err() == nil {
 				continue
 			}
-			r.Logf(logging.Bold+"[%s/%s]\n"+logging.Reset, fcr.NamespaceName, fcr.FeatureName)
+			r.Logf(logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)))
 			if fcr.CompilationError != nil {
-				r.Logf(logging.Red+"→"+logging.Reset+" %v\n", fcr.CompilationError)
+				r.Logf(fmt.Sprintf("%s %v\n", logging.Bold("→"), fcr.CompilationError))
 			}
 			if fcr.CompiledFeature == nil {
 				continue
 			}
 			for _, res := range fcr.CompiledFeature.ValidatorResults {
 				if !res.Passed() {
-					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
+					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
 				}
 			}
 			for _, res := range fcr.CompiledFeature.TestResults {
 				if !res.Passed() {
-					r.Logf(logging.Red+"→"+logging.Reset+" %s\n", res.DebugString())
+					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
 				}
 			}
 		}
@@ -265,7 +292,7 @@ func (r *Repo) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureComp
 	return results, nil
 }
 
-func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error) {
+func (r *repository) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error) {
 	contents, err := r.GetContents(ctx)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "get contents")
@@ -296,7 +323,7 @@ func (r *Repo) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFil
 	return results, numNamespaces, nil
 }
 
-func (r *Repo) registry(ctx context.Context, registry *protoregistry.Types) (*protoregistry.Types, error) {
+func (r *repository) registry(ctx context.Context, registry *protoregistry.Types) (*protoregistry.Types, error) {
 	if registry != nil {
 		return registry, nil
 	}
@@ -311,7 +338,7 @@ func (r *Repo) registry(ctx context.Context, registry *protoregistry.Types) (*pr
 	return registry, nil
 }
 
-func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
+func (r *repository) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
 	return star.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
@@ -319,14 +346,14 @@ func (r *Repo) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string
 // Note: we don't have a way yet to run this from an ephemeral repo,
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
-func (r *Repo) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
+func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
 	if !r.bufEnabled {
 		return nil, errors.New("buf cmd line not enabled")
 	}
 	return star.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
-func (r *Repo) Format(ctx context.Context) error {
+func (r *repository) Format(ctx context.Context) error {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "parse metadata")
@@ -350,7 +377,7 @@ func (r *Repo) Format(ctx context.Context) error {
 	return nil
 }
 
-func (r *Repo) FormatFeature(ctx context.Context, ff feature.FeatureFile) error {
+func (r *repository) FormatFeature(ctx context.Context, ff feature.FeatureFile) error {
 	formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r)
 	ok, err := formatter.Format(ctx)
 	if err != nil {
@@ -367,7 +394,7 @@ func (r *Repo) FormatFeature(ctx context.Context, ff feature.FeatureFile) error 
 // the namespace doesn't exist, or
 // a feature named featureName already exists
 // Returns the path to the feature file that was written to disk.
-func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error) {
+func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error) {
 	if !isValidName(featureName) {
 		return "", errors.Wrap(ErrInvalidName, "feature")
 	}
@@ -394,7 +421,7 @@ func (r *Repo) AddFeature(ctx context.Context, ns, featureName string, fType fea
 
 // Removes the given feature. If the namespace or feature doesn't exist, returns
 // an error.
-func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error {
+func (r *repository) RemoveFeature(ctx context.Context, ns, featureName string) error {
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
 	if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
@@ -422,7 +449,7 @@ func (r *Repo) RemoveFeature(ctx context.Context, ns, featureName string) error 
 
 // Adds the given namespace by adding it to lekko.root.yaml, and creating the
 // directory structure for it.
-func (r *Repo) AddNamespace(ctx context.Context, name string) error {
+func (r *repository) AddNamespace(ctx context.Context, name string) error {
 	if !isValidName(name) {
 		return errors.Wrap(ErrInvalidName, "namespace")
 	}
@@ -442,7 +469,7 @@ func (r *Repo) AddNamespace(ctx context.Context, name string) error {
 }
 
 // Removes the given namespace from the repo, as well as from lekko.root.yaml.
-func (r *Repo) RemoveNamespace(ctx context.Context, ns string) error {
+func (r *repository) RemoveNamespace(ctx context.Context, ns string) error {
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
 	if err != nil {
 		return fmt.Errorf("error parsing namespace metadata: %v", err)
@@ -468,7 +495,7 @@ func (r *Repo) RemoveNamespace(ctx context.Context, ns string) error {
 	return nil
 }
 
-func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error) {
+func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, "", errors.Wrap(err, "parse metadata")
@@ -495,7 +522,7 @@ func (r *Repo) Eval(ctx context.Context, ns, featureName string, iCtx map[string
 	return ret, evalF.Type(), err
 }
 
-func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {
+func (r *repository) Parse(ctx context.Context, ns, featureName string) error {
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
 		return errors.Wrap(err, "get feature contents")
@@ -531,7 +558,7 @@ func (r *Repo) Parse(ctx context.Context, ns, featureName string) error {
 	return nil
 }
 
-func (r *Repo) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error) {
+func (r *repository) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse root md")
@@ -547,7 +574,7 @@ func (r *Repo) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRep
 	return ret, nil
 }
 
-func (r *Repo) ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error) {
+func (r *repository) ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse md")
@@ -582,7 +609,7 @@ func isValidName(name string) bool {
 		boundary.MatchString(string(name[len(name)-1]))
 }
 
-func (r *Repo) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {
+func (r *repository) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {
 	ffs, err := feature.GroupFeatureFiles(ctx, namespace, r)
 	if err != nil {
 		return nil, errors.Wrap(err, "group feature files")
@@ -590,7 +617,7 @@ func (r *Repo) GetFeatureFiles(ctx context.Context, namespace string) ([]feature
 	return ffs, nil
 }
 
-func (r *Repo) GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error) {
+func (r *repository) GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error) {
 	ffs, err := r.GetFeatureFiles(ctx, namespace)
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature files")
@@ -609,7 +636,7 @@ func (r *Repo) GetFeatureFile(ctx context.Context, namespace, featureName string
 	return ff, nil
 }
 
-func (r *Repo) GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error) {
+func (r *repository) GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error) {
 	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature file")
@@ -639,16 +666,16 @@ func (r *Repo) GetFeatureContents(ctx context.Context, namespace, featureName st
 // Returns the hash of the proto bin file as indexed by the git tree. If there are
 // uncommitted changes those won't be accounted for in the hash.
 // The method is a reference, so I don't forget how to do this in the future (shubhit)
-func (r *Repo) GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error) {
+func (r *repository) GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error) {
 	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature file")
 	}
-	hash, err := r.WorkingDirectoryHash()
+	hash, err := r.headHash()
 	if err != nil {
 		return nil, errors.Wrap(err, "working directory hash")
 	}
-	co, err := r.Repo.CommitObject(*hash)
+	co, err := r.repo.CommitObject(*hash)
 	if err != nil {
 		return nil, errors.Wrapf(err, "commit object of hash %s", hash.String())
 	}
@@ -660,6 +687,6 @@ func (r *Repo) GetFeatureHash(ctx context.Context, namespace, featureName string
 	return &fi.Hash, nil
 }
 
-func (r *Repo) ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error) {
+func (r *repository) ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error) {
 	return metadata.ParseFullConfigRepoMetadataStrict(ctx, "", r)
 }

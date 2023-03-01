@@ -61,7 +61,7 @@ var repoListCmd = &cobra.Command{
 		}
 		fmt.Printf("%d repos found in team %s.\n", len(repos), rs.GetLekkoTeam())
 		for _, r := range repos {
-			fmt.Printf("%s[%s/%s]%s:\n\t%s\n\t%s\n", logging.Bold, r.Owner, r.RepoName, logging.Reset, r.Description, r.URL)
+			fmt.Printf("%s:\n\t%s\n\t%s\n", logging.Bold(fmt.Sprintf("[%s/%s]", r.Owner, r.RepoName)), r.Description, r.URL)
 		}
 		return nil
 	},
@@ -98,7 +98,7 @@ func repoCreateCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			fmt.Printf("Attempting to create a new configuration repository %s[%s/%s]%s in team %s.\n", logging.Bold, owner, repoName, logging.Reset, rs.GetLekkoTeam())
+			fmt.Printf("Attempting to create a new configuration repository %s in team %s.\n", logging.Bold(fmt.Sprintf("[%s/%s]", owner, repoName)), rs.GetLekkoTeam())
 			fmt.Printf("First, ensure that the github owner '%s' has installed Lekko App by visiting:\n\t%s\n", owner, lekkoAppInstallURL)
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)

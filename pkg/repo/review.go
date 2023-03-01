@@ -20,19 +20,25 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/pkg/errors"
 )
 
+// Allows interacting with an underlying git provider, like GitHub. This interface provides
+// tools to create code reviews and merge them.
+// TODO: generalize the arguments to this interface so that we're not just tied to github.
+type GitProvider interface {
+	Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error)
+	Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error
+}
+
 // Review will open a pull request. It takes different actions depending on
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
-func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient) (string, error) {
-	if err := r.CredentialsExist(); err != nil {
+func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error) {
+	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
 	var main, clean bool
@@ -41,7 +47,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 	if err != nil {
 		return "", errors.Wrap(err, "is main")
 	}
-	clean, err = r.wdClean()
+	clean, err = r.IsClean()
 	if err != nil {
 		return "", errors.Wrap(err, "wd clean")
 	}
@@ -51,15 +57,14 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", errors.Errorf("nothing to review on main with clean wd")
 		}
 		// dirty working directory on main
-		branchName, err = r.checkoutLocalBranch()
+		branchName, err = GenBranchName(ap.GetUsername())
 		if err != nil {
-			return "", errors.Wrap(err, "checkout new branch")
+			return "", errors.Wrap(err, "gen branch name")
 		}
-		// set up remote branch tracking
-		if err := r.setTrackingConfig(branchName); err != nil {
-			return "", errors.Wrap(err, "push to remote")
+		if err := r.NewRemoteBranch(branchName); err != nil {
+			return "", errors.Wrapf(err, "new remote branch: %s", branchName)
 		}
-		if _, err := r.Commit(ctx, title); err != nil {
+		if _, err := r.Commit(ctx, ap, title); err != nil {
 			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
@@ -68,7 +73,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 			return "", err
 		}
 		if !clean {
-			if _, err := r.Commit(ctx, title); err != nil {
+			if _, err := r.Commit(ctx, ap, title); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
 		}
@@ -80,8 +85,8 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient)
 	return url, nil
 }
 
-func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) error {
-	if err := r.CredentialsExist(); err != nil {
+func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error {
+	if err := credentialsExist(ap); err != nil {
 		return err
 	}
 	owner, repo, err := r.getOwnerRepo()
@@ -111,76 +116,29 @@ func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient) er
 	} else {
 		return errors.New("Failed to merge pull request.")
 	}
-	if err := r.Cleanup(ctx, &branchName); err != nil {
+	if err := r.Cleanup(ctx, &branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup")
 	}
 	return nil
 }
 
-func (r *Repo) wdClean() (bool, error) {
-	st, err := r.Wt.Status()
-	if err != nil {
-		return false, errors.Wrap(err, "status")
-	}
-	return st.IsClean(), nil
-}
-
-func (r *Repo) GenBranchName() (string, error) {
-	user := r.Auth.GetUsername()
-	if user == "" {
+// Generates a branch name based on the given github username,
+// or if not available, the github username stored in git config.
+func GenBranchName(ghUsername string) (string, error) {
+	if ghUsername == "" {
 		cfg, err := config.LoadConfig(config.GlobalScope)
 		if err != nil {
 			return "", errors.Wrap(err, "load global config")
 		}
-		user = strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
+		ghUsername = strings.ToLower(strings.Split(cfg.User.Name, " ")[0])
 	}
-	if user == "" {
-		user = "anon"
+	if ghUsername == "" {
+		ghUsername = "anon"
 	}
-	return fmt.Sprintf("%s-review-%d", user, time.Now().Nanosecond()), nil
+	return fmt.Sprintf("%s-review-%d", ghUsername, time.Now().Nanosecond()), nil
 }
 
-func (r *Repo) checkoutLocalBranch() (string, error) {
-	branchName, err := r.GenBranchName()
-	if err != nil {
-		return "", errors.Wrap(err, "gen branch name")
-	}
-	if err := r.Wt.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName(branchName),
-		Create: true,
-		Keep:   true,
-	}); err != nil {
-		return "", errors.Wrap(err, "checkout")
-	}
-	r.Logf("Checked out local branch %s\n", branchName)
-	return branchName, nil
-}
-
-func (r *Repo) pushToRemote(ctx context.Context, branchName string) error {
-	if err := r.Repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: RemoteName,
-		Auth:       r.BasicAuth(),
-	}); err != nil {
-		return errors.Wrap(err, "push")
-	}
-	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
-	return nil
-}
-
-func (r *Repo) setTrackingConfig(branchName string) error {
-	if err := r.Repo.CreateBranch(&config.Branch{
-		Name:   branchName,
-		Remote: RemoteName,
-		Merge:  plumbing.NewBranchReferenceName(branchName),
-	}); err != nil && !errors.Is(err, git.ErrBranchExists) {
-		return errors.Wrap(err, "create branch tracking configuration")
-	}
-	r.Logf("Local branch %s has been set up to track changes from %s\n",
-		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
-	return nil
-}
-
-func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) (string, error) {
+func (r *repository) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) (string, error) {
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
 		return "", errors.Wrap(err, "get owner repo")
@@ -209,7 +167,7 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
+func (r *repository) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
 	prs, resp, err := ghCli.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Head: fmt.Sprintf("%s:%s", owner, branchName),
 	})
@@ -223,28 +181,4 @@ func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName strin
 		return nil, fmt.Errorf("more that one open pr found for branch %s", branchName)
 	}
 	return prs[0], nil
-}
-
-func (r *Repo) GetPRInfo(ctx context.Context, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, []*github.PullRequestReview, []*github.CheckRun, error) {
-	owner, repo, err := r.getOwnerRepo()
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "get owner repo")
-	}
-	pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
-	if err != nil {
-		return nil, nil, nil, errors.Wrap(err, "get pr for branch")
-	}
-	reviews, resp, err := ghCli.PullRequests.ListReviews(ctx, owner, repo, *pr.Number, nil)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list pull requests #%d reviews, resp %v: %w", *pr.Number, resp.Status, err)
-	}
-	checks, resp, err := ghCli.Checks.ListCheckRunsForRef(ctx, owner, repo, *pr.Head.Ref, nil)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to list pull requests #%d checks, resp %v: %w", *pr.Number, resp.Status, err)
-	}
-	var checkRuns []*github.CheckRun
-	if checks != nil {
-		checkRuns = checks.CheckRuns
-	}
-	return pr, reviews, checkRuns, nil
 }

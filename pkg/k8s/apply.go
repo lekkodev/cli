@@ -40,13 +40,13 @@ const (
 type kubeClient struct {
 	cs           *kubernetes.Clientset
 	k8sNamespace string
-	r            *repo.Repo
+	r            repo.ConfigurationRepository
 }
 
 // Returns an object that acts as lekko cli's gateway to kubernetes. Handles
 // initializing the client, and operates on the single given namespace.
 // TODO: handle multiple namespaces in the future?
-func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
+func NewKubernetes(kubeConfigPath string, r repo.ConfigurationRepository) (*kubeClient, error) {
 	if kubeConfigPath == "" {
 		return nil, errors.New("kubeConfigPath not provided")
 	}
@@ -80,9 +80,9 @@ func NewKubernetes(kubeConfigPath string, r *repo.Repo) (*kubeClient, error) {
 // directory exactly. It will delete configmaps that don't exist in the config repo,
 // and apply the ones that do.
 // See https://kubernetes.io/docs/reference/kubectl/cheatsheet/#kubectl-apply
-func (k *kubeClient) Apply(ctx context.Context) error {
-	if err := k.r.CredentialsExist(); err != nil {
-		return err
+func (k *kubeClient) Apply(ctx context.Context, username string) error {
+	if len(username) == 0 {
+		return errors.New("no username provided")
 	}
 	// Find all lekko configmaps first, so we can later delete ones that shouldn't exist
 	result, err := k.cs.CoreV1().ConfigMaps(k.k8sNamespace).List(ctx, metav1.ListOptions{
@@ -103,7 +103,7 @@ func (k *kubeClient) Apply(ctx context.Context) error {
 
 	for _, md := range nsMD {
 		cmName := fmt.Sprintf("%s%s", lekkoConfigMapPrefix, md.Name)
-		if err := k.applyLekkoNamespace(ctx, md.Name, cmName); err != nil {
+		if err := k.applyLekkoNamespace(ctx, md.Name, cmName, username); err != nil {
 			return fmt.Errorf("namespace %s: apply: %w", md.Name, err)
 		}
 		delete(existingConfigMaps, cmName)
@@ -146,19 +146,34 @@ func (k *kubeClient) annotationKey(key string) string {
 	return fmt.Sprintf("lekko/%s", key)
 }
 
-func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration) error {
-	hash, err := k.r.HumanReadableHash()
+func (k *kubeClient) humanReadableHash() (string, error) {
+	hash, err := k.r.Hash()
+	if err != nil {
+		return "", err
+	}
+	var suffix string
+	clean, err := k.r.IsClean()
+	if err != nil {
+		return "", errors.Wrap(err, "wd clean")
+	}
+	if !clean {
+		suffix = "-dirty"
+	}
+	return fmt.Sprintf("%s%s", hash, suffix), nil
+}
+
+func (k *kubeClient) addAnnotations(cm *corev1.ConfigMapApplyConfiguration, username string) error {
+	hash, err := k.humanReadableHash()
 	if err != nil {
 		return errors.Wrap(err, "wd hash")
 	}
-	user := k.r.Auth.GetUsername()
 	branch, err := k.r.BranchName()
 	if err != nil {
 		return errors.Wrap(err, "branch name")
 	}
 	cm.WithAnnotations(map[string]string{
 		k.annotationKey(annotationKeyHash):   hash,
-		k.annotationKey(annotationKeyUser):   user,
+		k.annotationKey(annotationKeyUser):   username,
 		k.annotationKey(annotationKeyBranch): branch,
 	})
 	return nil
@@ -168,6 +183,7 @@ func (k *kubeClient) applyLekkoNamespace(
 	ctx context.Context,
 	namespaceName string,
 	cmName string,
+	username string,
 ) error {
 	cm := corev1.ConfigMap(cmName, k.k8sNamespace)
 	ffs, err := k.r.GetFeatureFiles(ctx, namespaceName)
@@ -181,7 +197,7 @@ func (k *kubeClient) applyLekkoNamespace(
 		}
 		cm.WithBinaryData(map[string][]byte{ff.Name: bytes})
 	}
-	if err := k.addAnnotations(cm); err != nil {
+	if err := k.addAnnotations(cm, username); err != nil {
 		return errors.Wrap(err, "add annotations")
 	}
 	cm.WithLabels(map[string]string{

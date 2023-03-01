@@ -64,7 +64,7 @@ func createAPIKeyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Generated api key:\n\t%s\n", logging.Bold+key+logging.Reset)
+			fmt.Printf("Generated api key:\n\t%s\n", logging.Bold(key))
 			fmt.Printf("Please save the key somewhere safe, as you will not be able to access it again.\n")
 			fmt.Printf("Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
 			return nil
@@ -120,10 +120,10 @@ func checkAPIKeyCmd() *cobra.Command {
 			fmt.Printf("Checking authentication status for api key in team '%s'...\n", rs.GetLekkoTeam())
 			lekkoKey, err := a.Check(cmd.Context(), key)
 			if err != nil {
-				fmt.Printf("Lekko: Unauthenticated %s✖%s\n", logging.Red, logging.Reset)
+				fmt.Printf("Lekko: Unauthenticated %s\n", logging.Red("✖"))
 				return errors.Wrap(err, "check")
 			}
-			fmt.Printf("Lekko: Authenticated %s✔%s\n", logging.Green, logging.Reset)
+			fmt.Printf("Lekko: Authenticated %s\n", logging.Green("✔"))
 			printAPIKeys(lekkoKey)
 			return nil
 		},

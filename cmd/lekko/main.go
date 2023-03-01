@@ -61,7 +61,6 @@ func main() {
 	k8sCmd.AddCommand(listCmd())
 	experimentalCmd.AddCommand(k8sCmd)
 	experimentalCmd.AddCommand(parseCmd())
-	experimentalCmd.AddCommand(startCmd)
 	experimentalCmd.AddCommand(cleanupCmd)
 	experimentalCmd.AddCommand(formatCmd())
 	rootCmd.AddCommand(experimentalCmd)
@@ -214,7 +213,7 @@ func reviewCmd() *cobra.Command {
 				}
 			}
 
-			_, err = r.Review(ctx, title, ghCli)
+			_, err = r.Review(ctx, title, ghCli, rs)
 			return err
 		},
 	}
@@ -255,7 +254,7 @@ var mergeCmd = &cobra.Command{
 		if _, err := ghCli.GetUser(ctx); err != nil {
 			return errors.Wrap(err, "github auth fail")
 		}
-		if err := r.Merge(ctx, prNum, ghCli); err != nil {
+		if err := r.Merge(ctx, prNum, ghCli, rs); err != nil {
 			return errors.Wrap(err, "merge")
 		}
 		fmt.Printf("PR merged.\n")
@@ -454,7 +453,7 @@ func applyCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "failed to build k8s client")
 			}
-			if err := kube.Apply(ctx); err != nil {
+			if err := kube.Apply(ctx, rs.GetUsername()); err != nil {
 				return errors.Wrap(err, "apply")
 			}
 
@@ -494,36 +493,6 @@ var experimentalCmd = &cobra.Command{
 	Short: "experimental commands",
 }
 
-var startCmd = &cobra.Command{
-	Use:   "start",
-	Short: "sets up the local config repo for making changes",
-	Args:  cobra.MaximumNArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
-		r, err := repo.NewLocal(wd, rs)
-		if err != nil {
-			return errors.Wrap(err, "new repo")
-		}
-		var branch string
-		if len(args) == 0 {
-			branch, err = r.GenBranchName()
-			if err != nil {
-				return errors.Wrap(err, "gen branch name")
-			}
-		} else {
-			branch = args[0]
-		}
-		if err = r.CreateOrRestore(branch); err != nil {
-			return err
-		}
-		return nil
-	},
-}
-
 func commitCmd() *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
@@ -545,7 +514,7 @@ func commitCmd() *cobra.Command {
 			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
-			if _, err = r.Commit(ctx, message); err != nil {
+			if _, err = r.Commit(ctx, rs, message); err != nil {
 				return err
 			}
 			return nil
@@ -573,7 +542,7 @@ var cleanupCmd = &cobra.Command{
 		if len(args) > 0 {
 			optionalBranchName = &args[0]
 		}
-		if err = r.Cleanup(cmd.Context(), optionalBranchName); err != nil {
+		if err = r.Cleanup(cmd.Context(), optionalBranchName, rs); err != nil {
 			return err
 		}
 		return nil
@@ -616,7 +585,6 @@ func restoreCmd() *cobra.Command {
 			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
-			fmt.Printf("Successfully compiled.\n")
 			fmt.Printf("Restored hash %s to your working directory. \nRun `lekko review` to create a PR with these changes.\n", args[0])
 			return nil
 		},
