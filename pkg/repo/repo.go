@@ -46,7 +46,6 @@ var (
 	ErrNotFound           = fmt.Errorf("not found")
 )
 
-//
 type ConfigurationRepository interface {
 	ConfigurationStore
 	GitRepository
