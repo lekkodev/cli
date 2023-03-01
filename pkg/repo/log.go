@@ -18,7 +18,7 @@ import (
 	"fmt"
 )
 
-func (r *Repo) Logf(format string, a ...any) {
+func (r *repository) Logf(format string, a ...any) {
 	if !r.loggingEnabled {
 		return
 	}

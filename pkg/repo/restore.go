@@ -29,7 +29,7 @@ import (
 // We do this by checking out the given hash in a detached head state,
 // copying all the files (except the .git directory) to local memory,
 // and writing out all the contents to our current working directory.
-func (r *Repo) RestoreWorkingDirectory(hash string) error {
+func (r *repository) RestoreWorkingDirectory(hash string) error {
 	currentBranchName, err := r.BranchName()
 	if err != nil {
 		return errors.Wrap(err, "get branch name")
@@ -77,7 +77,7 @@ type rawContent struct {
 	mode  os.FileMode
 }
 
-func (r *Repo) walkContents(path string, shouldWalk func(string) bool, del bool) ([]rawContent, error) {
+func (r *repository) walkContents(path string, shouldWalk func(string) bool, del bool) ([]rawContent, error) {
 	fis, err := r.fs.ReadDir(path)
 	if err != nil {
 		return nil, errors.Wrap(err, "read dir")
@@ -113,7 +113,7 @@ func (r *Repo) walkContents(path string, shouldWalk func(string) bool, del bool)
 	return ret, nil
 }
 
-func (r *Repo) restore(rcs []rawContent) error {
+func (r *repository) restore(rcs []rawContent) error {
 	for _, rc := range rcs {
 		dir := filepath.Dir(rc.path)
 		if err := r.MkdirAll(dir, rc.mode); err != nil {

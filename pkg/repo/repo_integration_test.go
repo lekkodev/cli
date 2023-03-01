@@ -70,7 +70,7 @@ func TestRepoIntegration(t *testing.T) {
 	require.NoError(t, err, "github token should be valid")
 	t.Logf("Running integration test on behalf of '%s'\n", user.GetLogin())
 
-	var r *Repo
+	var r *repository
 	t.Run("Constructor", func(t *testing.T) { r = testConstructor(t, tmpDir, ap) })
 	require.NotNil(t, r)
 	var branchName string
@@ -81,12 +81,12 @@ func TestRepoIntegration(t *testing.T) {
 	t.Run("Restore", func(t *testing.T) { testRestore(ctx, t, tmpDir, ap) })
 }
 
-func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *Repo {
+func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 	path := filepath.Join(tmpDir, "test-constructor")
 	cr, err := NewLocalClone(path, integrationTestURL, ap)
-	r, ok := cr.(*Repo)
-	require.True(t, ok)
 	require.NoError(t, err)
+	r, ok := cr.(*repository)
+	require.True(t, ok)
 	branch, err := r.BranchName()
 	require.NoError(t, err)
 	require.Equal(t, MainBranchName, branch, "should be on main branch after construction")
@@ -102,7 +102,7 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *Repo {
 	return r
 }
 
-func testReview(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubClient, ap AuthProvider) string {
+func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider) string {
 	// Add feature, so we have some changes in our working directory.
 	namespace, featureName := "default", "test"
 	path, err := r.AddFeature(ctx, namespace, featureName, feature.FeatureTypeBool)
@@ -137,16 +137,16 @@ func testReview(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubClie
 
 func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchName string) {
 	cr, err := NewEphemeral(integrationTestURL, ap, branchName)
-	r, ok := cr.(*Repo)
-	require.True(t, ok)
 	require.NoError(t, err)
+	r, ok := cr.(*repository)
+	require.True(t, ok)
 	currentBranchName, err := r.BranchName()
 	require.NoError(t, err)
 	assert.Equal(t, branchName, currentBranchName)
 	assertUpToDate(t, r, branchName)
 }
 
-func testCleanup(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubClient, ap AuthProvider, branchName string) {
+func testCleanup(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider, branchName string) {
 	require.NoError(t, r.Cleanup(ctx, &branchName, ap))
 	_, resp, err := ghCli.Repositories.GetBranch(ctx, integrationTestOwnerName, integrationTestRepoName, branchName, false)
 	require.Error(t, err)
@@ -160,7 +160,7 @@ func testCleanup(ctx context.Context, t *testing.T, r *Repo, ghCli *gh.GithubCli
 	assert.Nil(t, localRef)
 }
 
-func assertUpToDate(t *testing.T, r *Repo, branchName string) {
+func assertUpToDate(t *testing.T, r *repository, branchName string) {
 	localRef, err := r.repo.Reference(plumbing.NewBranchReferenceName(branchName), false)
 	require.NoError(t, err)
 	remoteRef, err := r.repo.Reference(plumbing.NewRemoteReferenceName(RemoteName, branchName), false)

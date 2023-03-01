@@ -50,3 +50,15 @@ That will cross-compile the binary for multiple platforms and architectures, usi
 After completion, navigate to https://github.com/lekkodev/cli/releases/ to see the latest releases under the tag you just created.
 
 Done! The cli has just been released. Follow instructions above to [Download](#download) the latest cli.
+
+## Integration Tests
+
+Integration tests exist for the cli and they are run on CI by default. You can run them locally:
+
+```bash
+GITHUB_TOKEN=${github_personal_access_token} make integration
+```
+
+The tests are configured to use the [lekkodev/integration-test](https://github.com/lekkodev/integration-test) repository as a remote for testing.
+
+All tests live in `./pkg/repo/repo_integration_test.go`. They aren't run via `make test` due to the use of a [Go Build Constraint](https://pkg.go.dev/go/build#hdr-Build_Constraints).

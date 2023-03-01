@@ -46,13 +46,21 @@ var (
 	ErrNotFound           = fmt.Errorf("not found")
 )
 
+// ConfigurationRepository provides read and write access to Lekko configuration
+// stored in a git repository.
 type ConfigurationRepository interface {
+	// Provides CRUD functionality on Lekko configuration stored anywhere
 	ConfigurationStore
+	// Allows interacting with git
 	GitRepository
+	// Allows interacting with a git provider, e.g. GitHub
+	GitProvider
+	// Underlying filesystem interfaces
 	fs.Provider
 	fs.ConfigWriter
 }
 
+// Provides functionality for interacting with git.
 type GitRepository interface {
 	// Checks out the branch at origin/${branchName}. The remote branch must exist.
 	CheckoutRemoteBranch(branchName string) error
@@ -81,7 +89,7 @@ type GitRepository interface {
 // Abstraction around git and github operations associated with the lekko configuration repo.
 // This class can be used either by the cli, or by any other system that intends to manage
 // operations around the lekko config repo.
-type Repo struct {
+type repository struct {
 	repo *git.Repository
 	wt   *git.Worktree
 	fs   billy.Filesystem
@@ -126,7 +134,7 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 
-	cr := &Repo{
+	cr := &repository{
 		repo:           repo,
 		wt:             wt,
 		fs:             wt.Filesystem,
@@ -155,7 +163,7 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	cr := &Repo{
+	cr := &repository{
 		repo:           repo,
 		wt:             wt,
 		fs:             wt.Filesystem,
@@ -186,7 +194,7 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 	if err != nil {
 		return nil, errors.Wrap(err, "git clone")
 	}
-	return &Repo{
+	return &repository{
 		repo: r,
 		wt:   wt,
 		fs:   wt.Filesystem,
@@ -194,7 +202,7 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 }
 
 // Checks out the remote branch
-func (r *Repo) CheckoutRemoteBranch(branchName string) error {
+func (r *repository) CheckoutRemoteBranch(branchName string) error {
 	localRef, remoteRef := plumbing.NewBranchReferenceName(branchName), plumbing.NewRemoteReferenceName(RemoteName, branchName)
 	// set a symbolic git ref, so that the local branch we checkout to next
 	// goes off of the remote ref
@@ -209,7 +217,7 @@ func (r *Repo) CheckoutRemoteBranch(branchName string) error {
 	return nil
 }
 
-func (r *Repo) GetRemoteURL() (string, error) {
+func (r *repository) GetRemoteURL() (string, error) {
 	cfg, err := r.repo.Config()
 	if err != nil {
 		return "", errors.Wrap(err, "config")
@@ -226,7 +234,7 @@ func (r *Repo) GetRemoteURL() (string, error) {
 
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
-func (r *Repo) Commit(ctx context.Context, ap AuthProvider, message string) (string, error) {
+func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string) (string, error) {
 	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
@@ -281,7 +289,7 @@ func (r *Repo) Commit(ctx context.Context, ap AuthProvider, message string) (str
 // local and remote, if they exist. If branchName is nil, uses the current
 // (non-master) branch. Will switch the current branch back to main, and
 // pull from remote to ensure we are on the latest commit.
-func (r *Repo) Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error {
+func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error {
 	if err := r.cleanupBranch(ctx, branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
@@ -292,7 +300,7 @@ func (r *Repo) Cleanup(ctx context.Context, branchName *string, ap AuthProvider)
 	return nil
 }
 
-func (r *Repo) Pull(ap AuthProvider) error {
+func (r *repository) Pull(ap AuthProvider) error {
 	if err := r.wt.Pull(&git.PullOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
@@ -302,7 +310,7 @@ func (r *Repo) Pull(ap AuthProvider) error {
 	return nil
 }
 
-func (r *Repo) cleanupBranch(ctx context.Context, branchName *string, ap AuthProvider) error {
+func (r *repository) cleanupBranch(ctx context.Context, branchName *string, ap AuthProvider) error {
 	currentBranch, err := r.BranchName()
 	if err != nil {
 		return errors.Wrap(err, "branch name")
@@ -359,7 +367,7 @@ func (r *Repo) cleanupBranch(ctx context.Context, branchName *string, ap AuthPro
 }
 
 // Returns the hash of the current commit that HEAD is pointing to.
-func (r *Repo) Hash() (string, error) {
+func (r *repository) Hash() (string, error) {
 	h, err := r.headHash()
 	if err != nil {
 		return "", err
@@ -367,7 +375,7 @@ func (r *Repo) Hash() (string, error) {
 	return h.String(), nil
 }
 
-func (r *Repo) headHash() (*plumbing.Hash, error) {
+func (r *repository) headHash() (*plumbing.Hash, error) {
 	hash, err := r.repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
 	if err != nil {
 		return &plumbing.Hash{}, errors.Wrap(err, "resolve revision")
@@ -375,7 +383,7 @@ func (r *Repo) headHash() (*plumbing.Hash, error) {
 	return hash, nil
 }
 
-func (r *Repo) ensureMainBranch(ap AuthProvider) error {
+func (r *repository) ensureMainBranch(ap AuthProvider) error {
 	h, err := r.repo.Head()
 	if err != nil {
 		return errors.Wrap(err, "head")
@@ -401,7 +409,7 @@ func (r *Repo) ensureMainBranch(ap AuthProvider) error {
 	return nil
 }
 
-func (r *Repo) isMain() (bool, error) {
+func (r *repository) isMain() (bool, error) {
 	h, err := r.repo.Head()
 	if err != nil {
 		return false, errors.Wrap(err, "head")
@@ -412,7 +420,7 @@ func (r *Repo) isMain() (bool, error) {
 	return h.Name().Short() == MainBranchName, nil
 }
 
-func (r *Repo) BranchName() (string, error) {
+func (r *repository) BranchName() (string, error) {
 	h, err := r.repo.Head()
 	if err != nil {
 		return "", errors.Wrap(err, "head")
@@ -420,7 +428,7 @@ func (r *Repo) BranchName() (string, error) {
 	return h.Name().Short(), nil
 }
 
-func (r *Repo) getURL() (*url.URL, error) {
+func (r *repository) getURL() (*url.URL, error) {
 	rm, err := r.repo.Remote(RemoteName)
 	if err != nil {
 		return nil, errors.Wrap(err, "remote")
@@ -435,7 +443,7 @@ func (r *Repo) getURL() (*url.URL, error) {
 	return u, nil
 }
 
-func (r *Repo) getOwnerRepo() (string, string, error) {
+func (r *repository) getOwnerRepo() (string, string, error) {
 	u, err := r.getURL()
 	if err != nil {
 		return "", "", errors.Wrap(err, "get url")
@@ -449,7 +457,7 @@ func (r *Repo) getOwnerRepo() (string, string, error) {
 
 // Returns whether or not the working directory is
 // clean (i.e. has no uncommitted changes)
-func (r *Repo) IsClean() (bool, error) {
+func (r *repository) IsClean() (bool, error) {
 	st, err := r.wt.Status()
 	if err != nil {
 		return false, errors.Wrap(err, "status")
@@ -459,7 +467,7 @@ func (r *Repo) IsClean() (bool, error) {
 
 // Creates new remote branch config at the given sha, and checks out the
 // new branch locally. branchName must be sufficiently unique.
-func (r *Repo) NewRemoteBranch(branchName string) error {
+func (r *repository) NewRemoteBranch(branchName string) error {
 	localRef := plumbing.NewBranchReferenceName(branchName)
 	if err := r.wt.Checkout(&git.CheckoutOptions{
 		Branch: localRef,

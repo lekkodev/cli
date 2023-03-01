@@ -26,10 +26,18 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Allows interacting with an underlying git provider, like GitHub. This interface provides
+// tools to create code reviews and merge them.
+// TODO: generalize the arguments to this interface so that we're not just tied to github.
+type GitProvider interface {
+	Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error)
+	Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error
+}
+
 // Review will open a pull request. It takes different actions depending on
 // whether or not we are currently on main, and whether or not the working
 // directory is clean.
-func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error) {
+func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error) {
 	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
@@ -77,7 +85,7 @@ func (r *Repo) Review(ctx context.Context, title string, ghCli *gh.GithubClient,
 	return url, nil
 }
 
-func (r *Repo) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error {
+func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error {
 	if err := credentialsExist(ap); err != nil {
 		return err
 	}
@@ -130,7 +138,7 @@ func GenBranchName(ghUsername string) (string, error) {
 	return fmt.Sprintf("%s-review-%d", ghUsername, time.Now().Nanosecond()), nil
 }
 
-func (r *Repo) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) (string, error) {
+func (r *repository) createPR(ctx context.Context, branchName, title string, ghCli *gh.GithubClient) (string, error) {
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
 		return "", errors.Wrap(err, "get owner repo")
@@ -159,7 +167,7 @@ func strPtr(s string) *string {
 	return &s
 }
 
-func (r *Repo) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
+func (r *repository) getPRForBranch(ctx context.Context, owner, repo, branchName string, ghCli *gh.GithubClient) (*github.PullRequest, error) {
 	prs, resp, err := ghCli.PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Head: fmt.Sprintf("%s:%s", owner, branchName),
 	})
