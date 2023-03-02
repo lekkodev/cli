@@ -178,26 +178,22 @@ func parseCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "build dynamic type registry")
 			}
-			var options []string
+			var nsfs namespaceFeatures
 			if all {
-				options, err = featureOptions(ctx, r, ns, featureName)
+				nsfs, err = getNamespaceFeatures(ctx, r, ns, featureName)
 				if err != nil {
 					return err
 				}
 			} else {
-				ns, featureName, err = featureSelect(ctx, r, ns, featureName)
+				nsf, err := featureSelect(ctx, r, ns, featureName)
 				if err != nil {
 					return err
 				}
-				options = append(options, fmt.Sprintf("%s/%s", ns, featureName))
+				nsfs = append(nsfs, nsf)
 			}
-			for _, option := range options {
-				parts := strings.Split(option, "/")
-				if len(parts) != 2 {
-					return errors.Errorf("invalid input: %s", option)
-				}
-				f, err := r.Parse(ctx, parts[0], parts[1])
-				fmt.Print(logging.Bold(fmt.Sprintf("[%s/%s]", parts[0], parts[1])))
+			for _, nsf := range nsfs {
+				f, err := r.Parse(ctx, nsf.namespace(), nsf.feature())
+				fmt.Print(logging.Bold(fmt.Sprintf("[%s]", nsf.String())))
 				if errors.Is(err, static.ErrUnsupportedStaticParsing) {
 					fmt.Printf(" Unsupported static parsing\n")
 				} else if err != nil {
