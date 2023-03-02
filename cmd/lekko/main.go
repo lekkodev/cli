@@ -32,6 +32,7 @@ import (
 	"github.com/lekkodev/cli/pkg/oauth"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 
@@ -154,27 +155,68 @@ func compileCmd() *cobra.Command {
 }
 
 func parseCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "parse namespace/feature",
-		Short: "parse a starlark file using static analysis, and rewrite it",
-		Args:  cobra.ExactArgs(1),
+	var ns, featureName string
+	var all, printFeature bool
+	cmd := &cobra.Command{
+		Use:   "parse",
+		Short: "parse a feature file using static analysis, and rewrite the starlark",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
 			}
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
+			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			namespace, featureName, err := feature.ParseFeaturePath(args[0])
+			ctx := cmd.Context()
+			rootMD, _, err := r.ParseMetadata(ctx)
 			if err != nil {
-				return errors.Wrap(err, "parse feature path")
+				return errors.Wrap(err, "parse metadata")
 			}
-			return r.Parse(cmd.Context(), namespace, featureName)
+			registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "build dynamic type registry")
+			}
+			var options []string
+			if all {
+				options, err = featureOptions(ctx, r, ns, featureName)
+				if err != nil {
+					return err
+				}
+			} else {
+				ns, featureName, err = featureSelect(ctx, r, ns, featureName)
+				if err != nil {
+					return err
+				}
+				options = append(options, fmt.Sprintf("%s/%s", ns, featureName))
+			}
+			for _, option := range options {
+				parts := strings.Split(option, "/")
+				if len(parts) != 2 {
+					return errors.Errorf("invalid input: %s", option)
+				}
+				f, err := r.Parse(ctx, parts[0], parts[1])
+				fmt.Print(logging.Bold(fmt.Sprintf("[%s/%s]", parts[0], parts[1])))
+				if errors.Is(err, static.ErrUnsupportedStaticParsing) {
+					fmt.Printf(" Unsupported static parsing\n")
+				} else if err != nil {
+					fmt.Printf(" %v\n", err)
+				} else {
+					fmt.Printf("[%s] Parsed\n", f.FeatureType)
+					if printFeature {
+						f.PrintJSON(registry)
+					}
+				}
+			}
+			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "parse all features")
+	cmd.Flags().BoolVarP(&printFeature, "print", "p", false, "print parsed feature(s)")
+	return cmd
 }
 
 func reviewCmd() *cobra.Command {

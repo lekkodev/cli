@@ -286,7 +286,9 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 	case *structpb.Value:
 		return w.genValue(goValType.GetKind())
 	case *structpb.Value_ListValue:
-		listExpr := &build.ListExpr{}
+		listExpr := &build.ListExpr{
+			ForceMultiLine: true,
+		}
 		for _, listElem := range goValType.ListValue.GetValues() {
 			expr, err := w.genValue(listElem)
 			if err != nil {
@@ -296,7 +298,9 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 		}
 		return listExpr, nil
 	case *structpb.Value_StructValue:
-		dictExpr := &build.DictExpr{}
+		dictExpr := &build.DictExpr{
+			ForceMultiLine: true,
+		}
 		for key, value := range goValType.StructValue.Fields {
 			valExpr, err := w.genValue(value)
 			if err != nil {

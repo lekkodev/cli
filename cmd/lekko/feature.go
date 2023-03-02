@@ -149,26 +149,34 @@ func featureAdd() *cobra.Command {
 	return cmd
 }
 
-func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (string, string, error) {
+func featureOptions(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) ([]string, error) {
 	if len(ns) > 0 && len(feature) > 0 {
 		// namespace and feature already populated
-		return ns, feature, nil
+		return []string{fmt.Sprintf("%s/%s", ns, feature)}, nil
 	}
 	nsMDs, err := r.ListNamespaces(ctx)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	var options []string
 	for _, nsMD := range nsMDs {
 		if len(ns) == 0 || ns == nsMD.Name {
 			ffs, err := r.GetFeatureFiles(ctx, nsMD.Name)
 			if err != nil {
-				return "", "", errors.Wrap(err, "get feature files")
+				return nil, errors.Wrap(err, "get feature files")
 			}
 			for _, ff := range ffs {
 				options = append(options, fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))
 			}
 		}
+	}
+	return options, nil
+}
+
+func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (string, string, error) {
+	options, err := featureOptions(ctx, r, ns, feature)
+	if err != nil {
+		return "", "", err
 	}
 	var fPath string
 	if err := survey.AskOne(&survey.Select{

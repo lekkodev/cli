@@ -66,70 +66,128 @@ func (t *traverser) withRulesFn(fn rulesFn) *traverser {
 }
 
 func (t *traverser) traverse() error {
-	kwargs, err := t.getFeatureKWArgs()
+	ast, err := t.getFeatureAST()
 	if err != nil {
 		return err
 	}
-	defaultExpr, ok := kwargs[star.DefaultValueAttrName]
-	if !ok {
-		return fmt.Errorf("could not find %s attribute", star.DefaultValueAttrName)
+	defaultExpr, err := ast.get(star.DefaultValueAttrName)
+	if err != nil {
+		return err
 	}
 	if err := t.defaultFn(defaultExpr); err != nil {
 		return errors.Wrap(err, "default fn")
 	}
-
-	for k, v := range kwargs {
-		switch k {
-		case star.DescriptionAttrName:
-			vExpr := *v
-			descriptionStr, ok := vExpr.(*build.StringExpr)
-			if !ok {
-				return fmt.Errorf("description kwarg: expected string, got %T", vExpr)
-			}
-			if err := t.descriptionFn(descriptionStr); err != nil {
-				return errors.Wrap(err, "description fn")
-			}
-		case star.RulesAttrName:
-			if err := t.parseRules(*v); err != nil {
-				return errors.Wrap(err, "parse rules")
-			}
-		}
+	descriptionExprPtr, err := ast.get(star.DescriptionAttrName)
+	if err != nil {
+		return err
+	}
+	descriptionExpr := *descriptionExprPtr
+	descriptionStr, ok := descriptionExpr.(*build.StringExpr)
+	if !ok {
+		return fmt.Errorf("description kwarg: expected string, got %T", descriptionExpr)
+	}
+	if err := t.descriptionFn(descriptionStr); err != nil {
+		return errors.Wrap(err, "description fn")
+	}
+	// rules
+	if err := ast.parseRules(t.rulesFn); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (t *traverser) parseRules(v build.Expr) error {
-	listV, ok := v.(*build.ListExpr)
-	if !ok {
-		return fmt.Errorf("expecting list, got %T", v)
-	}
-	rulesW := &rulesWrapper{}
-	for i, elemV := range listV.List {
-		r, err := newRule(elemV)
-		if err != nil {
-			return errors.Wrapf(err, "rule %d", i)
-		}
-		rulesW.rules = append(rulesW.rules, *r)
-	}
-	if err := t.rulesFn(rulesW); err != nil {
-		return errors.Wrap(err, "rules fn")
-	}
+// A wrapper type around the feature AST, e.g.
+// `feature(description="foo", default=False)`
+type starFeatureAST struct {
+	*build.CallExpr
+}
 
-	// Now, use the updated rules and put them back in the AST
+func (ast *starFeatureAST) get(key string) (*build.Expr, error) {
+	for _, expr := range ast.List {
+		assignExpr, ok := expr.(*build.AssignExpr)
+		if ok {
+			kwargName, ok := assignExpr.LHS.(*build.Ident)
+			if ok {
+				if kwargName.Name == key {
+					return &assignExpr.RHS, nil
+				}
+			}
+		}
+	}
+	return nil, errors.Errorf("could not find '%s' attribute in feature", key)
+}
+
+func (ast *starFeatureAST) set(key string, value build.Expr) {
+	if existing, err := ast.get(key); err == nil {
+		*existing = value
+		return
+	}
+	assignExpr := &build.AssignExpr{
+		LHS:       &build.Ident{Name: key},
+		Op:        "=",
+		LineBreak: false,
+		RHS:       value,
+	}
+	ast.List = append(ast.List, assignExpr)
+}
+
+func (ast *starFeatureAST) unset(key string) {
+	if existing, err := ast.get(key); err == nil {
+		*existing = nil
+	}
+	newAssignmentList := make([]build.Expr, 0)
+	for _, expr := range ast.List {
+		assignExpr, ok := expr.(*build.AssignExpr)
+		if ok {
+			kwargName, ok := assignExpr.LHS.(*build.Ident)
+			if ok {
+				if kwargName.Name == key {
+					continue
+				}
+				newAssignmentList = append(newAssignmentList, expr)
+			}
+		}
+	}
+	ast.List = newAssignmentList
+}
+
+func (ast *starFeatureAST) parseRules(fn rulesFn) error {
+	rulesW := &rulesWrapper{}
+	rulesExprPtr, err := ast.get(star.RulesAttrName)
+	if err == nil { // extract existing rules
+		v := *rulesExprPtr
+		listV, ok := v.(*build.ListExpr)
+		if !ok {
+			return fmt.Errorf("expecting list, got %T", v)
+		}
+		for i, elemV := range listV.List {
+			r, err := newRule(elemV)
+			if err != nil {
+				return errors.Wrapf(err, "rule %d", i)
+			}
+			rulesW.rules = append(rulesW.rules, *r)
+		}
+	}
+	if err := fn(rulesW); err != nil {
+		return err
+	}
+	if len(rulesW.rules) == 0 {
+		ast.unset(star.RulesAttrName)
+		return nil
+	}
 	var newList []build.Expr
 	for _, rule := range rulesW.rules {
 		newList = append(newList, rule.toExpr())
 	}
-	listV.List = newList
+	ast.set(star.RulesAttrName, &build.ListExpr{
+		List:           newList,
+		ForceMultiLine: true,
+	})
 	return nil
 }
 
-// extracts a map of kwargs that are used to construct the resulting
-// feature value. E.g.
-// result = feature(description="foo", default=False)
-// has two keys, each with a corresponding build expression.
-func (t *traverser) getFeatureKWArgs() (map[string]*build.Expr, error) {
-	ret := make(map[string]*build.Expr)
+// extracts a pointer to the feature AST in starlark.
+func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 	for _, expr := range t.f.Stmt {
 		switch t := expr.(type) {
 		case *build.AssignExpr:
@@ -139,25 +197,13 @@ func (t *traverser) getFeatureKWArgs() (map[string]*build.Expr, error) {
 				if ok && len(rhs.List) > 0 {
 					structName, ok := rhs.X.(*build.Ident)
 					if ok && structName.Name == star.FeatureConstructor.GoString() {
-						// we've reached the list of kwarg assignments
-						for _, expr := range rhs.List {
-							assignExpr, ok := expr.(*build.AssignExpr)
-							if ok {
-								kwargName, ok := assignExpr.LHS.(*build.Ident)
-								if ok {
-									ret[kwargName.Name] = &assignExpr.RHS
-								}
-							}
-						}
+						return &starFeatureAST{rhs}, nil
 					}
 				}
 			}
 		}
 	}
-	if len(ret) == 0 {
-		return nil, fmt.Errorf("no feature kwargs found")
-	}
-	return ret, nil
+	return nil, fmt.Errorf("no feature found in star file")
 }
 
 func (t *traverser) format() []byte {
