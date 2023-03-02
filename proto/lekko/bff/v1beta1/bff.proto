@@ -32,6 +32,7 @@ service BFFService {
   // Retrieves an oauth access token for the user, and stores in in the database
   rpc OAuthUser(OAuthUserRequest) returns (OAuthUserResponse) {}
   rpc GetUserOAuth(GetUserOAuthRequest) returns (GetUserOAuthResponse) {}
+  rpc DeleteUserOAuth(DeleteUserOAuthRequest) returns (DeleteUserOAuthResponse) {}
   rpc AuthorizeDevice(AuthorizeDeviceRequest) returns (AuthorizeDeviceResponse) {}
   // Generate an API used by SDKs to authenticate with Lekko.
   rpc GenerateAPIKey(GenerateAPIKeyRequest) returns (GenerateAPIKeyResponse) {}
@@ -386,6 +387,10 @@ message GetUserOAuthRequest {}
 message GetUserOAuthResponse {
   bool authenticated = 1;
 }
+
+message DeleteUserOAuthRequest {}
+
+message DeleteUserOAuthResponse {}
 
 message AuthorizeDeviceRequest {
   string user_code = 1;
