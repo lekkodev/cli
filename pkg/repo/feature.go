@@ -52,7 +52,7 @@ type ConfigurationStore interface {
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
 	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error)
-	Parse(ctx context.Context, ns, featureName string) error
+	Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
 	GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error)
@@ -522,40 +522,30 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[
 	return ret, evalF.Type(), err
 }
 
-func (r *repository) Parse(ctx context.Context, ns, featureName string) error {
+func (r *repository) Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error) {
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
-		return errors.Wrap(err, "get feature contents")
+		return nil, errors.Wrap(err, "get feature contents")
 	}
 	filename := fc.File.RootPath(fc.File.StarlarkFileName)
 	w := static.NewWalker(filename, fc.Star)
 	f, err := w.Build()
 	if err != nil {
-		return errors.Wrap(err, "build")
+		return nil, errors.Wrap(err, "build")
 	}
 	f.Key = fc.File.Name
 
-	rootMD, _, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return errors.Wrap(err, "parse metadata")
-	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return errors.Wrap(err, "build dynamic type registry")
-	}
-	// Print json to stdout
-	f.PrintJSON(registry)
 	// Rewrite the bytes to the starfile path, based on the parse AST.
 	// This is just an illustration, but in the future we could modify
 	// the feature and use the following code to write it out.
 	bytes, err := w.Mutate(f)
 	if err != nil {
-		return errors.Wrap(err, "mutate")
+		return nil, errors.Wrap(err, "mutate")
 	}
 	if err := r.WriteFile(filename, bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write file")
+		return nil, errors.Wrap(err, "failed to write file")
 	}
-	return nil
+	return f, nil
 }
 
 func (r *repository) GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error) {
