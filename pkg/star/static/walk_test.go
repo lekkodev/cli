@@ -26,6 +26,16 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+var (
+	parsableFeatureTypes = []feature.FeatureType{
+		feature.FeatureTypeBool,
+		feature.FeatureTypeString,
+		feature.FeatureTypeInt,
+		feature.FeatureTypeFloat,
+		feature.FeatureTypeJSON,
+	}
+)
+
 type testVal struct {
 	goVal    interface{}
 	starRepr string
@@ -93,15 +103,25 @@ func TestWalkerBuildJSON(t *testing.T) {
 }
 
 func TestWalkerMutateNoop(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, fType := range parsableFeatureTypes {
+		t.Run(string(fType), func(t *testing.T) {
+			_, _, starBytes := testStar(t, fType)
+			b := testWalker(starBytes)
+			f, err := b.Build()
+			require.NoError(t, err)
+			require.NotNil(t, f)
 
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.EqualValues(t, string(starBytes), string(bytes))
+			bytes, err := b.Mutate(f)
+			require.NoError(t, err)
+			if fType != feature.FeatureTypeJSON {
+				// JSON struct feature types are represented as go maps
+				// after being parsed. Go maps have nondeterministic ordering
+				// of keys. As a result, when they are transformed back to
+				// starlark bytes, the order of the json object may be different.
+				assert.EqualValues(t, string(starBytes), string(bytes))
+			}
+		})
+	}
 }
 
 func TestWalkerMutateDefault(t *testing.T) {
@@ -160,6 +180,37 @@ func TestWalkerMutateAddRule(t *testing.T) {
 	assert.Contains(t, string(bytes), "(\"age == 12\", False)")
 }
 
+func TestWalkerMutateAddFirstRule(t *testing.T) {
+	val, _ := typedVals(t, feature.FeatureTypeBool)
+	starBytes := []byte(fmt.Sprintf(`result = feature(
+    description = "this is a simple feature",
+    default = %s,
+	)
+	`, val.starRepr))
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	f.Rules = append(f.Rules, &feature.Rule{
+		Condition: "age == 12",
+		ConditionAST: &rulesv1beta2.Rule{
+			Rule: &rulesv1beta2.Rule_Atom{
+				Atom: &rulesv1beta2.Atom{
+					ContextKey:         "age",
+					ComparisonValue:    structpb.NewNumberValue(12),
+					ComparisonOperator: rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+				},
+			},
+		},
+		Value: false,
+	})
+
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.Contains(t, string(bytes), "(\"age == 12\", False)")
+}
+
 func TestWalkerMutateRemoveRule(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(starBytes)
@@ -174,18 +225,44 @@ func TestWalkerMutateRemoveRule(t *testing.T) {
 	assert.NotContains(t, string(bytes), "(\"age == 10\", False)")
 }
 
-func TestWalkerMutateDescription(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+func TestWalkerMutateRemoveOnlyRule(t *testing.T) {
+	val, ruleVal := typedVals(t, feature.FeatureTypeBool)
+	starBytes := []byte(fmt.Sprintf(`result = feature(
+    description = "this is a simple feature",
+    default = %s,
+	rules = [
+		("age == 10", %s),
+	],
+)
+	`, val.starRepr, ruleVal.starRepr))
 	b := testWalker(starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	f.Description = "a NEW way to describe this feature."
+	f.Rules = nil
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
-	assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+	assert.NotContains(t, string(bytes), "age == 10")
+}
+
+func TestWalkerMutateDescription(t *testing.T) {
+	for _, fType := range parsableFeatureTypes {
+		t.Run(string(fType), func(t *testing.T) {
+			_, _, starBytes := testStar(t, fType)
+			b := testWalker(starBytes)
+			f, err := b.Build()
+			require.NoError(t, err)
+			require.NotNil(t, f)
+
+			f.Description = "a NEW way to describe this feature."
+
+			bytes, err := b.Mutate(f)
+			require.NoError(t, err)
+			assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+		})
+	}
 }
 
 func TestWalkerMutateTypeMismatch(t *testing.T) {
@@ -259,8 +336,9 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	require.True(t, ok)
 	require.NotEmpty(t, defaultVal.GetListValue().Values)
 
-	defaultVal.GetListValue().Values = append(defaultVal.GetListValue().Values, structpb.NewBoolValue(false))
+	defaultVal.GetListValue().Values = append(defaultVal.GetListValue().Values, structpb.NewStringValue("foobar"))
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
+	assert.Contains(t, string(bytes), "foobar")
 }

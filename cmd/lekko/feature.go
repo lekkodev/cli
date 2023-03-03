@@ -149,41 +149,6 @@ func featureAdd() *cobra.Command {
 	return cmd
 }
 
-func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (string, string, error) {
-	if len(ns) > 0 && len(feature) > 0 {
-		// namespace and feature already populated
-		return ns, feature, nil
-	}
-	nsMDs, err := r.ListNamespaces(ctx)
-	if err != nil {
-		return "", "", err
-	}
-	var options []string
-	for _, nsMD := range nsMDs {
-		if len(ns) == 0 || ns == nsMD.Name {
-			ffs, err := r.GetFeatureFiles(ctx, nsMD.Name)
-			if err != nil {
-				return "", "", errors.Wrap(err, "get feature files")
-			}
-			for _, ff := range ffs {
-				options = append(options, fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))
-			}
-		}
-	}
-	var fPath string
-	if err := survey.AskOne(&survey.Select{
-		Message: "Feature:",
-		Options: options,
-	}, &fPath); err != nil {
-		return "", "", errors.Wrap(err, "prompt")
-	}
-	parts := strings.Split(fPath, "/")
-	if len(parts) != 2 {
-		return "", "", errors.Errorf("invalid input: %s", fPath)
-	}
-	return parts[0], parts[1], nil
-}
-
 func featureRemove() *cobra.Command {
 	var ns, featureName string
 	cmd := &cobra.Command{
@@ -198,10 +163,11 @@ func featureRemove() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			ns, featureName, err := featureSelect(cmd.Context(), r, ns, featureName)
+			nsf, err := featureSelect(cmd.Context(), r, ns, featureName)
 			if err != nil {
 				return err
 			}
+			ns, featureName = nsf.namespace(), nsf.feature()
 			// Confirm
 			featurePair := fmt.Sprintf("%s/%s", ns, featureName)
 			fmt.Printf("Deleting feature %s...\n", featurePair)
@@ -235,10 +201,11 @@ func featureEval() *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
-			ns, featureName, err := featureSelect(ctx, r, ns, featureName)
+			nsf, err := featureSelect(ctx, r, ns, featureName)
 			if err != nil {
 				return err
 			}
+			ns, featureName = nsf.namespace(), nsf.feature()
 			if len(jsonContext) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "Context:",
@@ -444,4 +411,85 @@ func confirmInput(text string) error {
 		return errors.New("incorrect input")
 	}
 	return nil
+}
+
+type namespaceFeature struct {
+	ns, featureName string
+}
+
+func newNSF(ns, featureName string) *namespaceFeature {
+	return &namespaceFeature{
+		ns:          ns,
+		featureName: featureName,
+	}
+}
+
+func newNSFFromPair(nsfPair string) (*namespaceFeature, error) {
+	parts := strings.Split(nsfPair, "/")
+	if len(parts) != 2 {
+		return nil, errors.Errorf("invalid namespace/feature: %s", nsfPair)
+	}
+	return newNSF(parts[0], parts[1]), nil
+}
+
+func (nsf *namespaceFeature) namespace() string {
+	return nsf.ns
+}
+
+func (nsf *namespaceFeature) feature() string {
+	return nsf.featureName
+}
+
+func (nsf *namespaceFeature) String() string {
+	return fmt.Sprintf("%s/%s", nsf.namespace(), nsf.feature())
+}
+
+type namespaceFeatures []*namespaceFeature
+
+func (nsfs namespaceFeatures) toOptions() []string {
+	var options []string
+	for _, nsf := range nsfs {
+		options = append(options, nsf.String())
+	}
+	return options
+}
+
+func getNamespaceFeatures(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (namespaceFeatures, error) {
+	if len(ns) > 0 && len(feature) > 0 {
+		// namespace and feature already populated
+		return []*namespaceFeature{newNSF(ns, feature)}, nil
+	}
+	nsMDs, err := r.ListNamespaces(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var nsfs namespaceFeatures
+	for _, nsMD := range nsMDs {
+		if len(ns) == 0 || ns == nsMD.Name {
+			ffs, err := r.GetFeatureFiles(ctx, nsMD.Name)
+			if err != nil {
+				return nil, errors.Wrap(err, "get feature files")
+			}
+			for _, ff := range ffs {
+				nsfs = append(nsfs, newNSF(ff.NamespaceName, ff.Name))
+			}
+		}
+	}
+	return nsfs, nil
+}
+
+func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feature string) (*namespaceFeature, error) {
+	nsfs, err := getNamespaceFeatures(ctx, r, ns, feature)
+	if err != nil {
+		return nil, err
+	}
+	options := nsfs.toOptions()
+	var fPath string
+	if err := survey.AskOne(&survey.Select{
+		Message: "Feature:",
+		Options: options,
+	}, &fPath); err != nil {
+		return nil, errors.Wrap(err, "prompt")
+	}
+	return newNSFFromPair(fPath)
 }
