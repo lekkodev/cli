@@ -132,9 +132,6 @@ func (ast *starFeatureAST) set(key string, value build.Expr) {
 }
 
 func (ast *starFeatureAST) unset(key string) {
-	if existing, err := ast.get(key); err == nil {
-		*existing = nil
-	}
 	newAssignmentList := make([]build.Expr, 0)
 	for _, expr := range ast.List {
 		assignExpr, ok := expr.(*build.AssignExpr)
