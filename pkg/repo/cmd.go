@@ -79,13 +79,13 @@ func (r *RepoCmd) Create(ctx context.Context, owner, repo string) (string, error
 	return resp.Msg.GetUrl(), nil
 }
 
-func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnGithub bool) error {
+func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote bool) error {
 	_, err := r.lekkoBFFClient.DeleteRepository(ctx, connect.NewRequest(&bffv1beta1.DeleteRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,
 		},
-		DeleteOnGithub: deleteOnGithub,
+		DeleteOnRemote: deleteOnRemote,
 	}))
 	if err != nil {
 		return errors.Wrap(err, "delete repository")

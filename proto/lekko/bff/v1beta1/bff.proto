@@ -237,9 +237,9 @@ message CreateRepositoryResponse {
 
 message DeleteRepositoryRequest {
   RepositoryKey repo_key = 1;
-  // If provided, this rpc will also delete the repository on github.
+  // If provided, this rpc will also delete the repository upstream, e.g. on github.
   // This flag should probably depend on user preference.
-  bool delete_on_github = 2;
+  bool delete_on_remote = 2;
 }
 
 message DeleteRepositoryResponse {}

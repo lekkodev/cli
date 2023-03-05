@@ -196,7 +196,7 @@ func repoDeleteCmd() *cobra.Command {
 			var deleteOnGithub bool
 			if err := survey.AskOne(&survey.Confirm{
 				Message: "Also delete on GitHub?",
-				Help:    "y: repo is deleted on Github. N: repo remains on Github but is unlinked from Lekko.",
+				Help:    "y/Y: repo is deleted on Github. n/N: repo remains on Github but is unlinked from Lekko.",
 			}, &deleteOnGithub); err != nil {
 				return errors.Wrap(err, "prompt")
 			}
