@@ -480,6 +480,9 @@ message Branch {
   int64 pr_number = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
+  // The base sha is the sha that the branch
+  // was pointing to when it was created.
+  string base_sha = 7;
 }
 
 message BranchKey {
