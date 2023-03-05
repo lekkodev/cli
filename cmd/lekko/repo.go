@@ -193,11 +193,22 @@ func repoDeleteCmd() *cobra.Command {
 				return errors.Errorf("malformed selection: %s", selected)
 			}
 			owner, repoName := paths[0], paths[1]
-			fmt.Printf("Deleting repository %s...\n", selected)
+			var deleteOnGithub bool
+			if err := survey.AskOne(&survey.Confirm{
+				Message: "Also delete on GitHub?",
+				Help:    "y/Y: repo is deleted on Github. n/N: repo remains on Github but is unlinked from Lekko.",
+			}, &deleteOnGithub); err != nil {
+				return errors.Wrap(err, "prompt")
+			}
+			text := "Unlinking repository '%s' from Lekko...\n"
+			if deleteOnGithub {
+				text = "Deleting repository '%s' from Github and Lekko...\n"
+			}
+			fmt.Printf(text, selected)
 			if err := confirmInput(selected); err != nil {
 				return err
 			}
-			if err := repo.Delete(ctx, owner, repoName); err != nil {
+			if err := repo.Delete(ctx, owner, repoName, deleteOnGithub); err != nil {
 				return errors.Wrap(err, "delete repo")
 			}
 			fmt.Printf("Successfully deleted repository %s.\n", selected)
