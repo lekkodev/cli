@@ -200,6 +200,58 @@ func (ChecksState) EnumDescriptor() ([]byte, []int) {
 	return file_lekko_bff_v1beta1_bff_proto_rawDescGZIP(), []int{2}
 }
 
+type PullRequest_Mergeable int32
+
+const (
+	PullRequest_MERGEABLE_UNSPECIFIED PullRequest_Mergeable = 0
+	PullRequest_MERGEABLE_PENDING     PullRequest_Mergeable = 1
+	PullRequest_MERGEABLE_TRUE        PullRequest_Mergeable = 2
+	PullRequest_MERGEABLE_FALSE       PullRequest_Mergeable = 3
+)
+
+// Enum value maps for PullRequest_Mergeable.
+var (
+	PullRequest_Mergeable_name = map[int32]string{
+		0: "MERGEABLE_UNSPECIFIED",
+		1: "MERGEABLE_PENDING",
+		2: "MERGEABLE_TRUE",
+		3: "MERGEABLE_FALSE",
+	}
+	PullRequest_Mergeable_value = map[string]int32{
+		"MERGEABLE_UNSPECIFIED": 0,
+		"MERGEABLE_PENDING":     1,
+		"MERGEABLE_TRUE":        2,
+		"MERGEABLE_FALSE":       3,
+	}
+)
+
+func (x PullRequest_Mergeable) Enum() *PullRequest_Mergeable {
+	p := new(PullRequest_Mergeable)
+	*p = x
+	return p
+}
+
+func (x PullRequest_Mergeable) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PullRequest_Mergeable) Descriptor() protoreflect.EnumDescriptor {
+	return file_lekko_bff_v1beta1_bff_proto_enumTypes[3].Descriptor()
+}
+
+func (PullRequest_Mergeable) Type() protoreflect.EnumType {
+	return &file_lekko_bff_v1beta1_bff_proto_enumTypes[3]
+}
+
+func (x PullRequest_Mergeable) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PullRequest_Mergeable.Descriptor instead.
+func (PullRequest_Mergeable) EnumDescriptor() ([]byte, []int) {
+	return file_lekko_bff_v1beta1_bff_proto_rawDescGZIP(), []int{63, 0}
+}
+
 type GetUserLoggedInInfoRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -3322,10 +3374,11 @@ type PullRequest struct {
 	CheckRuns []*CheckRun            `protobuf:"bytes,9,rep,name=check_runs,json=checkRuns,proto3" json:"check_runs,omitempty"`
 	// the git ref (e.g. my-feature) and git sha of the
 	// head and base of this PR.
-	HeadRef string `protobuf:"bytes,10,opt,name=head_ref,json=headRef,proto3" json:"head_ref,omitempty"`
-	HeadSha string `protobuf:"bytes,11,opt,name=head_sha,json=headSha,proto3" json:"head_sha,omitempty"`
-	BaseRef string `protobuf:"bytes,12,opt,name=base_ref,json=baseRef,proto3" json:"base_ref,omitempty"`
-	BaseSha string `protobuf:"bytes,13,opt,name=base_sha,json=baseSha,proto3" json:"base_sha,omitempty"`
+	HeadRef   string                `protobuf:"bytes,10,opt,name=head_ref,json=headRef,proto3" json:"head_ref,omitempty"`
+	HeadSha   string                `protobuf:"bytes,11,opt,name=head_sha,json=headSha,proto3" json:"head_sha,omitempty"`
+	BaseRef   string                `protobuf:"bytes,12,opt,name=base_ref,json=baseRef,proto3" json:"base_ref,omitempty"`
+	BaseSha   string                `protobuf:"bytes,13,opt,name=base_sha,json=baseSha,proto3" json:"base_sha,omitempty"`
+	Mergeable PullRequest_Mergeable `protobuf:"varint,14,opt,name=mergeable,proto3,enum=lekko.bff.v1beta1.PullRequest_Mergeable" json:"mergeable,omitempty"`
 }
 
 func (x *PullRequest) Reset() {
@@ -3452,6 +3505,13 @@ func (x *PullRequest) GetBaseSha() string {
 		return x.BaseSha
 	}
 	return ""
+}
+
+func (x *PullRequest) GetMergeable() PullRequest_Mergeable {
+	if x != nil {
+		return x.Mergeable
+	}
+	return PullRequest_MERGEABLE_UNSPECIFIED
 }
 
 type GetPRInfoRequest struct {
@@ -6014,7 +6074,7 @@ var file_lekko_bff_v1beta1_bff_proto_rawDesc = []byte{
 	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b,
 	0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
 	0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x63, 0x6f,
-	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x41, 0x74, 0x22, 0x93, 0x05, 0x0a, 0x0b, 0x50, 0x75,
+	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x64, 0x41, 0x74, 0x22, 0xc3, 0x06, 0x0a, 0x0b, 0x50, 0x75,
 	0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x69, 0x74,
 	0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x74, 0x69, 0x74, 0x6c, 0x65, 0x12,
 	0x10, 0x0a, 0x03, 0x75, 0x72, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72,
@@ -6045,17 +6105,28 @@ var file_lekko_bff_v1beta1_bff_proto_rawDesc = []byte{
 	0x65, 0x61, 0x64, 0x53, 0x68, 0x61, 0x12, 0x19, 0x0a, 0x08, 0x62, 0x61, 0x73, 0x65, 0x5f, 0x72,
 	0x65, 0x66, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x62, 0x61, 0x73, 0x65, 0x52, 0x65,
 	0x66, 0x12, 0x19, 0x0a, 0x08, 0x62, 0x61, 0x73, 0x65, 0x5f, 0x73, 0x68, 0x61, 0x18, 0x0d, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x07, 0x62, 0x61, 0x73, 0x65, 0x53, 0x68, 0x61, 0x1a, 0xa0, 0x01, 0x0a,
-	0x06, 0x52, 0x65, 0x76, 0x69, 0x65, 0x77, 0x12, 0x12, 0x0a, 0x04, 0x75, 0x73, 0x65, 0x72, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x75, 0x73, 0x65, 0x72, 0x12, 0x3d, 0x0a, 0x0c, 0x73,
-	0x75, 0x62, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x73,
-	0x75, 0x62, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x73, 0x74,
-	0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65,
-	0x12, 0x2d, 0x0a, 0x12, 0x61, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x5f, 0x61, 0x73, 0x73, 0x6f, 0x63,
-	0x69, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x61, 0x75,
-	0x74, 0x68, 0x6f, 0x72, 0x41, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x62, 0x61, 0x73, 0x65, 0x53, 0x68, 0x61, 0x12, 0x46, 0x0a, 0x09,
+	0x6d, 0x65, 0x72, 0x67, 0x65, 0x61, 0x62, 0x6c, 0x65, 0x18, 0x0e, 0x20, 0x01, 0x28, 0x0e, 0x32,
+	0x28, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x66, 0x66, 0x2e, 0x76, 0x31, 0x62, 0x65,
+	0x74, 0x61, 0x31, 0x2e, 0x50, 0x75, 0x6c, 0x6c, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e,
+	0x4d, 0x65, 0x72, 0x67, 0x65, 0x61, 0x62, 0x6c, 0x65, 0x52, 0x09, 0x6d, 0x65, 0x72, 0x67, 0x65,
+	0x61, 0x62, 0x6c, 0x65, 0x1a, 0xa0, 0x01, 0x0a, 0x06, 0x52, 0x65, 0x76, 0x69, 0x65, 0x77, 0x12,
+	0x12, 0x0a, 0x04, 0x75, 0x73, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x75,
+	0x73, 0x65, 0x72, 0x12, 0x3d, 0x0a, 0x0c, 0x73, 0x75, 0x62, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64,
+	0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
+	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65,
+	0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x0b, 0x73, 0x75, 0x62, 0x6d, 0x69, 0x74, 0x74, 0x65, 0x64,
+	0x41, 0x74, 0x12, 0x14, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x05, 0x73, 0x74, 0x61, 0x74, 0x65, 0x12, 0x2d, 0x0a, 0x12, 0x61, 0x75, 0x74, 0x68,
+	0x6f, 0x72, 0x5f, 0x61, 0x73, 0x73, 0x6f, 0x63, 0x69, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x11, 0x61, 0x75, 0x74, 0x68, 0x6f, 0x72, 0x41, 0x73, 0x73, 0x6f,
+	0x63, 0x69, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x66, 0x0a, 0x09, 0x4d, 0x65, 0x72, 0x67, 0x65,
+	0x61, 0x62, 0x6c, 0x65, 0x12, 0x19, 0x0a, 0x15, 0x4d, 0x45, 0x52, 0x47, 0x45, 0x41, 0x42, 0x4c,
+	0x45, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12,
+	0x15, 0x0a, 0x11, 0x4d, 0x45, 0x52, 0x47, 0x45, 0x41, 0x42, 0x4c, 0x45, 0x5f, 0x50, 0x45, 0x4e,
+	0x44, 0x49, 0x4e, 0x47, 0x10, 0x01, 0x12, 0x12, 0x0a, 0x0e, 0x4d, 0x45, 0x52, 0x47, 0x45, 0x41,
+	0x42, 0x4c, 0x45, 0x5f, 0x54, 0x52, 0x55, 0x45, 0x10, 0x02, 0x12, 0x13, 0x0a, 0x0f, 0x4d, 0x45,
+	0x52, 0x47, 0x45, 0x41, 0x42, 0x4c, 0x45, 0x5f, 0x46, 0x41, 0x4c, 0x53, 0x45, 0x10, 0x03, 0x22,
 	0x4f, 0x0a, 0x10, 0x47, 0x65, 0x74, 0x50, 0x52, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x65, 0x71, 0x75,
 	0x65, 0x73, 0x74, 0x12, 0x3b, 0x0a, 0x08, 0x72, 0x65, 0x70, 0x6f, 0x5f, 0x6b, 0x65, 0x79, 0x18,
 	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x20, 0x2e, 0x6c, 0x65, 0x6b, 0x6b, 0x6f, 0x2e, 0x62, 0x66,
@@ -6634,287 +6705,289 @@ func file_lekko_bff_v1beta1_bff_proto_rawDescGZIP() []byte {
 	return file_lekko_bff_v1beta1_bff_proto_rawDescData
 }
 
-var file_lekko_bff_v1beta1_bff_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_lekko_bff_v1beta1_bff_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_lekko_bff_v1beta1_bff_proto_msgTypes = make([]protoimpl.MessageInfo, 103)
 var file_lekko_bff_v1beta1_bff_proto_goTypes = []interface{}{
 	(MembershipRole)(0),                                      // 0: lekko.bff.v1beta1.MembershipRole
 	(FeatureType)(0),                                         // 1: lekko.bff.v1beta1.FeatureType
 	(ChecksState)(0),                                         // 2: lekko.bff.v1beta1.ChecksState
-	(*GetUserLoggedInInfoRequest)(nil),                       // 3: lekko.bff.v1beta1.GetUserLoggedInInfoRequest
-	(*GetUserLoggedInInfoResponse)(nil),                      // 4: lekko.bff.v1beta1.GetUserLoggedInInfoResponse
-	(*ChangePasswordRequest)(nil),                            // 5: lekko.bff.v1beta1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil),                           // 6: lekko.bff.v1beta1.ChangePasswordResponse
-	(*GenerateAPIKeyRequest)(nil),                            // 7: lekko.bff.v1beta1.GenerateAPIKeyRequest
-	(*GenerateAPIKeyResponse)(nil),                           // 8: lekko.bff.v1beta1.GenerateAPIKeyResponse
-	(*APIKey)(nil),                                           // 9: lekko.bff.v1beta1.APIKey
-	(*ListAPIKeysRequest)(nil),                               // 10: lekko.bff.v1beta1.ListAPIKeysRequest
-	(*ListAPIKeysResponse)(nil),                              // 11: lekko.bff.v1beta1.ListAPIKeysResponse
-	(*DeleteAPIKeyRequest)(nil),                              // 12: lekko.bff.v1beta1.DeleteAPIKeyRequest
-	(*DeleteAPIKeyResponse)(nil),                             // 13: lekko.bff.v1beta1.DeleteAPIKeyResponse
-	(*CheckAPIKeyRequest)(nil),                               // 14: lekko.bff.v1beta1.CheckAPIKeyRequest
-	(*CheckAPIKeyResponse)(nil),                              // 15: lekko.bff.v1beta1.CheckAPIKeyResponse
-	(*CreateTeamRequest)(nil),                                // 16: lekko.bff.v1beta1.CreateTeamRequest
-	(*CreateTeamResponse)(nil),                               // 17: lekko.bff.v1beta1.CreateTeamResponse
-	(*DeleteTeamRequest)(nil),                                // 18: lekko.bff.v1beta1.DeleteTeamRequest
-	(*DeleteTeamResponse)(nil),                               // 19: lekko.bff.v1beta1.DeleteTeamResponse
-	(*UseTeamRequest)(nil),                                   // 20: lekko.bff.v1beta1.UseTeamRequest
-	(*UseTeamResponse)(nil),                                  // 21: lekko.bff.v1beta1.UseTeamResponse
-	(*Membership)(nil),                                       // 22: lekko.bff.v1beta1.Membership
-	(*ListTeamMembershipsRequest)(nil),                       // 23: lekko.bff.v1beta1.ListTeamMembershipsRequest
-	(*ListTeamMembershipsResponse)(nil),                      // 24: lekko.bff.v1beta1.ListTeamMembershipsResponse
-	(*ListUserMembershipsRequest)(nil),                       // 25: lekko.bff.v1beta1.ListUserMembershipsRequest
-	(*ListUserMembershipsResponse)(nil),                      // 26: lekko.bff.v1beta1.ListUserMembershipsResponse
-	(*UpsertMembershipRequest)(nil),                          // 27: lekko.bff.v1beta1.UpsertMembershipRequest
-	(*UpsertMembershipResponse)(nil),                         // 28: lekko.bff.v1beta1.UpsertMembershipResponse
-	(*RemoveMembershipRequest)(nil),                          // 29: lekko.bff.v1beta1.RemoveMembershipRequest
-	(*RemoveMembershipResponse)(nil),                         // 30: lekko.bff.v1beta1.RemoveMembershipResponse
-	(*RepositoryKey)(nil),                                    // 31: lekko.bff.v1beta1.RepositoryKey
-	(*CreateRepositoryRequest)(nil),                          // 32: lekko.bff.v1beta1.CreateRepositoryRequest
-	(*CreateRepositoryResponse)(nil),                         // 33: lekko.bff.v1beta1.CreateRepositoryResponse
-	(*DeleteRepositoryRequest)(nil),                          // 34: lekko.bff.v1beta1.DeleteRepositoryRequest
-	(*DeleteRepositoryResponse)(nil),                         // 35: lekko.bff.v1beta1.DeleteRepositoryResponse
-	(*ListRepositoriesRequest)(nil),                          // 36: lekko.bff.v1beta1.ListRepositoriesRequest
-	(*Repository)(nil),                                       // 37: lekko.bff.v1beta1.Repository
-	(*ListRepositoriesResponse)(nil),                         // 38: lekko.bff.v1beta1.ListRepositoriesResponse
-	(*ListNamespacesRequest)(nil),                            // 39: lekko.bff.v1beta1.ListNamespacesRequest
-	(*ListNamespacesResponse)(nil),                           // 40: lekko.bff.v1beta1.ListNamespacesResponse
-	(*Namespace)(nil),                                        // 41: lekko.bff.v1beta1.Namespace
-	(*ListFeaturesRequest)(nil),                              // 42: lekko.bff.v1beta1.ListFeaturesRequest
-	(*ListFeaturesResponse)(nil),                             // 43: lekko.bff.v1beta1.ListFeaturesResponse
-	(*ListRepositoryContentsRequest)(nil),                    // 44: lekko.bff.v1beta1.ListRepositoryContentsRequest
-	(*ListRepositoryContentsResponse)(nil),                   // 45: lekko.bff.v1beta1.ListRepositoryContentsResponse
-	(*GetFeatureRequest)(nil),                                // 46: lekko.bff.v1beta1.GetFeatureRequest
-	(*GetFeatureResponse)(nil),                               // 47: lekko.bff.v1beta1.GetFeatureResponse
-	(*Feature)(nil),                                          // 48: lekko.bff.v1beta1.Feature
-	(*AddNamespaceRequest)(nil),                              // 49: lekko.bff.v1beta1.AddNamespaceRequest
-	(*AddNamespaceResponse)(nil),                             // 50: lekko.bff.v1beta1.AddNamespaceResponse
-	(*RemoveNamespaceRequest)(nil),                           // 51: lekko.bff.v1beta1.RemoveNamespaceRequest
-	(*RemoveNamespaceResponse)(nil),                          // 52: lekko.bff.v1beta1.RemoveNamespaceResponse
-	(*AddFeatureRequest)(nil),                                // 53: lekko.bff.v1beta1.AddFeatureRequest
-	(*AddFeatureResponse)(nil),                               // 54: lekko.bff.v1beta1.AddFeatureResponse
-	(*RemoveFeatureRequest)(nil),                             // 55: lekko.bff.v1beta1.RemoveFeatureRequest
-	(*RemoveFeatureResponse)(nil),                            // 56: lekko.bff.v1beta1.RemoveFeatureResponse
-	(*OAuthUserRequest)(nil),                                 // 57: lekko.bff.v1beta1.OAuthUserRequest
-	(*OAuthUserResponse)(nil),                                // 58: lekko.bff.v1beta1.OAuthUserResponse
-	(*GetUserOAuthRequest)(nil),                              // 59: lekko.bff.v1beta1.GetUserOAuthRequest
-	(*GetUserOAuthResponse)(nil),                             // 60: lekko.bff.v1beta1.GetUserOAuthResponse
-	(*DeleteUserOAuthRequest)(nil),                           // 61: lekko.bff.v1beta1.DeleteUserOAuthRequest
-	(*DeleteUserOAuthResponse)(nil),                          // 62: lekko.bff.v1beta1.DeleteUserOAuthResponse
-	(*AuthorizeDeviceRequest)(nil),                           // 63: lekko.bff.v1beta1.AuthorizeDeviceRequest
-	(*AuthorizeDeviceResponse)(nil),                          // 64: lekko.bff.v1beta1.AuthorizeDeviceResponse
-	(*CheckRun)(nil),                                         // 65: lekko.bff.v1beta1.CheckRun
-	(*PullRequest)(nil),                                      // 66: lekko.bff.v1beta1.PullRequest
-	(*GetPRInfoRequest)(nil),                                 // 67: lekko.bff.v1beta1.GetPRInfoRequest
-	(*GetPRInfoResponse)(nil),                                // 68: lekko.bff.v1beta1.GetPRInfoResponse
-	(*GetPRRequest)(nil),                                     // 69: lekko.bff.v1beta1.GetPRRequest
-	(*GetPRResponse)(nil),                                    // 70: lekko.bff.v1beta1.GetPRResponse
-	(*MergePRRequest)(nil),                                   // 71: lekko.bff.v1beta1.MergePRRequest
-	(*MergePRResponse)(nil),                                  // 72: lekko.bff.v1beta1.MergePRResponse
-	(*Branch)(nil),                                           // 73: lekko.bff.v1beta1.Branch
-	(*BranchKey)(nil),                                        // 74: lekko.bff.v1beta1.BranchKey
-	(*CreateBranchRequest)(nil),                              // 75: lekko.bff.v1beta1.CreateBranchRequest
-	(*CreateBranchResponse)(nil),                             // 76: lekko.bff.v1beta1.CreateBranchResponse
-	(*ListBranchesRequest)(nil),                              // 77: lekko.bff.v1beta1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),                             // 78: lekko.bff.v1beta1.ListBranchesResponse
-	(*DeleteBranchRequest)(nil),                              // 79: lekko.bff.v1beta1.DeleteBranchRequest
-	(*DeleteBranchResponse)(nil),                             // 80: lekko.bff.v1beta1.DeleteBranchResponse
-	(*SaveRequest)(nil),                                      // 81: lekko.bff.v1beta1.SaveRequest
-	(*SaveResponse)(nil),                                     // 82: lekko.bff.v1beta1.SaveResponse
-	(*ReviewRequest)(nil),                                    // 83: lekko.bff.v1beta1.ReviewRequest
-	(*ReviewResponse)(nil),                                   // 84: lekko.bff.v1beta1.ReviewResponse
-	(*MergeRequest)(nil),                                     // 85: lekko.bff.v1beta1.MergeRequest
-	(*MergeResponse)(nil),                                    // 86: lekko.bff.v1beta1.MergeResponse
-	(*EvalRequest)(nil),                                      // 87: lekko.bff.v1beta1.EvalRequest
-	(*EvalResponse)(nil),                                     // 88: lekko.bff.v1beta1.EvalResponse
-	(*GetFlagEvaluationMetricsRequest)(nil),                  // 89: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest
-	(*GetFlagEvaluationMetricsResponse)(nil),                 // 90: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse
-	(*RestoreRequest)(nil),                                   // 91: lekko.bff.v1beta1.RestoreRequest
-	(*RestoreResponse)(nil),                                  // 92: lekko.bff.v1beta1.RestoreResponse
-	(*GetRepositoryLogsRequest)(nil),                         // 93: lekko.bff.v1beta1.GetRepositoryLogsRequest
-	(*RepositoryLog)(nil),                                    // 94: lekko.bff.v1beta1.RepositoryLog
-	(*GetRepositoryLogsResponse)(nil),                        // 95: lekko.bff.v1beta1.GetRepositoryLogsResponse
-	(*GetRolloutRequest)(nil),                                // 96: lekko.bff.v1beta1.GetRolloutRequest
-	(*Rollout)(nil),                                          // 97: lekko.bff.v1beta1.Rollout
-	(*GetRolloutResponse)(nil),                               // 98: lekko.bff.v1beta1.GetRolloutResponse
-	(*ListFeaturesResponse_FeatureListItem)(nil),             // 99: lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem
-	(*ListRepositoryContentsResponse_FeatureListItem)(nil),   // 100: lekko.bff.v1beta1.ListRepositoryContentsResponse.FeatureListItem
-	(*ListRepositoryContentsResponse_NamespaceListItem)(nil), // 101: lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem
-	(*PullRequest_Review)(nil),                               // 102: lekko.bff.v1beta1.PullRequest.Review
-	nil,                                                      // 103: lekko.bff.v1beta1.EvalRequest.ContextEntry
-	(*GetFlagEvaluationMetricsResponse_ContextKeyCount)(nil), // 104: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.ContextKeyCount
-	(*GetFlagEvaluationMetricsResponse_PathCount)(nil),       // 105: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.PathCount
-	(*timestamppb.Timestamp)(nil),                            // 106: google.protobuf.Timestamp
-	(*v1beta1.Feature)(nil),                                  // 107: lekko.feature.v1beta1.Feature
-	(v1beta1.FeatureType)(0),                                 // 108: lekko.feature.v1beta1.FeatureType
-	(*anypb.Any)(nil),                                        // 109: google.protobuf.Any
-	(*v1beta11.Value)(nil),                                   // 110: lekko.backend.v1beta1.Value
+	(PullRequest_Mergeable)(0),                               // 3: lekko.bff.v1beta1.PullRequest.Mergeable
+	(*GetUserLoggedInInfoRequest)(nil),                       // 4: lekko.bff.v1beta1.GetUserLoggedInInfoRequest
+	(*GetUserLoggedInInfoResponse)(nil),                      // 5: lekko.bff.v1beta1.GetUserLoggedInInfoResponse
+	(*ChangePasswordRequest)(nil),                            // 6: lekko.bff.v1beta1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),                           // 7: lekko.bff.v1beta1.ChangePasswordResponse
+	(*GenerateAPIKeyRequest)(nil),                            // 8: lekko.bff.v1beta1.GenerateAPIKeyRequest
+	(*GenerateAPIKeyResponse)(nil),                           // 9: lekko.bff.v1beta1.GenerateAPIKeyResponse
+	(*APIKey)(nil),                                           // 10: lekko.bff.v1beta1.APIKey
+	(*ListAPIKeysRequest)(nil),                               // 11: lekko.bff.v1beta1.ListAPIKeysRequest
+	(*ListAPIKeysResponse)(nil),                              // 12: lekko.bff.v1beta1.ListAPIKeysResponse
+	(*DeleteAPIKeyRequest)(nil),                              // 13: lekko.bff.v1beta1.DeleteAPIKeyRequest
+	(*DeleteAPIKeyResponse)(nil),                             // 14: lekko.bff.v1beta1.DeleteAPIKeyResponse
+	(*CheckAPIKeyRequest)(nil),                               // 15: lekko.bff.v1beta1.CheckAPIKeyRequest
+	(*CheckAPIKeyResponse)(nil),                              // 16: lekko.bff.v1beta1.CheckAPIKeyResponse
+	(*CreateTeamRequest)(nil),                                // 17: lekko.bff.v1beta1.CreateTeamRequest
+	(*CreateTeamResponse)(nil),                               // 18: lekko.bff.v1beta1.CreateTeamResponse
+	(*DeleteTeamRequest)(nil),                                // 19: lekko.bff.v1beta1.DeleteTeamRequest
+	(*DeleteTeamResponse)(nil),                               // 20: lekko.bff.v1beta1.DeleteTeamResponse
+	(*UseTeamRequest)(nil),                                   // 21: lekko.bff.v1beta1.UseTeamRequest
+	(*UseTeamResponse)(nil),                                  // 22: lekko.bff.v1beta1.UseTeamResponse
+	(*Membership)(nil),                                       // 23: lekko.bff.v1beta1.Membership
+	(*ListTeamMembershipsRequest)(nil),                       // 24: lekko.bff.v1beta1.ListTeamMembershipsRequest
+	(*ListTeamMembershipsResponse)(nil),                      // 25: lekko.bff.v1beta1.ListTeamMembershipsResponse
+	(*ListUserMembershipsRequest)(nil),                       // 26: lekko.bff.v1beta1.ListUserMembershipsRequest
+	(*ListUserMembershipsResponse)(nil),                      // 27: lekko.bff.v1beta1.ListUserMembershipsResponse
+	(*UpsertMembershipRequest)(nil),                          // 28: lekko.bff.v1beta1.UpsertMembershipRequest
+	(*UpsertMembershipResponse)(nil),                         // 29: lekko.bff.v1beta1.UpsertMembershipResponse
+	(*RemoveMembershipRequest)(nil),                          // 30: lekko.bff.v1beta1.RemoveMembershipRequest
+	(*RemoveMembershipResponse)(nil),                         // 31: lekko.bff.v1beta1.RemoveMembershipResponse
+	(*RepositoryKey)(nil),                                    // 32: lekko.bff.v1beta1.RepositoryKey
+	(*CreateRepositoryRequest)(nil),                          // 33: lekko.bff.v1beta1.CreateRepositoryRequest
+	(*CreateRepositoryResponse)(nil),                         // 34: lekko.bff.v1beta1.CreateRepositoryResponse
+	(*DeleteRepositoryRequest)(nil),                          // 35: lekko.bff.v1beta1.DeleteRepositoryRequest
+	(*DeleteRepositoryResponse)(nil),                         // 36: lekko.bff.v1beta1.DeleteRepositoryResponse
+	(*ListRepositoriesRequest)(nil),                          // 37: lekko.bff.v1beta1.ListRepositoriesRequest
+	(*Repository)(nil),                                       // 38: lekko.bff.v1beta1.Repository
+	(*ListRepositoriesResponse)(nil),                         // 39: lekko.bff.v1beta1.ListRepositoriesResponse
+	(*ListNamespacesRequest)(nil),                            // 40: lekko.bff.v1beta1.ListNamespacesRequest
+	(*ListNamespacesResponse)(nil),                           // 41: lekko.bff.v1beta1.ListNamespacesResponse
+	(*Namespace)(nil),                                        // 42: lekko.bff.v1beta1.Namespace
+	(*ListFeaturesRequest)(nil),                              // 43: lekko.bff.v1beta1.ListFeaturesRequest
+	(*ListFeaturesResponse)(nil),                             // 44: lekko.bff.v1beta1.ListFeaturesResponse
+	(*ListRepositoryContentsRequest)(nil),                    // 45: lekko.bff.v1beta1.ListRepositoryContentsRequest
+	(*ListRepositoryContentsResponse)(nil),                   // 46: lekko.bff.v1beta1.ListRepositoryContentsResponse
+	(*GetFeatureRequest)(nil),                                // 47: lekko.bff.v1beta1.GetFeatureRequest
+	(*GetFeatureResponse)(nil),                               // 48: lekko.bff.v1beta1.GetFeatureResponse
+	(*Feature)(nil),                                          // 49: lekko.bff.v1beta1.Feature
+	(*AddNamespaceRequest)(nil),                              // 50: lekko.bff.v1beta1.AddNamespaceRequest
+	(*AddNamespaceResponse)(nil),                             // 51: lekko.bff.v1beta1.AddNamespaceResponse
+	(*RemoveNamespaceRequest)(nil),                           // 52: lekko.bff.v1beta1.RemoveNamespaceRequest
+	(*RemoveNamespaceResponse)(nil),                          // 53: lekko.bff.v1beta1.RemoveNamespaceResponse
+	(*AddFeatureRequest)(nil),                                // 54: lekko.bff.v1beta1.AddFeatureRequest
+	(*AddFeatureResponse)(nil),                               // 55: lekko.bff.v1beta1.AddFeatureResponse
+	(*RemoveFeatureRequest)(nil),                             // 56: lekko.bff.v1beta1.RemoveFeatureRequest
+	(*RemoveFeatureResponse)(nil),                            // 57: lekko.bff.v1beta1.RemoveFeatureResponse
+	(*OAuthUserRequest)(nil),                                 // 58: lekko.bff.v1beta1.OAuthUserRequest
+	(*OAuthUserResponse)(nil),                                // 59: lekko.bff.v1beta1.OAuthUserResponse
+	(*GetUserOAuthRequest)(nil),                              // 60: lekko.bff.v1beta1.GetUserOAuthRequest
+	(*GetUserOAuthResponse)(nil),                             // 61: lekko.bff.v1beta1.GetUserOAuthResponse
+	(*DeleteUserOAuthRequest)(nil),                           // 62: lekko.bff.v1beta1.DeleteUserOAuthRequest
+	(*DeleteUserOAuthResponse)(nil),                          // 63: lekko.bff.v1beta1.DeleteUserOAuthResponse
+	(*AuthorizeDeviceRequest)(nil),                           // 64: lekko.bff.v1beta1.AuthorizeDeviceRequest
+	(*AuthorizeDeviceResponse)(nil),                          // 65: lekko.bff.v1beta1.AuthorizeDeviceResponse
+	(*CheckRun)(nil),                                         // 66: lekko.bff.v1beta1.CheckRun
+	(*PullRequest)(nil),                                      // 67: lekko.bff.v1beta1.PullRequest
+	(*GetPRInfoRequest)(nil),                                 // 68: lekko.bff.v1beta1.GetPRInfoRequest
+	(*GetPRInfoResponse)(nil),                                // 69: lekko.bff.v1beta1.GetPRInfoResponse
+	(*GetPRRequest)(nil),                                     // 70: lekko.bff.v1beta1.GetPRRequest
+	(*GetPRResponse)(nil),                                    // 71: lekko.bff.v1beta1.GetPRResponse
+	(*MergePRRequest)(nil),                                   // 72: lekko.bff.v1beta1.MergePRRequest
+	(*MergePRResponse)(nil),                                  // 73: lekko.bff.v1beta1.MergePRResponse
+	(*Branch)(nil),                                           // 74: lekko.bff.v1beta1.Branch
+	(*BranchKey)(nil),                                        // 75: lekko.bff.v1beta1.BranchKey
+	(*CreateBranchRequest)(nil),                              // 76: lekko.bff.v1beta1.CreateBranchRequest
+	(*CreateBranchResponse)(nil),                             // 77: lekko.bff.v1beta1.CreateBranchResponse
+	(*ListBranchesRequest)(nil),                              // 78: lekko.bff.v1beta1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),                             // 79: lekko.bff.v1beta1.ListBranchesResponse
+	(*DeleteBranchRequest)(nil),                              // 80: lekko.bff.v1beta1.DeleteBranchRequest
+	(*DeleteBranchResponse)(nil),                             // 81: lekko.bff.v1beta1.DeleteBranchResponse
+	(*SaveRequest)(nil),                                      // 82: lekko.bff.v1beta1.SaveRequest
+	(*SaveResponse)(nil),                                     // 83: lekko.bff.v1beta1.SaveResponse
+	(*ReviewRequest)(nil),                                    // 84: lekko.bff.v1beta1.ReviewRequest
+	(*ReviewResponse)(nil),                                   // 85: lekko.bff.v1beta1.ReviewResponse
+	(*MergeRequest)(nil),                                     // 86: lekko.bff.v1beta1.MergeRequest
+	(*MergeResponse)(nil),                                    // 87: lekko.bff.v1beta1.MergeResponse
+	(*EvalRequest)(nil),                                      // 88: lekko.bff.v1beta1.EvalRequest
+	(*EvalResponse)(nil),                                     // 89: lekko.bff.v1beta1.EvalResponse
+	(*GetFlagEvaluationMetricsRequest)(nil),                  // 90: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest
+	(*GetFlagEvaluationMetricsResponse)(nil),                 // 91: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse
+	(*RestoreRequest)(nil),                                   // 92: lekko.bff.v1beta1.RestoreRequest
+	(*RestoreResponse)(nil),                                  // 93: lekko.bff.v1beta1.RestoreResponse
+	(*GetRepositoryLogsRequest)(nil),                         // 94: lekko.bff.v1beta1.GetRepositoryLogsRequest
+	(*RepositoryLog)(nil),                                    // 95: lekko.bff.v1beta1.RepositoryLog
+	(*GetRepositoryLogsResponse)(nil),                        // 96: lekko.bff.v1beta1.GetRepositoryLogsResponse
+	(*GetRolloutRequest)(nil),                                // 97: lekko.bff.v1beta1.GetRolloutRequest
+	(*Rollout)(nil),                                          // 98: lekko.bff.v1beta1.Rollout
+	(*GetRolloutResponse)(nil),                               // 99: lekko.bff.v1beta1.GetRolloutResponse
+	(*ListFeaturesResponse_FeatureListItem)(nil),             // 100: lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem
+	(*ListRepositoryContentsResponse_FeatureListItem)(nil),   // 101: lekko.bff.v1beta1.ListRepositoryContentsResponse.FeatureListItem
+	(*ListRepositoryContentsResponse_NamespaceListItem)(nil), // 102: lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem
+	(*PullRequest_Review)(nil),                               // 103: lekko.bff.v1beta1.PullRequest.Review
+	nil,                                                      // 104: lekko.bff.v1beta1.EvalRequest.ContextEntry
+	(*GetFlagEvaluationMetricsResponse_ContextKeyCount)(nil), // 105: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.ContextKeyCount
+	(*GetFlagEvaluationMetricsResponse_PathCount)(nil),       // 106: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.PathCount
+	(*timestamppb.Timestamp)(nil),                            // 107: google.protobuf.Timestamp
+	(*v1beta1.Feature)(nil),                                  // 108: lekko.feature.v1beta1.Feature
+	(v1beta1.FeatureType)(0),                                 // 109: lekko.feature.v1beta1.FeatureType
+	(*anypb.Any)(nil),                                        // 110: google.protobuf.Any
+	(*v1beta11.Value)(nil),                                   // 111: lekko.backend.v1beta1.Value
 }
 var file_lekko_bff_v1beta1_bff_proto_depIdxs = []int32{
-	106, // 0: lekko.bff.v1beta1.APIKey.created_at:type_name -> google.protobuf.Timestamp
-	9,   // 1: lekko.bff.v1beta1.ListAPIKeysResponse.api_keys:type_name -> lekko.bff.v1beta1.APIKey
-	9,   // 2: lekko.bff.v1beta1.CheckAPIKeyResponse.key:type_name -> lekko.bff.v1beta1.APIKey
+	107, // 0: lekko.bff.v1beta1.APIKey.created_at:type_name -> google.protobuf.Timestamp
+	10,  // 1: lekko.bff.v1beta1.ListAPIKeysResponse.api_keys:type_name -> lekko.bff.v1beta1.APIKey
+	10,  // 2: lekko.bff.v1beta1.CheckAPIKeyResponse.key:type_name -> lekko.bff.v1beta1.APIKey
 	0,   // 3: lekko.bff.v1beta1.Membership.role:type_name -> lekko.bff.v1beta1.MembershipRole
-	22,  // 4: lekko.bff.v1beta1.ListTeamMembershipsResponse.memberships:type_name -> lekko.bff.v1beta1.Membership
-	22,  // 5: lekko.bff.v1beta1.ListUserMembershipsResponse.memberships:type_name -> lekko.bff.v1beta1.Membership
+	23,  // 4: lekko.bff.v1beta1.ListTeamMembershipsResponse.memberships:type_name -> lekko.bff.v1beta1.Membership
+	23,  // 5: lekko.bff.v1beta1.ListUserMembershipsResponse.memberships:type_name -> lekko.bff.v1beta1.Membership
 	0,   // 6: lekko.bff.v1beta1.UpsertMembershipRequest.role:type_name -> lekko.bff.v1beta1.MembershipRole
-	22,  // 7: lekko.bff.v1beta1.UpsertMembershipResponse.membership:type_name -> lekko.bff.v1beta1.Membership
-	31,  // 8: lekko.bff.v1beta1.CreateRepositoryRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	31,  // 9: lekko.bff.v1beta1.DeleteRepositoryRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	106, // 10: lekko.bff.v1beta1.Repository.created_at:type_name -> google.protobuf.Timestamp
-	106, // 11: lekko.bff.v1beta1.Repository.updated_at:type_name -> google.protobuf.Timestamp
-	37,  // 12: lekko.bff.v1beta1.ListRepositoriesResponse.repositories:type_name -> lekko.bff.v1beta1.Repository
-	31,  // 13: lekko.bff.v1beta1.ListNamespacesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	41,  // 14: lekko.bff.v1beta1.ListNamespacesResponse.namespaces:type_name -> lekko.bff.v1beta1.Namespace
-	106, // 15: lekko.bff.v1beta1.Namespace.updated_at:type_name -> google.protobuf.Timestamp
-	31,  // 16: lekko.bff.v1beta1.ListFeaturesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	99,  // 17: lekko.bff.v1beta1.ListFeaturesResponse.features:type_name -> lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem
-	74,  // 18: lekko.bff.v1beta1.ListRepositoryContentsRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	101, // 19: lekko.bff.v1beta1.ListRepositoryContentsResponse.namespaces:type_name -> lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem
-	74,  // 20: lekko.bff.v1beta1.GetFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	48,  // 21: lekko.bff.v1beta1.GetFeatureResponse.feature:type_name -> lekko.bff.v1beta1.Feature
-	107, // 22: lekko.bff.v1beta1.Feature.static_feature:type_name -> lekko.feature.v1beta1.Feature
-	74,  // 23: lekko.bff.v1beta1.AddNamespaceRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	74,  // 24: lekko.bff.v1beta1.RemoveNamespaceRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	74,  // 25: lekko.bff.v1beta1.AddFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	23,  // 7: lekko.bff.v1beta1.UpsertMembershipResponse.membership:type_name -> lekko.bff.v1beta1.Membership
+	32,  // 8: lekko.bff.v1beta1.CreateRepositoryRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	32,  // 9: lekko.bff.v1beta1.DeleteRepositoryRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	107, // 10: lekko.bff.v1beta1.Repository.created_at:type_name -> google.protobuf.Timestamp
+	107, // 11: lekko.bff.v1beta1.Repository.updated_at:type_name -> google.protobuf.Timestamp
+	38,  // 12: lekko.bff.v1beta1.ListRepositoriesResponse.repositories:type_name -> lekko.bff.v1beta1.Repository
+	32,  // 13: lekko.bff.v1beta1.ListNamespacesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	42,  // 14: lekko.bff.v1beta1.ListNamespacesResponse.namespaces:type_name -> lekko.bff.v1beta1.Namespace
+	107, // 15: lekko.bff.v1beta1.Namespace.updated_at:type_name -> google.protobuf.Timestamp
+	32,  // 16: lekko.bff.v1beta1.ListFeaturesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	100, // 17: lekko.bff.v1beta1.ListFeaturesResponse.features:type_name -> lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem
+	75,  // 18: lekko.bff.v1beta1.ListRepositoryContentsRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	102, // 19: lekko.bff.v1beta1.ListRepositoryContentsResponse.namespaces:type_name -> lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem
+	75,  // 20: lekko.bff.v1beta1.GetFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	49,  // 21: lekko.bff.v1beta1.GetFeatureResponse.feature:type_name -> lekko.bff.v1beta1.Feature
+	108, // 22: lekko.bff.v1beta1.Feature.static_feature:type_name -> lekko.feature.v1beta1.Feature
+	75,  // 23: lekko.bff.v1beta1.AddNamespaceRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	75,  // 24: lekko.bff.v1beta1.RemoveNamespaceRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	75,  // 25: lekko.bff.v1beta1.AddFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
 	1,   // 26: lekko.bff.v1beta1.AddFeatureRequest.type:type_name -> lekko.bff.v1beta1.FeatureType
-	108, // 27: lekko.bff.v1beta1.AddFeatureRequest.type_new:type_name -> lekko.feature.v1beta1.FeatureType
-	74,  // 28: lekko.bff.v1beta1.RemoveFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	106, // 29: lekko.bff.v1beta1.CheckRun.started_at:type_name -> google.protobuf.Timestamp
-	106, // 30: lekko.bff.v1beta1.CheckRun.completed_at:type_name -> google.protobuf.Timestamp
+	109, // 27: lekko.bff.v1beta1.AddFeatureRequest.type_new:type_name -> lekko.feature.v1beta1.FeatureType
+	75,  // 28: lekko.bff.v1beta1.RemoveFeatureRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	107, // 29: lekko.bff.v1beta1.CheckRun.started_at:type_name -> google.protobuf.Timestamp
+	107, // 30: lekko.bff.v1beta1.CheckRun.completed_at:type_name -> google.protobuf.Timestamp
 	2,   // 31: lekko.bff.v1beta1.PullRequest.checks_state:type_name -> lekko.bff.v1beta1.ChecksState
-	106, // 32: lekko.bff.v1beta1.PullRequest.pushed_at:type_name -> google.protobuf.Timestamp
-	102, // 33: lekko.bff.v1beta1.PullRequest.reviews:type_name -> lekko.bff.v1beta1.PullRequest.Review
-	65,  // 34: lekko.bff.v1beta1.PullRequest.check_runs:type_name -> lekko.bff.v1beta1.CheckRun
-	31,  // 35: lekko.bff.v1beta1.GetPRInfoRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	66,  // 36: lekko.bff.v1beta1.GetPRInfoResponse.pull_requests:type_name -> lekko.bff.v1beta1.PullRequest
-	74,  // 37: lekko.bff.v1beta1.GetPRRequest.branch_key:type_name -> lekko.bff.v1beta1.BranchKey
-	66,  // 38: lekko.bff.v1beta1.GetPRResponse.pull_request:type_name -> lekko.bff.v1beta1.PullRequest
-	31,  // 39: lekko.bff.v1beta1.MergePRRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	74,  // 40: lekko.bff.v1beta1.Branch.key:type_name -> lekko.bff.v1beta1.BranchKey
-	106, // 41: lekko.bff.v1beta1.Branch.created_at:type_name -> google.protobuf.Timestamp
-	106, // 42: lekko.bff.v1beta1.Branch.updated_at:type_name -> google.protobuf.Timestamp
-	74,  // 43: lekko.bff.v1beta1.CreateBranchRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	73,  // 44: lekko.bff.v1beta1.CreateBranchResponse.branch:type_name -> lekko.bff.v1beta1.Branch
-	31,  // 45: lekko.bff.v1beta1.ListBranchesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	73,  // 46: lekko.bff.v1beta1.ListBranchesResponse.branches:type_name -> lekko.bff.v1beta1.Branch
-	74,  // 47: lekko.bff.v1beta1.DeleteBranchRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	107, // 48: lekko.bff.v1beta1.SaveRequest.feature:type_name -> lekko.feature.v1beta1.Feature
-	74,  // 49: lekko.bff.v1beta1.SaveRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	74,  // 50: lekko.bff.v1beta1.ReviewRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	74,  // 51: lekko.bff.v1beta1.MergeRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	103, // 52: lekko.bff.v1beta1.EvalRequest.context:type_name -> lekko.bff.v1beta1.EvalRequest.ContextEntry
-	74,  // 53: lekko.bff.v1beta1.EvalRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	109, // 54: lekko.bff.v1beta1.EvalResponse.result:type_name -> google.protobuf.Any
-	108, // 55: lekko.bff.v1beta1.EvalResponse.type:type_name -> lekko.feature.v1beta1.FeatureType
-	31,  // 56: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	106, // 57: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.start_time:type_name -> google.protobuf.Timestamp
-	106, // 58: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.end_time:type_name -> google.protobuf.Timestamp
-	106, // 59: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.start_time:type_name -> google.protobuf.Timestamp
-	106, // 60: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.end_time:type_name -> google.protobuf.Timestamp
-	104, // 61: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.context_key_counts:type_name -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.ContextKeyCount
-	105, // 62: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.path_counts:type_name -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.PathCount
-	74,  // 63: lekko.bff.v1beta1.RestoreRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
-	73,  // 64: lekko.bff.v1beta1.RestoreResponse.branch:type_name -> lekko.bff.v1beta1.Branch
-	31,  // 65: lekko.bff.v1beta1.GetRepositoryLogsRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	106, // 66: lekko.bff.v1beta1.RepositoryLog.create_time:type_name -> google.protobuf.Timestamp
-	94,  // 67: lekko.bff.v1beta1.GetRepositoryLogsResponse.logs:type_name -> lekko.bff.v1beta1.RepositoryLog
-	31,  // 68: lekko.bff.v1beta1.GetRolloutRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
-	106, // 69: lekko.bff.v1beta1.Rollout.created_at:type_name -> google.protobuf.Timestamp
-	106, // 70: lekko.bff.v1beta1.Rollout.updated_at:type_name -> google.protobuf.Timestamp
-	97,  // 71: lekko.bff.v1beta1.GetRolloutResponse.rollout:type_name -> lekko.bff.v1beta1.Rollout
-	106, // 72: lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem.updated_at:type_name -> google.protobuf.Timestamp
-	100, // 73: lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem.features:type_name -> lekko.bff.v1beta1.ListRepositoryContentsResponse.FeatureListItem
-	106, // 74: lekko.bff.v1beta1.PullRequest.Review.submitted_at:type_name -> google.protobuf.Timestamp
-	110, // 75: lekko.bff.v1beta1.EvalRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
-	3,   // 76: lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo:input_type -> lekko.bff.v1beta1.GetUserLoggedInInfoRequest
-	5,   // 77: lekko.bff.v1beta1.BFFService.ChangePassword:input_type -> lekko.bff.v1beta1.ChangePasswordRequest
-	57,  // 78: lekko.bff.v1beta1.BFFService.OAuthUser:input_type -> lekko.bff.v1beta1.OAuthUserRequest
-	59,  // 79: lekko.bff.v1beta1.BFFService.GetUserOAuth:input_type -> lekko.bff.v1beta1.GetUserOAuthRequest
-	61,  // 80: lekko.bff.v1beta1.BFFService.DeleteUserOAuth:input_type -> lekko.bff.v1beta1.DeleteUserOAuthRequest
-	63,  // 81: lekko.bff.v1beta1.BFFService.AuthorizeDevice:input_type -> lekko.bff.v1beta1.AuthorizeDeviceRequest
-	7,   // 82: lekko.bff.v1beta1.BFFService.GenerateAPIKey:input_type -> lekko.bff.v1beta1.GenerateAPIKeyRequest
-	10,  // 83: lekko.bff.v1beta1.BFFService.ListAPIKeys:input_type -> lekko.bff.v1beta1.ListAPIKeysRequest
-	12,  // 84: lekko.bff.v1beta1.BFFService.DeleteAPIKey:input_type -> lekko.bff.v1beta1.DeleteAPIKeyRequest
-	14,  // 85: lekko.bff.v1beta1.BFFService.CheckAPIKey:input_type -> lekko.bff.v1beta1.CheckAPIKeyRequest
-	16,  // 86: lekko.bff.v1beta1.BFFService.CreateTeam:input_type -> lekko.bff.v1beta1.CreateTeamRequest
-	18,  // 87: lekko.bff.v1beta1.BFFService.DeleteTeam:input_type -> lekko.bff.v1beta1.DeleteTeamRequest
-	20,  // 88: lekko.bff.v1beta1.BFFService.UseTeam:input_type -> lekko.bff.v1beta1.UseTeamRequest
-	23,  // 89: lekko.bff.v1beta1.BFFService.ListTeamMemberships:input_type -> lekko.bff.v1beta1.ListTeamMembershipsRequest
-	25,  // 90: lekko.bff.v1beta1.BFFService.ListUserMemberships:input_type -> lekko.bff.v1beta1.ListUserMembershipsRequest
-	27,  // 91: lekko.bff.v1beta1.BFFService.UpsertMembership:input_type -> lekko.bff.v1beta1.UpsertMembershipRequest
-	29,  // 92: lekko.bff.v1beta1.BFFService.RemoveMembership:input_type -> lekko.bff.v1beta1.RemoveMembershipRequest
-	32,  // 93: lekko.bff.v1beta1.BFFService.CreateRepository:input_type -> lekko.bff.v1beta1.CreateRepositoryRequest
-	34,  // 94: lekko.bff.v1beta1.BFFService.DeleteRepository:input_type -> lekko.bff.v1beta1.DeleteRepositoryRequest
-	36,  // 95: lekko.bff.v1beta1.BFFService.ListRepositories:input_type -> lekko.bff.v1beta1.ListRepositoriesRequest
-	39,  // 96: lekko.bff.v1beta1.BFFService.ListNamespaces:input_type -> lekko.bff.v1beta1.ListNamespacesRequest
-	42,  // 97: lekko.bff.v1beta1.BFFService.ListFeatures:input_type -> lekko.bff.v1beta1.ListFeaturesRequest
-	44,  // 98: lekko.bff.v1beta1.BFFService.ListRepositoryContents:input_type -> lekko.bff.v1beta1.ListRepositoryContentsRequest
-	46,  // 99: lekko.bff.v1beta1.BFFService.GetFeature:input_type -> lekko.bff.v1beta1.GetFeatureRequest
-	49,  // 100: lekko.bff.v1beta1.BFFService.AddNamespace:input_type -> lekko.bff.v1beta1.AddNamespaceRequest
-	51,  // 101: lekko.bff.v1beta1.BFFService.RemoveNamespace:input_type -> lekko.bff.v1beta1.RemoveNamespaceRequest
-	53,  // 102: lekko.bff.v1beta1.BFFService.AddFeature:input_type -> lekko.bff.v1beta1.AddFeatureRequest
-	55,  // 103: lekko.bff.v1beta1.BFFService.RemoveFeature:input_type -> lekko.bff.v1beta1.RemoveFeatureRequest
-	67,  // 104: lekko.bff.v1beta1.BFFService.GetPRInfo:input_type -> lekko.bff.v1beta1.GetPRInfoRequest
-	69,  // 105: lekko.bff.v1beta1.BFFService.GetPR:input_type -> lekko.bff.v1beta1.GetPRRequest
-	71,  // 106: lekko.bff.v1beta1.BFFService.MergePR:input_type -> lekko.bff.v1beta1.MergePRRequest
-	75,  // 107: lekko.bff.v1beta1.BFFService.CreateBranch:input_type -> lekko.bff.v1beta1.CreateBranchRequest
-	77,  // 108: lekko.bff.v1beta1.BFFService.ListBranches:input_type -> lekko.bff.v1beta1.ListBranchesRequest
-	79,  // 109: lekko.bff.v1beta1.BFFService.DeleteBranch:input_type -> lekko.bff.v1beta1.DeleteBranchRequest
-	81,  // 110: lekko.bff.v1beta1.BFFService.Save:input_type -> lekko.bff.v1beta1.SaveRequest
-	83,  // 111: lekko.bff.v1beta1.BFFService.Review:input_type -> lekko.bff.v1beta1.ReviewRequest
-	85,  // 112: lekko.bff.v1beta1.BFFService.Merge:input_type -> lekko.bff.v1beta1.MergeRequest
-	87,  // 113: lekko.bff.v1beta1.BFFService.Eval:input_type -> lekko.bff.v1beta1.EvalRequest
-	89,  // 114: lekko.bff.v1beta1.BFFService.GetFlagEvaluationMetrics:input_type -> lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest
-	91,  // 115: lekko.bff.v1beta1.BFFService.Restore:input_type -> lekko.bff.v1beta1.RestoreRequest
-	93,  // 116: lekko.bff.v1beta1.BFFService.GetRepositoryLogs:input_type -> lekko.bff.v1beta1.GetRepositoryLogsRequest
-	96,  // 117: lekko.bff.v1beta1.BFFService.GetRollout:input_type -> lekko.bff.v1beta1.GetRolloutRequest
-	4,   // 118: lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo:output_type -> lekko.bff.v1beta1.GetUserLoggedInInfoResponse
-	6,   // 119: lekko.bff.v1beta1.BFFService.ChangePassword:output_type -> lekko.bff.v1beta1.ChangePasswordResponse
-	58,  // 120: lekko.bff.v1beta1.BFFService.OAuthUser:output_type -> lekko.bff.v1beta1.OAuthUserResponse
-	60,  // 121: lekko.bff.v1beta1.BFFService.GetUserOAuth:output_type -> lekko.bff.v1beta1.GetUserOAuthResponse
-	62,  // 122: lekko.bff.v1beta1.BFFService.DeleteUserOAuth:output_type -> lekko.bff.v1beta1.DeleteUserOAuthResponse
-	64,  // 123: lekko.bff.v1beta1.BFFService.AuthorizeDevice:output_type -> lekko.bff.v1beta1.AuthorizeDeviceResponse
-	8,   // 124: lekko.bff.v1beta1.BFFService.GenerateAPIKey:output_type -> lekko.bff.v1beta1.GenerateAPIKeyResponse
-	11,  // 125: lekko.bff.v1beta1.BFFService.ListAPIKeys:output_type -> lekko.bff.v1beta1.ListAPIKeysResponse
-	13,  // 126: lekko.bff.v1beta1.BFFService.DeleteAPIKey:output_type -> lekko.bff.v1beta1.DeleteAPIKeyResponse
-	15,  // 127: lekko.bff.v1beta1.BFFService.CheckAPIKey:output_type -> lekko.bff.v1beta1.CheckAPIKeyResponse
-	17,  // 128: lekko.bff.v1beta1.BFFService.CreateTeam:output_type -> lekko.bff.v1beta1.CreateTeamResponse
-	19,  // 129: lekko.bff.v1beta1.BFFService.DeleteTeam:output_type -> lekko.bff.v1beta1.DeleteTeamResponse
-	21,  // 130: lekko.bff.v1beta1.BFFService.UseTeam:output_type -> lekko.bff.v1beta1.UseTeamResponse
-	24,  // 131: lekko.bff.v1beta1.BFFService.ListTeamMemberships:output_type -> lekko.bff.v1beta1.ListTeamMembershipsResponse
-	26,  // 132: lekko.bff.v1beta1.BFFService.ListUserMemberships:output_type -> lekko.bff.v1beta1.ListUserMembershipsResponse
-	28,  // 133: lekko.bff.v1beta1.BFFService.UpsertMembership:output_type -> lekko.bff.v1beta1.UpsertMembershipResponse
-	30,  // 134: lekko.bff.v1beta1.BFFService.RemoveMembership:output_type -> lekko.bff.v1beta1.RemoveMembershipResponse
-	33,  // 135: lekko.bff.v1beta1.BFFService.CreateRepository:output_type -> lekko.bff.v1beta1.CreateRepositoryResponse
-	35,  // 136: lekko.bff.v1beta1.BFFService.DeleteRepository:output_type -> lekko.bff.v1beta1.DeleteRepositoryResponse
-	38,  // 137: lekko.bff.v1beta1.BFFService.ListRepositories:output_type -> lekko.bff.v1beta1.ListRepositoriesResponse
-	40,  // 138: lekko.bff.v1beta1.BFFService.ListNamespaces:output_type -> lekko.bff.v1beta1.ListNamespacesResponse
-	43,  // 139: lekko.bff.v1beta1.BFFService.ListFeatures:output_type -> lekko.bff.v1beta1.ListFeaturesResponse
-	45,  // 140: lekko.bff.v1beta1.BFFService.ListRepositoryContents:output_type -> lekko.bff.v1beta1.ListRepositoryContentsResponse
-	47,  // 141: lekko.bff.v1beta1.BFFService.GetFeature:output_type -> lekko.bff.v1beta1.GetFeatureResponse
-	50,  // 142: lekko.bff.v1beta1.BFFService.AddNamespace:output_type -> lekko.bff.v1beta1.AddNamespaceResponse
-	52,  // 143: lekko.bff.v1beta1.BFFService.RemoveNamespace:output_type -> lekko.bff.v1beta1.RemoveNamespaceResponse
-	54,  // 144: lekko.bff.v1beta1.BFFService.AddFeature:output_type -> lekko.bff.v1beta1.AddFeatureResponse
-	56,  // 145: lekko.bff.v1beta1.BFFService.RemoveFeature:output_type -> lekko.bff.v1beta1.RemoveFeatureResponse
-	68,  // 146: lekko.bff.v1beta1.BFFService.GetPRInfo:output_type -> lekko.bff.v1beta1.GetPRInfoResponse
-	70,  // 147: lekko.bff.v1beta1.BFFService.GetPR:output_type -> lekko.bff.v1beta1.GetPRResponse
-	72,  // 148: lekko.bff.v1beta1.BFFService.MergePR:output_type -> lekko.bff.v1beta1.MergePRResponse
-	76,  // 149: lekko.bff.v1beta1.BFFService.CreateBranch:output_type -> lekko.bff.v1beta1.CreateBranchResponse
-	78,  // 150: lekko.bff.v1beta1.BFFService.ListBranches:output_type -> lekko.bff.v1beta1.ListBranchesResponse
-	80,  // 151: lekko.bff.v1beta1.BFFService.DeleteBranch:output_type -> lekko.bff.v1beta1.DeleteBranchResponse
-	82,  // 152: lekko.bff.v1beta1.BFFService.Save:output_type -> lekko.bff.v1beta1.SaveResponse
-	84,  // 153: lekko.bff.v1beta1.BFFService.Review:output_type -> lekko.bff.v1beta1.ReviewResponse
-	86,  // 154: lekko.bff.v1beta1.BFFService.Merge:output_type -> lekko.bff.v1beta1.MergeResponse
-	88,  // 155: lekko.bff.v1beta1.BFFService.Eval:output_type -> lekko.bff.v1beta1.EvalResponse
-	90,  // 156: lekko.bff.v1beta1.BFFService.GetFlagEvaluationMetrics:output_type -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse
-	92,  // 157: lekko.bff.v1beta1.BFFService.Restore:output_type -> lekko.bff.v1beta1.RestoreResponse
-	95,  // 158: lekko.bff.v1beta1.BFFService.GetRepositoryLogs:output_type -> lekko.bff.v1beta1.GetRepositoryLogsResponse
-	98,  // 159: lekko.bff.v1beta1.BFFService.GetRollout:output_type -> lekko.bff.v1beta1.GetRolloutResponse
-	118, // [118:160] is the sub-list for method output_type
-	76,  // [76:118] is the sub-list for method input_type
-	76,  // [76:76] is the sub-list for extension type_name
-	76,  // [76:76] is the sub-list for extension extendee
-	0,   // [0:76] is the sub-list for field type_name
+	107, // 32: lekko.bff.v1beta1.PullRequest.pushed_at:type_name -> google.protobuf.Timestamp
+	103, // 33: lekko.bff.v1beta1.PullRequest.reviews:type_name -> lekko.bff.v1beta1.PullRequest.Review
+	66,  // 34: lekko.bff.v1beta1.PullRequest.check_runs:type_name -> lekko.bff.v1beta1.CheckRun
+	3,   // 35: lekko.bff.v1beta1.PullRequest.mergeable:type_name -> lekko.bff.v1beta1.PullRequest.Mergeable
+	32,  // 36: lekko.bff.v1beta1.GetPRInfoRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	67,  // 37: lekko.bff.v1beta1.GetPRInfoResponse.pull_requests:type_name -> lekko.bff.v1beta1.PullRequest
+	75,  // 38: lekko.bff.v1beta1.GetPRRequest.branch_key:type_name -> lekko.bff.v1beta1.BranchKey
+	67,  // 39: lekko.bff.v1beta1.GetPRResponse.pull_request:type_name -> lekko.bff.v1beta1.PullRequest
+	32,  // 40: lekko.bff.v1beta1.MergePRRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	75,  // 41: lekko.bff.v1beta1.Branch.key:type_name -> lekko.bff.v1beta1.BranchKey
+	107, // 42: lekko.bff.v1beta1.Branch.created_at:type_name -> google.protobuf.Timestamp
+	107, // 43: lekko.bff.v1beta1.Branch.updated_at:type_name -> google.protobuf.Timestamp
+	75,  // 44: lekko.bff.v1beta1.CreateBranchRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	74,  // 45: lekko.bff.v1beta1.CreateBranchResponse.branch:type_name -> lekko.bff.v1beta1.Branch
+	32,  // 46: lekko.bff.v1beta1.ListBranchesRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	74,  // 47: lekko.bff.v1beta1.ListBranchesResponse.branches:type_name -> lekko.bff.v1beta1.Branch
+	75,  // 48: lekko.bff.v1beta1.DeleteBranchRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	108, // 49: lekko.bff.v1beta1.SaveRequest.feature:type_name -> lekko.feature.v1beta1.Feature
+	75,  // 50: lekko.bff.v1beta1.SaveRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	75,  // 51: lekko.bff.v1beta1.ReviewRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	75,  // 52: lekko.bff.v1beta1.MergeRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	104, // 53: lekko.bff.v1beta1.EvalRequest.context:type_name -> lekko.bff.v1beta1.EvalRequest.ContextEntry
+	75,  // 54: lekko.bff.v1beta1.EvalRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	110, // 55: lekko.bff.v1beta1.EvalResponse.result:type_name -> google.protobuf.Any
+	109, // 56: lekko.bff.v1beta1.EvalResponse.type:type_name -> lekko.feature.v1beta1.FeatureType
+	32,  // 57: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	107, // 58: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.start_time:type_name -> google.protobuf.Timestamp
+	107, // 59: lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest.end_time:type_name -> google.protobuf.Timestamp
+	107, // 60: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.start_time:type_name -> google.protobuf.Timestamp
+	107, // 61: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.end_time:type_name -> google.protobuf.Timestamp
+	105, // 62: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.context_key_counts:type_name -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.ContextKeyCount
+	106, // 63: lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.path_counts:type_name -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse.PathCount
+	75,  // 64: lekko.bff.v1beta1.RestoreRequest.key:type_name -> lekko.bff.v1beta1.BranchKey
+	74,  // 65: lekko.bff.v1beta1.RestoreResponse.branch:type_name -> lekko.bff.v1beta1.Branch
+	32,  // 66: lekko.bff.v1beta1.GetRepositoryLogsRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	107, // 67: lekko.bff.v1beta1.RepositoryLog.create_time:type_name -> google.protobuf.Timestamp
+	95,  // 68: lekko.bff.v1beta1.GetRepositoryLogsResponse.logs:type_name -> lekko.bff.v1beta1.RepositoryLog
+	32,  // 69: lekko.bff.v1beta1.GetRolloutRequest.repo_key:type_name -> lekko.bff.v1beta1.RepositoryKey
+	107, // 70: lekko.bff.v1beta1.Rollout.created_at:type_name -> google.protobuf.Timestamp
+	107, // 71: lekko.bff.v1beta1.Rollout.updated_at:type_name -> google.protobuf.Timestamp
+	98,  // 72: lekko.bff.v1beta1.GetRolloutResponse.rollout:type_name -> lekko.bff.v1beta1.Rollout
+	107, // 73: lekko.bff.v1beta1.ListFeaturesResponse.FeatureListItem.updated_at:type_name -> google.protobuf.Timestamp
+	101, // 74: lekko.bff.v1beta1.ListRepositoryContentsResponse.NamespaceListItem.features:type_name -> lekko.bff.v1beta1.ListRepositoryContentsResponse.FeatureListItem
+	107, // 75: lekko.bff.v1beta1.PullRequest.Review.submitted_at:type_name -> google.protobuf.Timestamp
+	111, // 76: lekko.bff.v1beta1.EvalRequest.ContextEntry.value:type_name -> lekko.backend.v1beta1.Value
+	4,   // 77: lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo:input_type -> lekko.bff.v1beta1.GetUserLoggedInInfoRequest
+	6,   // 78: lekko.bff.v1beta1.BFFService.ChangePassword:input_type -> lekko.bff.v1beta1.ChangePasswordRequest
+	58,  // 79: lekko.bff.v1beta1.BFFService.OAuthUser:input_type -> lekko.bff.v1beta1.OAuthUserRequest
+	60,  // 80: lekko.bff.v1beta1.BFFService.GetUserOAuth:input_type -> lekko.bff.v1beta1.GetUserOAuthRequest
+	62,  // 81: lekko.bff.v1beta1.BFFService.DeleteUserOAuth:input_type -> lekko.bff.v1beta1.DeleteUserOAuthRequest
+	64,  // 82: lekko.bff.v1beta1.BFFService.AuthorizeDevice:input_type -> lekko.bff.v1beta1.AuthorizeDeviceRequest
+	8,   // 83: lekko.bff.v1beta1.BFFService.GenerateAPIKey:input_type -> lekko.bff.v1beta1.GenerateAPIKeyRequest
+	11,  // 84: lekko.bff.v1beta1.BFFService.ListAPIKeys:input_type -> lekko.bff.v1beta1.ListAPIKeysRequest
+	13,  // 85: lekko.bff.v1beta1.BFFService.DeleteAPIKey:input_type -> lekko.bff.v1beta1.DeleteAPIKeyRequest
+	15,  // 86: lekko.bff.v1beta1.BFFService.CheckAPIKey:input_type -> lekko.bff.v1beta1.CheckAPIKeyRequest
+	17,  // 87: lekko.bff.v1beta1.BFFService.CreateTeam:input_type -> lekko.bff.v1beta1.CreateTeamRequest
+	19,  // 88: lekko.bff.v1beta1.BFFService.DeleteTeam:input_type -> lekko.bff.v1beta1.DeleteTeamRequest
+	21,  // 89: lekko.bff.v1beta1.BFFService.UseTeam:input_type -> lekko.bff.v1beta1.UseTeamRequest
+	24,  // 90: lekko.bff.v1beta1.BFFService.ListTeamMemberships:input_type -> lekko.bff.v1beta1.ListTeamMembershipsRequest
+	26,  // 91: lekko.bff.v1beta1.BFFService.ListUserMemberships:input_type -> lekko.bff.v1beta1.ListUserMembershipsRequest
+	28,  // 92: lekko.bff.v1beta1.BFFService.UpsertMembership:input_type -> lekko.bff.v1beta1.UpsertMembershipRequest
+	30,  // 93: lekko.bff.v1beta1.BFFService.RemoveMembership:input_type -> lekko.bff.v1beta1.RemoveMembershipRequest
+	33,  // 94: lekko.bff.v1beta1.BFFService.CreateRepository:input_type -> lekko.bff.v1beta1.CreateRepositoryRequest
+	35,  // 95: lekko.bff.v1beta1.BFFService.DeleteRepository:input_type -> lekko.bff.v1beta1.DeleteRepositoryRequest
+	37,  // 96: lekko.bff.v1beta1.BFFService.ListRepositories:input_type -> lekko.bff.v1beta1.ListRepositoriesRequest
+	40,  // 97: lekko.bff.v1beta1.BFFService.ListNamespaces:input_type -> lekko.bff.v1beta1.ListNamespacesRequest
+	43,  // 98: lekko.bff.v1beta1.BFFService.ListFeatures:input_type -> lekko.bff.v1beta1.ListFeaturesRequest
+	45,  // 99: lekko.bff.v1beta1.BFFService.ListRepositoryContents:input_type -> lekko.bff.v1beta1.ListRepositoryContentsRequest
+	47,  // 100: lekko.bff.v1beta1.BFFService.GetFeature:input_type -> lekko.bff.v1beta1.GetFeatureRequest
+	50,  // 101: lekko.bff.v1beta1.BFFService.AddNamespace:input_type -> lekko.bff.v1beta1.AddNamespaceRequest
+	52,  // 102: lekko.bff.v1beta1.BFFService.RemoveNamespace:input_type -> lekko.bff.v1beta1.RemoveNamespaceRequest
+	54,  // 103: lekko.bff.v1beta1.BFFService.AddFeature:input_type -> lekko.bff.v1beta1.AddFeatureRequest
+	56,  // 104: lekko.bff.v1beta1.BFFService.RemoveFeature:input_type -> lekko.bff.v1beta1.RemoveFeatureRequest
+	68,  // 105: lekko.bff.v1beta1.BFFService.GetPRInfo:input_type -> lekko.bff.v1beta1.GetPRInfoRequest
+	70,  // 106: lekko.bff.v1beta1.BFFService.GetPR:input_type -> lekko.bff.v1beta1.GetPRRequest
+	72,  // 107: lekko.bff.v1beta1.BFFService.MergePR:input_type -> lekko.bff.v1beta1.MergePRRequest
+	76,  // 108: lekko.bff.v1beta1.BFFService.CreateBranch:input_type -> lekko.bff.v1beta1.CreateBranchRequest
+	78,  // 109: lekko.bff.v1beta1.BFFService.ListBranches:input_type -> lekko.bff.v1beta1.ListBranchesRequest
+	80,  // 110: lekko.bff.v1beta1.BFFService.DeleteBranch:input_type -> lekko.bff.v1beta1.DeleteBranchRequest
+	82,  // 111: lekko.bff.v1beta1.BFFService.Save:input_type -> lekko.bff.v1beta1.SaveRequest
+	84,  // 112: lekko.bff.v1beta1.BFFService.Review:input_type -> lekko.bff.v1beta1.ReviewRequest
+	86,  // 113: lekko.bff.v1beta1.BFFService.Merge:input_type -> lekko.bff.v1beta1.MergeRequest
+	88,  // 114: lekko.bff.v1beta1.BFFService.Eval:input_type -> lekko.bff.v1beta1.EvalRequest
+	90,  // 115: lekko.bff.v1beta1.BFFService.GetFlagEvaluationMetrics:input_type -> lekko.bff.v1beta1.GetFlagEvaluationMetricsRequest
+	92,  // 116: lekko.bff.v1beta1.BFFService.Restore:input_type -> lekko.bff.v1beta1.RestoreRequest
+	94,  // 117: lekko.bff.v1beta1.BFFService.GetRepositoryLogs:input_type -> lekko.bff.v1beta1.GetRepositoryLogsRequest
+	97,  // 118: lekko.bff.v1beta1.BFFService.GetRollout:input_type -> lekko.bff.v1beta1.GetRolloutRequest
+	5,   // 119: lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo:output_type -> lekko.bff.v1beta1.GetUserLoggedInInfoResponse
+	7,   // 120: lekko.bff.v1beta1.BFFService.ChangePassword:output_type -> lekko.bff.v1beta1.ChangePasswordResponse
+	59,  // 121: lekko.bff.v1beta1.BFFService.OAuthUser:output_type -> lekko.bff.v1beta1.OAuthUserResponse
+	61,  // 122: lekko.bff.v1beta1.BFFService.GetUserOAuth:output_type -> lekko.bff.v1beta1.GetUserOAuthResponse
+	63,  // 123: lekko.bff.v1beta1.BFFService.DeleteUserOAuth:output_type -> lekko.bff.v1beta1.DeleteUserOAuthResponse
+	65,  // 124: lekko.bff.v1beta1.BFFService.AuthorizeDevice:output_type -> lekko.bff.v1beta1.AuthorizeDeviceResponse
+	9,   // 125: lekko.bff.v1beta1.BFFService.GenerateAPIKey:output_type -> lekko.bff.v1beta1.GenerateAPIKeyResponse
+	12,  // 126: lekko.bff.v1beta1.BFFService.ListAPIKeys:output_type -> lekko.bff.v1beta1.ListAPIKeysResponse
+	14,  // 127: lekko.bff.v1beta1.BFFService.DeleteAPIKey:output_type -> lekko.bff.v1beta1.DeleteAPIKeyResponse
+	16,  // 128: lekko.bff.v1beta1.BFFService.CheckAPIKey:output_type -> lekko.bff.v1beta1.CheckAPIKeyResponse
+	18,  // 129: lekko.bff.v1beta1.BFFService.CreateTeam:output_type -> lekko.bff.v1beta1.CreateTeamResponse
+	20,  // 130: lekko.bff.v1beta1.BFFService.DeleteTeam:output_type -> lekko.bff.v1beta1.DeleteTeamResponse
+	22,  // 131: lekko.bff.v1beta1.BFFService.UseTeam:output_type -> lekko.bff.v1beta1.UseTeamResponse
+	25,  // 132: lekko.bff.v1beta1.BFFService.ListTeamMemberships:output_type -> lekko.bff.v1beta1.ListTeamMembershipsResponse
+	27,  // 133: lekko.bff.v1beta1.BFFService.ListUserMemberships:output_type -> lekko.bff.v1beta1.ListUserMembershipsResponse
+	29,  // 134: lekko.bff.v1beta1.BFFService.UpsertMembership:output_type -> lekko.bff.v1beta1.UpsertMembershipResponse
+	31,  // 135: lekko.bff.v1beta1.BFFService.RemoveMembership:output_type -> lekko.bff.v1beta1.RemoveMembershipResponse
+	34,  // 136: lekko.bff.v1beta1.BFFService.CreateRepository:output_type -> lekko.bff.v1beta1.CreateRepositoryResponse
+	36,  // 137: lekko.bff.v1beta1.BFFService.DeleteRepository:output_type -> lekko.bff.v1beta1.DeleteRepositoryResponse
+	39,  // 138: lekko.bff.v1beta1.BFFService.ListRepositories:output_type -> lekko.bff.v1beta1.ListRepositoriesResponse
+	41,  // 139: lekko.bff.v1beta1.BFFService.ListNamespaces:output_type -> lekko.bff.v1beta1.ListNamespacesResponse
+	44,  // 140: lekko.bff.v1beta1.BFFService.ListFeatures:output_type -> lekko.bff.v1beta1.ListFeaturesResponse
+	46,  // 141: lekko.bff.v1beta1.BFFService.ListRepositoryContents:output_type -> lekko.bff.v1beta1.ListRepositoryContentsResponse
+	48,  // 142: lekko.bff.v1beta1.BFFService.GetFeature:output_type -> lekko.bff.v1beta1.GetFeatureResponse
+	51,  // 143: lekko.bff.v1beta1.BFFService.AddNamespace:output_type -> lekko.bff.v1beta1.AddNamespaceResponse
+	53,  // 144: lekko.bff.v1beta1.BFFService.RemoveNamespace:output_type -> lekko.bff.v1beta1.RemoveNamespaceResponse
+	55,  // 145: lekko.bff.v1beta1.BFFService.AddFeature:output_type -> lekko.bff.v1beta1.AddFeatureResponse
+	57,  // 146: lekko.bff.v1beta1.BFFService.RemoveFeature:output_type -> lekko.bff.v1beta1.RemoveFeatureResponse
+	69,  // 147: lekko.bff.v1beta1.BFFService.GetPRInfo:output_type -> lekko.bff.v1beta1.GetPRInfoResponse
+	71,  // 148: lekko.bff.v1beta1.BFFService.GetPR:output_type -> lekko.bff.v1beta1.GetPRResponse
+	73,  // 149: lekko.bff.v1beta1.BFFService.MergePR:output_type -> lekko.bff.v1beta1.MergePRResponse
+	77,  // 150: lekko.bff.v1beta1.BFFService.CreateBranch:output_type -> lekko.bff.v1beta1.CreateBranchResponse
+	79,  // 151: lekko.bff.v1beta1.BFFService.ListBranches:output_type -> lekko.bff.v1beta1.ListBranchesResponse
+	81,  // 152: lekko.bff.v1beta1.BFFService.DeleteBranch:output_type -> lekko.bff.v1beta1.DeleteBranchResponse
+	83,  // 153: lekko.bff.v1beta1.BFFService.Save:output_type -> lekko.bff.v1beta1.SaveResponse
+	85,  // 154: lekko.bff.v1beta1.BFFService.Review:output_type -> lekko.bff.v1beta1.ReviewResponse
+	87,  // 155: lekko.bff.v1beta1.BFFService.Merge:output_type -> lekko.bff.v1beta1.MergeResponse
+	89,  // 156: lekko.bff.v1beta1.BFFService.Eval:output_type -> lekko.bff.v1beta1.EvalResponse
+	91,  // 157: lekko.bff.v1beta1.BFFService.GetFlagEvaluationMetrics:output_type -> lekko.bff.v1beta1.GetFlagEvaluationMetricsResponse
+	93,  // 158: lekko.bff.v1beta1.BFFService.Restore:output_type -> lekko.bff.v1beta1.RestoreResponse
+	96,  // 159: lekko.bff.v1beta1.BFFService.GetRepositoryLogs:output_type -> lekko.bff.v1beta1.GetRepositoryLogsResponse
+	99,  // 160: lekko.bff.v1beta1.BFFService.GetRollout:output_type -> lekko.bff.v1beta1.GetRolloutResponse
+	119, // [119:161] is the sub-list for method output_type
+	77,  // [77:119] is the sub-list for method input_type
+	77,  // [77:77] is the sub-list for extension type_name
+	77,  // [77:77] is the sub-list for extension extendee
+	0,   // [0:77] is the sub-list for field type_name
 }
 
 func init() { file_lekko_bff_v1beta1_bff_proto_init() }
@@ -8153,7 +8226,7 @@ func file_lekko_bff_v1beta1_bff_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_lekko_bff_v1beta1_bff_proto_rawDesc,
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   103,
 			NumExtensions: 0,
 			NumServices:   1,

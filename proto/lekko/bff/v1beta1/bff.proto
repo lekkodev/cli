@@ -431,6 +431,13 @@ message PullRequest {
     string author_association = 4;
   }
 
+  enum Mergeable {
+    MERGEABLE_UNSPECIFIED = 0;
+    MERGEABLE_PENDING = 1;
+    MERGEABLE_TRUE = 2;
+    MERGEABLE_FALSE = 3;
+  }
+
   string title = 1;
   string url = 2;
   int64 number = 3;
@@ -446,6 +453,7 @@ message PullRequest {
   string head_sha = 11;
   string base_ref = 12;
   string base_sha = 13;
+  Mergeable mergeable = 14;
 }
 
 message GetPRInfoRequest {
