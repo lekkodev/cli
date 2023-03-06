@@ -200,13 +200,19 @@ func (ChecksState) EnumDescriptor() ([]byte, []int) {
 	return file_lekko_bff_v1beta1_bff_proto_rawDescGZIP(), []int{2}
 }
 
+// Specifies whether or not this pull request can be merged.
 type PullRequest_Mergeable int32
 
 const (
 	PullRequest_MERGEABLE_UNSPECIFIED PullRequest_Mergeable = 0
-	PullRequest_MERGEABLE_PENDING     PullRequest_Mergeable = 1
-	PullRequest_MERGEABLE_TRUE        PullRequest_Mergeable = 2
-	PullRequest_MERGEABLE_FALSE       PullRequest_Mergeable = 3
+	// GitHub has not yet determined if the PR is mergeable or not.
+	// Try again after some delay.
+	PullRequest_MERGEABLE_PENDING PullRequest_Mergeable = 1
+	// The PR has no merge conflicts with its base, and can be merged.
+	PullRequest_MERGEABLE_TRUE PullRequest_Mergeable = 2
+	// The PR has merge conflicts with its base. It can't be merged
+	// in its current state.
+	PullRequest_MERGEABLE_FALSE PullRequest_Mergeable = 3
 )
 
 // Enum value maps for PullRequest_Mergeable.

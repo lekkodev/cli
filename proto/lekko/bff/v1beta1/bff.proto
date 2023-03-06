@@ -431,10 +431,16 @@ message PullRequest {
     string author_association = 4;
   }
 
+  // Specifies whether or not this pull request can be merged.
   enum Mergeable {
     MERGEABLE_UNSPECIFIED = 0;
+    // GitHub has not yet determined if the PR is mergeable or not.
+    // Try again after some delay.
     MERGEABLE_PENDING = 1;
+    // The PR has no merge conflicts with its base, and can be merged.
     MERGEABLE_TRUE = 2;
+    // The PR has merge conflicts with its base. It can't be merged
+    // in its current state.
     MERGEABLE_FALSE = 3;
   }
 
