@@ -484,6 +484,10 @@ func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feat
 		return nil, err
 	}
 	options := nsfs.toOptions()
+	if len(options) == 1 {
+		// only 1 option, return it
+		return newNSFFromPair(options[0])
+	}
 	var fPath string
 	if err := survey.AskOne(&survey.Select{
 		Message: "Feature:",
