@@ -45,6 +45,8 @@ type AuthServiceClient interface {
 	// that is sent to the same origin for other requests
 	// inside the bff service.
 	Login(context.Context, *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error)
+	// Logout will expire the user's cookie.
+	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
 	// Returns a response indicating if the account already
 	// existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
@@ -71,6 +73,11 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 			baseURL+"/lekko.bff.v1beta1.AuthService/Login",
 			opts...,
 		),
+		logout: connect_go.NewClient[v1beta1.LogoutRequest, v1beta1.LogoutResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.AuthService/Logout",
+			opts...,
+		),
 		registerUser: connect_go.NewClient[v1beta1.RegisterUserRequest, v1beta1.RegisterUserResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.AuthService/RegisterUser",
@@ -92,6 +99,7 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
 	login          *connect_go.Client[v1beta1.LoginRequest, v1beta1.LoginResponse]
+	logout         *connect_go.Client[v1beta1.LogoutRequest, v1beta1.LogoutResponse]
 	registerUser   *connect_go.Client[v1beta1.RegisterUserRequest, v1beta1.RegisterUserResponse]
 	getDeviceCode  *connect_go.Client[v1beta1.GetDeviceCodeRequest, v1beta1.GetDeviceCodeResponse]
 	getAccessToken *connect_go.Client[v1beta1.GetAccessTokenRequest, v1beta1.GetAccessTokenResponse]
@@ -100,6 +108,11 @@ type authServiceClient struct {
 // Login calls lekko.bff.v1beta1.AuthService.Login.
 func (c *authServiceClient) Login(ctx context.Context, req *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error) {
 	return c.login.CallUnary(ctx, req)
+}
+
+// Logout calls lekko.bff.v1beta1.AuthService.Logout.
+func (c *authServiceClient) Logout(ctx context.Context, req *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error) {
+	return c.logout.CallUnary(ctx, req)
 }
 
 // RegisterUser calls lekko.bff.v1beta1.AuthService.RegisterUser.
@@ -123,6 +136,8 @@ type AuthServiceHandler interface {
 	// that is sent to the same origin for other requests
 	// inside the bff service.
 	Login(context.Context, *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error)
+	// Logout will expire the user's cookie.
+	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
 	// Returns a response indicating if the account already
 	// existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
@@ -144,6 +159,11 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect_go.HandlerOpt
 	mux.Handle("/lekko.bff.v1beta1.AuthService/Login", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.AuthService/Login",
 		svc.Login,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.AuthService/Logout", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.AuthService/Logout",
+		svc.Logout,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.AuthService/RegisterUser", connect_go.NewUnaryHandler(
@@ -169,6 +189,10 @@ type UnimplementedAuthServiceHandler struct{}
 
 func (UnimplementedAuthServiceHandler) Login(context.Context, *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.Login is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.Logout is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error) {
