@@ -24,6 +24,8 @@ service AuthService {
   // that is sent to the same origin for other requests
   // inside the bff service.
   rpc Login(LoginRequest) returns (LoginResponse) {}
+  // Logout will expire the user's cookie.
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {}
   // Returns a response indicating if the account already
   // existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
@@ -45,6 +47,10 @@ message LoginRequest {
 }
 
 message LoginResponse {}
+
+message LogoutRequest {}
+
+message LogoutResponse {}
 
 message RegisterUserRequest {
   string username = 1;
