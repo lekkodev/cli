@@ -22,12 +22,12 @@ import "google/protobuf/struct.proto";
 // by ruleslang. A rule is always one of 4 things:
 // 1. Atom -> This is a leaf node in the tree that returns true or false
 // 2. Not -> This negates the result of the underlying Rule.
-// 3. LogicalExpression -> This rule links two rules through an "and" or an "or".
+// 3. LogicalExpression -> This rule links at least two rules through an "and" or an "or".
 // 4. BoolConst -> true or false. This will be used for higher level short-circuits.
-// Parenthases and other logical constructs can all be represented by the correct
+// Parentheses and other logical constructs can all be represented by the correct
 // construction of this rule tree.
 //
-// !(A && B && C) || D can be represented by LogExp ( Not ( LogExp ( LogExp ( Atom(A) && Atom(B) ) && Atom (C))) || Atom(D))
+// !(A && B && C) || D can be represented by LogExp ( Not ( LogExp ( Atom(A) && Atom(B) && Atom(C) )) || Atom(D))
 message Rule {
   oneof rule {
     Atom atom = 1;
