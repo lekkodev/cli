@@ -307,6 +307,8 @@ message ListRepositoryContentsResponse {
   }
 
   repeated NamespaceListItem namespaces = 1;
+  // The parent branch of these repository contents
+  Branch branch = 2;
 }
 
 message GetFeatureRequest {
@@ -320,6 +322,8 @@ message GetFeatureRequest {
 
 message GetFeatureResponse {
   Feature feature = 1;
+  // The parent branch of this feature
+  Branch branch = 2;
 }
 
 message Feature {
