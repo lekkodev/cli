@@ -176,9 +176,14 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			if err != nil {
 				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
 			}
+			astNew, err := parser.BuildASTV3(rulesLang)
+			if err != nil {
+				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
+			}
 			rule := &feature.Rule{
-				Condition:    rulesLang,
-				ConditionAST: ast,
+				Condition:      rulesLang,
+				ConditionAST:   ast,
+				ConditionASTV3: astNew,
 			}
 			goVal, featureType, err := w.extractValue(&r.v)
 			if err != nil {

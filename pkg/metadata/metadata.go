@@ -29,6 +29,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/lekkodev/cli/pkg/fs"
@@ -54,7 +55,6 @@ type NamespaceConfigRepoMetadata struct {
 
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
 const DefaultNamespaceConfigRepoMetadataFileName = "lekko.ns.yaml"
-const LatestNamespaceVersion = "v1beta3"
 const GenFolderPathJSON = "gen/json"
 const GenFolderPathProto = "gen/proto"
 
@@ -97,11 +97,7 @@ func UpdateRootConfigRepoMetadata(ctx context.Context, path string, cw fs.Config
 		return fmt.Errorf("could not parse root metadata: %v", err)
 	}
 	f(&rootMetadata)
-	bytes, err := MarshalYAML(&rootMetadata)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal updated yaml")
-	}
-	if err := cw.WriteFile(filepath.Join(path, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
+	if err = writeYAML(cw, &rootMetadata, filepath.Join(path, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
 		return errors.Wrap(err, "failed to write root md file")
 	}
 	return nil
@@ -122,33 +118,45 @@ func ParseNamespaceMetadataStrict(ctx context.Context, rootPath, namespaceName s
 	return &nsConfig, nil
 }
 
-func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, cw fs.ConfigWriter) error {
+func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, cw fs.ConfigWriter, version string) error {
 	if err := cw.MkdirAll(filepath.Join(rootPath, namespaceName), 0755); err != nil {
 		return errors.Wrap(err, "failed to mkdir")
 	}
-	nsConfig := NamespaceConfigRepoMetadata{
-		Version: LatestNamespaceVersion,
+	if err := writeYAML(cw, &NamespaceConfigRepoMetadata{
+		Version: version,
 		Name:    namespaceName,
+	}, filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), 0600); err != nil {
+		return errors.Wrap(err, "failed to write namespace metadata")
 	}
-	bytes, err := MarshalYAML(&nsConfig)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal yaml")
-	}
-	if err := cw.WriteFile(filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write file")
-	}
+
 	// now, add the new namespace to the root repo metadata
 	rootMD, _, err := ParseFullConfigRepoMetadataStrict(ctx, rootPath, cw)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse root config repo metadata")
 	}
 	rootMD.Namespaces = append(rootMD.Namespaces, namespaceName)
-	bytes, err = MarshalYAML(rootMD)
-	if err != nil {
-		return errors.Wrap(err, "failed to marshal root config repo metadata into yaml")
-	}
-	if err = cw.WriteFile(filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), bytes, 0644); err != nil {
+	if err = writeYAML(cw, rootMD, filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
 		return errors.Wrap(err, "failed to write root config repo metadata")
+	}
+	return nil
+}
+
+func UpdateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string, cw fs.ConfigWriter, f func(*NamespaceConfigRepoMetadata)) error {
+	existing, err := ParseNamespaceMetadataStrict(ctx, rootPath, namespaceName, cw)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse namespace metadata")
+	}
+	f(existing)
+	return writeYAML(cw, existing, filepath.Join(rootPath, namespaceName, DefaultNamespaceConfigRepoMetadataFileName), 0600)
+}
+
+func writeYAML(cw fs.ConfigWriter, goStruct interface{}, filename string, perm os.FileMode) error {
+	bytes, err := MarshalYAML(goStruct)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal yaml")
+	}
+	if err := cw.WriteFile(filename, bytes, perm); err != nil {
+		return errors.Wrap(err, "failed to write file")
 	}
 	return nil
 }
