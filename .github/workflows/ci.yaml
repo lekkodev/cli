@@ -4,14 +4,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v3
       - name: Configure git for private modules
         env:
           TOKEN: ${{ secrets.CI_PERSONAL_ACCESS_TOKEN }}
         run: git config --global --add url."https://lekkoci:${TOKEN}@github.com".insteadOf "https://github.com"
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.CI_PERSONAL_ACCESS_TOKEN }}
+      - uses: bufbuild/buf-lint-action@v1
       - name: setup-go
         if: success()
         uses: actions/setup-go@v2
