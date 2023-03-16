@@ -26,8 +26,7 @@ service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
   // Logout will expire the user's cookie.
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
-  // Returns a response indicating if the account already
-  // existed.
+  // Returns a response indicating if the account already existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
 
   /* The following rpcs implement part of the OAuth 2.0 Device Authorization Grant
