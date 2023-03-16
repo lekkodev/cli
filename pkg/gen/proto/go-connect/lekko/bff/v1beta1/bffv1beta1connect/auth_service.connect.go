@@ -47,8 +47,7 @@ type AuthServiceClient interface {
 	Login(context.Context, *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error)
 	// Logout will expire the user's cookie.
 	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
-	// Returns a response indicating if the account already
-	// existed.
+	// Returns a response indicating if the account already existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
 	// An rpc that a 3rd party device makes to our backend to obtain device and user
 	// codes to complete device oauth.
@@ -138,8 +137,7 @@ type AuthServiceHandler interface {
 	Login(context.Context, *connect_go.Request[v1beta1.LoginRequest]) (*connect_go.Response[v1beta1.LoginResponse], error)
 	// Logout will expire the user's cookie.
 	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
-	// Returns a response indicating if the account already
-	// existed.
+	// Returns a response indicating if the account already existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
 	// An rpc that a 3rd party device makes to our backend to obtain device and user
 	// codes to complete device oauth.
