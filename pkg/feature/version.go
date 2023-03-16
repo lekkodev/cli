@@ -89,3 +89,7 @@ func (nv NamespaceVersion) Before(cmp NamespaceVersion) bool {
 	}
 	return myIdx < cmpIdx
 }
+
+func (nv NamespaceVersion) String() string {
+	return string(nv)
+}
