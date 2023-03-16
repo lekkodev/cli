@@ -25,6 +25,7 @@ const (
 	NamespaceVersionV1Beta1 NamespaceVersion = "v1beta1"
 	NamespaceVersionV1Beta2 NamespaceVersion = "v1beta2"
 	NamespaceVersionV1Beta3 NamespaceVersion = "v1beta3"
+	// Supports generating n-ary rules AST
 	NamespaceVersionV1Beta4 NamespaceVersion = "v1beta4"
 )
 
