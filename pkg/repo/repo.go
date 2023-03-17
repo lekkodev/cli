@@ -84,6 +84,8 @@ type GitRepository interface {
 	// new branch locally. branchName must be sufficiently unique.
 	NewRemoteBranch(branchName string) error
 	Read(path string) ([]byte, error)
+	Status() (git.Status, error)
+	HeadCommit() (*object.Commit, error)
 }
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
@@ -376,11 +378,12 @@ func (r *repository) Hash() (string, error) {
 }
 
 func (r *repository) headHash() (*plumbing.Hash, error) {
-	hash, err := r.repo.ResolveRevision(plumbing.Revision(plumbing.HEAD))
+	ref, err := r.repo.Head()
 	if err != nil {
-		return &plumbing.Hash{}, errors.Wrap(err, "resolve revision")
+		return nil, err
 	}
-	return hash, nil
+	hash := ref.Hash()
+	return &hash, nil
 }
 
 func (r *repository) ensureMainBranch(ap AuthProvider) error {
@@ -463,6 +466,18 @@ func (r *repository) IsClean() (bool, error) {
 		return false, errors.Wrap(err, "status")
 	}
 	return st.IsClean(), nil
+}
+
+func (r *repository) Status() (git.Status, error) {
+	return r.wt.Status()
+}
+
+func (r *repository) HeadCommit() (*object.Commit, error) {
+	hash, err := r.headHash()
+	if err != nil {
+		return nil, errors.Wrap(err, "resolve head")
+	}
+	return r.repo.CommitObject(*hash)
 }
 
 // Creates new remote branch config at the given sha, and checks out the
