@@ -235,6 +235,6 @@ func errMismatchedType(actual interface{}, expected ...string) error {
 	return errors.Wrapf(ErrMismatchedType, "expected %v, got %T", strings.Join(expected, ","), actual)
 }
 
-func errUnsupportedType(co rulesv1beta2.ComparisonOperator, actual *structpb.Value) error {
+func errUnsupportedType(co fmt.Stringer, actual *structpb.Value) error {
 	return errors.Wrapf(ErrUnsupportedType, "rule type %T for comparison operator %s", actual.GetKind(), co.String())
 }
