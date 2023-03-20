@@ -18,6 +18,7 @@ package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
 import "lekko/rules/v1beta2/rules.proto";
+import "lekko/rules/v1beta3/rules.proto";
 
 // A prototype of the wrapper type that will be used to house all feature flags for
 // the 'homegrown' feature flagging solution:
@@ -68,4 +69,7 @@ message Constraint {
   // Rules AST used for rules evaluation. It is a strict derivative of the
   // string rule above.
   lekko.rules.v1beta2.Rule rule_ast = 4;
+
+  // Rules AST used for rules evaluation. It is an n-ary tree.
+  lekko.rules.v1beta3.Rule rule_ast_new = 5;
 }

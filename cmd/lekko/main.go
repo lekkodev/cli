@@ -104,7 +104,7 @@ func formatCmd() *cobra.Command {
 }
 
 func compileCmd() *cobra.Command {
-	var force, dryRun bool
+	var force, dryRun, upgrade bool
 	cmd := &cobra.Command{
 		Use:   "compile [namespace[/feature]]",
 		Short: "compiles features based on individual definitions",
@@ -142,7 +142,8 @@ func compileCmd() *cobra.Command {
 				IgnoreBackwardsCompatibility: force,
 				// don't verify file structure, since we may have not yet generated
 				// the DSLs for newly added features.
-				Verify: false,
+				Verify:  false,
+				Upgrade: upgrade,
 			}); err != nil {
 				return errors.Wrap(err, "compile")
 			}
@@ -151,6 +152,7 @@ func compileCmd() *cobra.Command {
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "skip persisting any newly compiled changes to disk.")
+	cmd.Flags().BoolVarP(&upgrade, "upgrade", "u", false, "upgrade any of the requested namespaces that are behind the latest version.")
 	return cmd
 }
 

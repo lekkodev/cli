@@ -24,7 +24,7 @@ import (
 
 func TestFeatureProtoRoundTripBool(t *testing.T) {
 	f := NewBoolFeature(false)
-	require.NoError(t, f.AddBoolRule("foo", nil, true))
+	require.NoError(t, f.AddBoolRule("foo", nil, nil, true))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -36,7 +36,7 @@ func TestFeatureProtoRoundTripBool(t *testing.T) {
 
 func TestFeatureProtoRoundTripString(t *testing.T) {
 	f := NewStringFeature("a")
-	require.NoError(t, f.AddStringRule("foo", nil, "b"))
+	require.NoError(t, f.AddStringRule("foo", nil, nil, "b"))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -48,7 +48,7 @@ func TestFeatureProtoRoundTripString(t *testing.T) {
 
 func TestFeatureProtoRoundTripInt(t *testing.T) {
 	f := NewIntFeature(1)
-	require.NoError(t, f.AddIntRule("foo", nil, 2))
+	require.NoError(t, f.AddIntRule("foo", nil, nil, 2))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -60,7 +60,7 @@ func TestFeatureProtoRoundTripInt(t *testing.T) {
 
 func TestFeatureProtoRoundTripFloat(t *testing.T) {
 	f := NewFloatFeature(1.2)
-	require.NoError(t, f.AddFloatRule("foo", nil, 3.0))
+	require.NoError(t, f.AddFloatRule("foo", nil, nil, 3.0))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -81,7 +81,7 @@ func TestFeatureProtoRoundTripJSON(t *testing.T) {
 		"a": 1,
 	})
 	require.NoError(t, err)
-	require.NoError(t, f.AddJSONRule("foo", nil, ruleVal))
+	require.NoError(t, f.AddJSONRule("foo", nil, nil, ruleVal))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)

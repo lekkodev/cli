@@ -39,10 +39,9 @@ import (
 // Provides functionality needed for accessing and making changes to Lekko configuration.
 // This interface should make no assumptions about where the configuration is stored.
 type ConfigurationStore interface {
-	CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error)
-	PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error
+	CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, nv feature.NamespaceVersion) (*feature.CompiledFeature, error)
+	PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, nv feature.NamespaceVersion, force bool) error
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
-	FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error)
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	Format(ctx context.Context) error
@@ -63,7 +62,7 @@ type ConfigurationStore interface {
 	RestoreWorkingDirectory(hash string) error
 }
 
-func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string) (*feature.CompiledFeature, error) {
+func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, nv feature.NamespaceVersion) (*feature.CompiledFeature, error) {
 	if !isValidName(namespace) {
 		return nil, errors.Errorf("invalid name '%s'", namespace)
 	}
@@ -76,21 +75,21 @@ func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry
 		return nil, errors.Wrap(err, "registry")
 	}
 	compiler := star.NewCompiler(registry, &ff, r)
-	f, err := compiler.Compile(ctx)
+	f, err := compiler.Compile(ctx, nv)
 	if err != nil {
 		return nil, errors.Wrap(err, "compile")
 	}
 	return f, nil
 }
 
-func (r *repository) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, force bool) error {
+func (r *repository) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, nv feature.NamespaceVersion, force bool) error {
 	registry, err := r.registry(ctx, registry)
 	if err != nil {
 		return errors.Wrap(err, "registry")
 	}
 	ff := feature.NewFeatureFile(namespace, f.Key)
 	compiler := star.NewCompiler(registry, &ff, r)
-	persisted, err := compiler.Persist(ctx, f, force)
+	persisted, err := compiler.Persist(ctx, f, nv, force)
 	if err != nil {
 		return errors.Wrap(err, "persist")
 	}
@@ -118,11 +117,24 @@ type CompileRequest struct {
 	// checks are run. This should be false if we've just added a new .star file and are
 	// compiling it for the first time.
 	Verify bool
+	// If true, and if a version later than the existing namespace version exists,
+	// we will compile the requested feature(s) to the latest version.
+	// Note: if upgrading, no feature filter is allowed to be specified.
+	// That is because you must upgrade an entire namespace at a time.
+	Upgrade bool
+}
+
+func (cr CompileRequest) Validate() error {
+	if cr.Upgrade && len(cr.FeatureFilter) > 0 {
+		return errors.New("cannot provide a feature filter if upgrading an entire namespace")
+	}
+	return nil
 }
 
 type FeatureCompilationResult struct {
 	NamespaceName    string
 	FeatureName      string
+	NamespaceVersion feature.NamespaceVersion
 	CompiledFeature  *feature.CompiledFeature
 	CompilationError error
 }
@@ -190,16 +202,27 @@ func (fcrs FeatureCompilationResults) Err() error {
 }
 
 func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
+	if err := req.Validate(); err != nil {
+		return nil, errors.Wrap(err, "validate request")
+	}
 	// Step 1: collect. Find all features
-	ffs, numNamespaces, err := r.FindFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
+	vffs, numNamespaces, err := r.findVersionedFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
 	if err != nil {
 		return nil, errors.Wrap(err, "find features")
 	}
+	oldNamespaces := make(map[string]struct{})
 	var results FeatureCompilationResults
-	for _, ff := range ffs {
-		results = append(results, &FeatureCompilationResult{NamespaceName: ff.NamespaceName, FeatureName: ff.Name})
+	for _, vff := range vffs {
+		if vff.nv.Before(feature.LatestNamespaceVersion()) {
+			oldNamespaces[vff.ff.NamespaceName] = struct{}{}
+		}
+		desiredVersion := vff.nv
+		if req.Upgrade {
+			desiredVersion = feature.LatestNamespaceVersion()
+		}
+		results = append(results, &FeatureCompilationResult{NamespaceName: vff.ff.NamespaceName, FeatureName: vff.ff.Name, NamespaceVersion: desiredVersion})
 	}
-	r.Logf("Found %d features across %d namespaces\n", len(ffs), numNamespaces)
+	r.Logf("Found %d features across %d namespaces\n", len(vffs), numNamespaces)
 	r.Logf("Compiling...\n")
 	registry, err := r.registry(ctx, req.Registry)
 	if err != nil {
@@ -224,7 +247,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 					if !ok {
 						return
 					}
-					cf, err := r.CompileFeature(ctx, registry, fcr.NamespaceName, fcr.FeatureName)
+					cf, err := r.CompileFeature(ctx, registry, fcr.NamespaceName, fcr.FeatureName, fcr.NamespaceVersion)
 					fcr.CompiledFeature = cf
 					fcr.CompilationError = err
 				}
@@ -282,28 +305,62 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	}
 	if req.Persist {
 		r.Logf("-------------------\n")
+		namespaces := make(map[string]struct{})
 		for _, fcr := range results {
-			if err := r.PersistFeature(ctx, registry, fcr.NamespaceName, fcr.CompiledFeature.Feature, req.IgnoreBackwardsCompatibility); err != nil {
+			namespaces[fcr.NamespaceName] = struct{}{}
+			if err := r.PersistFeature(ctx, registry, fcr.NamespaceName, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility); err != nil {
 				return nil, errors.Wrapf(err, "persist feature %s/%s", fcr.NamespaceName, fcr.FeatureName)
 			}
 		}
+		if req.Upgrade {
+			for ns := range namespaces {
+				if err := metadata.UpdateNamespaceMetadata(ctx, "", ns, r, func(ncrm *metadata.NamespaceConfigRepoMetadata) {
+					ncrm.Version = string(feature.LatestNamespaceVersion())
+				}); err != nil {
+					return nil, errors.Wrapf(err, "failed to upgrade namespace metadata")
+				}
+			}
+		}
+	}
+	// Print upgrade warning
+	if !req.Upgrade && len(oldNamespaces) > 0 {
+		r.Logf("-------------------\n")
+		var oldNamespacesArr []string
+		for oldNS := range oldNamespaces {
+			oldNamespacesArr = append(oldNamespacesArr, oldNS)
+		}
+		sort.Strings(oldNamespacesArr)
+		r.Logf(logging.Yellow("Warning: The following namespaces need an upgrade:\n"))
+		for _, oldNS := range oldNamespacesArr {
+			r.Logf(fmt.Sprintf("\t%s\n", oldNS))
+		}
+		r.Logf("Run '%s' to perform the upgrade.\n", logging.Bold("lekko compile --upgrade"))
 	}
 
 	return results, nil
 }
 
-func (r *repository) FindFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*feature.FeatureFile, int, error) {
+type versionedFeatureFile struct {
+	ff *feature.FeatureFile
+	nv feature.NamespaceVersion
+}
+
+func (r *repository) findVersionedFeatureFiles(ctx context.Context, namespaceFilter, featureFilter string, verify bool) ([]*versionedFeatureFile, int, error) {
 	contents, err := r.GetContents(ctx)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "get contents")
 	}
 	var numNamespaces int
-	var results []*feature.FeatureFile
+	var results []*versionedFeatureFile
 	for nsMD, ffs := range contents {
 		if len(namespaceFilter) > 0 && nsMD.Name != namespaceFilter {
 			continue
 		}
 		numNamespaces++
+		nv, err := feature.NewNamespaceVersion(nsMD.Version)
+		if err != nil {
+			return nil, 0, err
+		}
 		for _, ff := range ffs {
 			ff := ff
 			if len(featureFilter) > 0 && ff.Name != featureFilter {
@@ -317,7 +374,10 @@ func (r *repository) FindFeatureFiles(ctx context.Context, namespaceFilter, feat
 					return nil, 0, errors.Wrapf(err, "feature %s/%s compliance check", ff.NamespaceName, ff.Name)
 				}
 			}
-			results = append(results, &ff)
+			results = append(results, &versionedFeatureFile{
+				ff: &ff,
+				nv: *nv,
+			})
 		}
 	}
 	return results, numNamespaces, nil
@@ -358,11 +418,7 @@ func (r *repository) Format(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "parse metadata")
 	}
-	for ns, nsMD := range nsMDs {
-		if nsMD.Version != metadata.LatestNamespaceVersion {
-			r.Logf("Skipping namespace %s since version %s doesn't conform to compilation\n", ns, nsMD.Version)
-			continue
-		}
+	for ns := range nsMDs {
 		ffs, err := r.GetFeatureFiles(ctx, ns)
 		if err != nil {
 			return errors.Wrap(err, "get feature files")
@@ -457,7 +513,7 @@ func (r *repository) AddNamespace(ctx context.Context, name string) error {
 	_, err := metadata.ParseNamespaceMetadataStrict(ctx, "", name, r)
 	if errors.Is(err, os.ErrNotExist) {
 		// if it doesn't exist, create it and exit.
-		if err := metadata.CreateNamespaceMetadata(ctx, "", name, r); err != nil {
+		if err := metadata.CreateNamespaceMetadata(ctx, "", name, r, string(feature.LatestNamespaceVersion())); err != nil {
 			return errors.Wrap(err, "create ns meta")
 		}
 		return nil

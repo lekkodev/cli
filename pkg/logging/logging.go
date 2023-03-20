@@ -25,6 +25,7 @@ var reset = "\033[0m"
 var red = "\033[31m"
 var green = "\033[32m"
 var bold = "\033[1m"
+var yellow = "\033[33m"
 
 func InitColors() {
 	if runtime.GOOS == "windows" {
@@ -45,4 +46,8 @@ func Red(v interface{}) string {
 
 func Green(v interface{}) string {
 	return fmt.Sprintf("%s%s%s", green, v, reset)
+}
+
+func Yellow(v interface{}) string {
+	return fmt.Sprintf("%s%s%s", yellow, v, reset)
 }

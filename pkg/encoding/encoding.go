@@ -32,7 +32,13 @@ import (
 // type.
 func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
 	switch nsMD.Version {
-	case "v1beta3":
+	case feature.NamespaceVersionV1Beta1.String():
+		fallthrough
+	case feature.NamespaceVersionV1Beta2.String():
+		fallthrough
+	case feature.NamespaceVersionV1Beta3.String():
+		fallthrough
+	case feature.NamespaceVersionV1Beta4.String():
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
 		if err != nil {

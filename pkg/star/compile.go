@@ -33,8 +33,9 @@ import (
 )
 
 type Compiler interface {
-	Compile(context.Context) (*feature.CompiledFeature, error)
-	Persist(context.Context, *feature.Feature, bool) (bool, error)
+	Compile(context.Context, feature.NamespaceVersion) (*feature.CompiledFeature, error)
+	// Returns (persisted, error)
+	Persist(context.Context, *feature.Feature, feature.NamespaceVersion, bool) (bool, error)
 }
 
 type compiler struct {
@@ -55,7 +56,10 @@ func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.C
 	}
 }
 
-func (c *compiler) Compile(ctx context.Context) (*feature.CompiledFeature, error) {
+func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*feature.CompiledFeature, error) {
+	if err := nv.Supported(); err != nil {
+		return nil, err
+	}
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
@@ -77,14 +81,17 @@ func (c *compiler) Compile(ctx context.Context) (*feature.CompiledFeature, error
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	cf, err := newFeatureBuilder(c.ff.Name, globals).Build()
+	cf, err := newFeatureBuilder(c.ff.Name, globals, nv).Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}
 	return cf, nil
 }
 
-func (c *compiler) Persist(ctx context.Context, f *feature.Feature, force bool) (bool, error) {
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, force bool) (bool, error) {
+	if err := nv.Supported(); err != nil {
+		return false, err
+	}
 	fProto, err := f.ToProto()
 	if err != nil {
 		return false, errors.Wrap(err, "feature to proto")
