@@ -22,8 +22,8 @@ import (
 
 func TestPriorVersionsSupported(t *testing.T) {
 	supported := SupportedNamespaceVersions()
-	assert.Contains(t, supported, NamespaceVersionV1Beta1)
-	assert.Contains(t, supported, NamespaceVersionV1Beta2)
+	assert.NotContains(t, supported, NamespaceVersionV1Beta1)
+	assert.NotContains(t, supported, NamespaceVersionV1Beta2)
 	assert.Contains(t, supported, NamespaceVersionV1Beta3)
 	assert.Contains(t, supported, NamespaceVersionV1Beta4)
 }

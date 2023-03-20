@@ -97,7 +97,7 @@ func UpdateRootConfigRepoMetadata(ctx context.Context, path string, cw fs.Config
 		return fmt.Errorf("could not parse root metadata: %v", err)
 	}
 	f(&rootMetadata)
-	if err = writeYAML(cw, &rootMetadata, filepath.Join(path, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
+	if err := writeYAML(cw, &rootMetadata, filepath.Join(path, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
 		return errors.Wrap(err, "failed to write root md file")
 	}
 	return nil
@@ -135,7 +135,7 @@ func CreateNamespaceMetadata(ctx context.Context, rootPath, namespaceName string
 		return errors.Wrap(err, "failed to parse root config repo metadata")
 	}
 	rootMD.Namespaces = append(rootMD.Namespaces, namespaceName)
-	if err = writeYAML(cw, rootMD, filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
+	if err := writeYAML(cw, rootMD, filepath.Join(rootPath, DefaultRootConfigRepoMetadataFileName), 0644); err != nil {
 		return errors.Wrap(err, "failed to write root config repo metadata")
 	}
 	return nil

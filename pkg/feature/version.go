@@ -54,7 +54,15 @@ func AllNamespaceVersions() []NamespaceVersion {
 
 // Returns the list of namespace versions that are supported.
 func SupportedNamespaceVersions() []NamespaceVersion {
-	return AllNamespaceVersions()
+	all := AllNamespaceVersions()
+	start := 0
+	for i, v := range all {
+		if v == NamespaceVersionV1Beta3 { // Last supported version
+			start = i
+			break
+		}
+	}
+	return all[start:]
 }
 
 // Returns the latest namespace version.
