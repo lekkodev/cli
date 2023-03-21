@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -51,7 +52,10 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 	if err != nil {
 		return "", errors.Wrap(err, "wd clean")
 	}
-	var branchName string
+	branchName, err := r.BranchName()
+	if err != nil {
+		return "", err
+	}
 	if main {
 		if clean {
 			return "", errors.Errorf("nothing to review on main with clean wd")
@@ -68,14 +72,17 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
-		branchName, err = r.BranchName()
-		if err != nil {
-			return "", err
-		}
 		if !clean {
 			if _, err := r.Commit(ctx, ap, title); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
+		}
+		// update remote if needed
+		if err := r.repo.PushContext(ctx, &git.PushOptions{
+			RemoteName: RemoteName,
+			Auth:       basicAuth(ap),
+		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return "", errors.Wrap(err, "push")
 		}
 	}
 	url, err := r.createPR(ctx, branchName, title, ghCli)
@@ -97,6 +104,7 @@ func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClie
 	if err != nil {
 		return errors.Wrap(err, "branch name")
 	}
+
 	if prNum == nil {
 		pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
 		if err != nil {
@@ -146,6 +154,7 @@ func (r *repository) createPR(ctx context.Context, branchName, title string, ghC
 	pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
 	if err == nil {
 		// pr already exists
+		r.Logf("Updated existing PR:\n\t%s\n", pr.GetHTMLURL())
 		return pr.GetHTMLURL(), nil
 	}
 	if title == "" {
