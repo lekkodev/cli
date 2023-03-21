@@ -507,6 +507,9 @@ message BranchKey {
   string owner_name = 1;
   string repo_name = 2;
   string name = 3;
+  // random uuid to help identify a request, for
+  // debugging purposes.
+  string uuid = 4;
 }
 
 message CreateBranchRequest {
