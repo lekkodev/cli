@@ -50,22 +50,18 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 		}
 		return !innerPasses, nil
 	case *rulesv1beta3.Rule_LogicalExpression:
-		firstPasses, err := v1b3.evaluateRule(r.LogicalExpression.GetFirstRule(), context)
-		if err != nil {
-			return false, errors.Wrap(err, "first: ")
+		var bools []bool
+		if len(r.LogicalExpression.GetRules()) == 0 {
+			return false, errors.New("no rules found in logical expression")
 		}
-		secondPasses, err := v1b3.evaluateRule(r.LogicalExpression.GetSecondRule(), context)
-		if err != nil {
-			return false, errors.Wrap(err, "second: ")
+		for i, rule := range r.LogicalExpression.GetRules() {
+			passes, err := v1b3.evaluateRule(rule, context)
+			if err != nil {
+				return false, errors.Wrapf(err, "rule idx %d", i)
+			}
+			bools = append(bools, passes)
 		}
-		switch r.LogicalExpression.LogicalOperator {
-		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND:
-			return firstPasses && secondPasses, nil
-		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR:
-			return firstPasses || secondPasses, nil
-		default:
-			return false, errors.Wrapf(ErrUnknownLogicalOperator, "%s", r.LogicalExpression.GetLogicalOperator().String())
-		}
+		return reduce(bools, r.LogicalExpression.LogicalOperator)
 	case *rulesv1beta3.Rule_Atom:
 		contextKey := r.Atom.GetContextKey()
 		runtimeCtxVal, present := context[contextKey]
@@ -102,6 +98,21 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 		}
 	}
 	return false, errors.Errorf("unknown rule type %T", rule.Rule)
+}
+
+func reduce(bools []bool, op rulesv1beta3.LogicalOperator) (bool, error) {
+	ret := op == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND
+	for _, b := range bools {
+		switch op {
+		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND:
+			ret = ret && b
+		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR:
+			ret = ret || b
+		default:
+			return false, errors.Wrap(ErrUnknownLogicalOperator, op.String())
+		}
+	}
+	return ret, nil
 }
 
 // Only accepts bool, number or string ruleVal.
