@@ -81,10 +81,13 @@ type BFFServiceClient interface {
 	// sidebar of the lekko web app.
 	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	GetRepositoryContents(context.Context, *connect_go.Request[v1beta1.GetRepositoryContentsRequest]) (*connect_go.Response[v1beta1.GetRepositoryContentsResponse], error)
 	AddNamespace(context.Context, *connect_go.Request[v1beta1.AddNamespaceRequest]) (*connect_go.Response[v1beta1.AddNamespaceResponse], error)
 	RemoveNamespace(context.Context, *connect_go.Request[v1beta1.RemoveNamespaceRequest]) (*connect_go.Response[v1beta1.RemoveNamespaceResponse], error)
 	AddFeature(context.Context, *connect_go.Request[v1beta1.AddFeatureRequest]) (*connect_go.Response[v1beta1.AddFeatureResponse], error)
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
+	// Saves a feature to the local repo, and runs compilation
+	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
 	// Get info about multiple PRs in a repository
 	//
 	// Deprecated: do not use.
@@ -98,8 +101,6 @@ type BFFServiceClient interface {
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
 	DeleteBranch(context.Context, *connect_go.Request[v1beta1.DeleteBranchRequest]) (*connect_go.Response[v1beta1.DeleteBranchResponse], error)
-	// Saves a feature to the local repo, and runs compilation
-	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
 	// Review opens a pull request against main using the currently committed changes.
 	Review(context.Context, *connect_go.Request[v1beta1.ReviewRequest]) (*connect_go.Response[v1beta1.ReviewResponse], error)
 	// Merges the pull request based on the given session.
@@ -243,6 +244,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetFeature",
 			opts...,
 		),
+		getRepositoryContents: connect_go.NewClient[v1beta1.GetRepositoryContentsRequest, v1beta1.GetRepositoryContentsResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/GetRepositoryContents",
+			opts...,
+		),
 		addNamespace: connect_go.NewClient[v1beta1.AddNamespaceRequest, v1beta1.AddNamespaceResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/AddNamespace",
@@ -261,6 +267,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		removeFeature: connect_go.NewClient[v1beta1.RemoveFeatureRequest, v1beta1.RemoveFeatureResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/RemoveFeature",
+			opts...,
+		),
+		save: connect_go.NewClient[v1beta1.SaveRequest, v1beta1.SaveResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/Save",
 			opts...,
 		),
 		getPRInfo: connect_go.NewClient[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse](
@@ -291,11 +302,6 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 		deleteBranch: connect_go.NewClient[v1beta1.DeleteBranchRequest, v1beta1.DeleteBranchResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/DeleteBranch",
-			opts...,
-		),
-		save: connect_go.NewClient[v1beta1.SaveRequest, v1beta1.SaveResponse](
-			httpClient,
-			baseURL+"/lekko.bff.v1beta1.BFFService/Save",
 			opts...,
 		),
 		review: connect_go.NewClient[v1beta1.ReviewRequest, v1beta1.ReviewResponse](
@@ -362,17 +368,18 @@ type bFFServiceClient struct {
 	listFeatures             *connect_go.Client[v1beta1.ListFeaturesRequest, v1beta1.ListFeaturesResponse]
 	listRepositoryContents   *connect_go.Client[v1beta1.ListRepositoryContentsRequest, v1beta1.ListRepositoryContentsResponse]
 	getFeature               *connect_go.Client[v1beta1.GetFeatureRequest, v1beta1.GetFeatureResponse]
+	getRepositoryContents    *connect_go.Client[v1beta1.GetRepositoryContentsRequest, v1beta1.GetRepositoryContentsResponse]
 	addNamespace             *connect_go.Client[v1beta1.AddNamespaceRequest, v1beta1.AddNamespaceResponse]
 	removeNamespace          *connect_go.Client[v1beta1.RemoveNamespaceRequest, v1beta1.RemoveNamespaceResponse]
 	addFeature               *connect_go.Client[v1beta1.AddFeatureRequest, v1beta1.AddFeatureResponse]
 	removeFeature            *connect_go.Client[v1beta1.RemoveFeatureRequest, v1beta1.RemoveFeatureResponse]
+	save                     *connect_go.Client[v1beta1.SaveRequest, v1beta1.SaveResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
 	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
 	mergePR                  *connect_go.Client[v1beta1.MergePRRequest, v1beta1.MergePRResponse]
 	createBranch             *connect_go.Client[v1beta1.CreateBranchRequest, v1beta1.CreateBranchResponse]
 	listBranches             *connect_go.Client[v1beta1.ListBranchesRequest, v1beta1.ListBranchesResponse]
 	deleteBranch             *connect_go.Client[v1beta1.DeleteBranchRequest, v1beta1.DeleteBranchResponse]
-	save                     *connect_go.Client[v1beta1.SaveRequest, v1beta1.SaveResponse]
 	review                   *connect_go.Client[v1beta1.ReviewRequest, v1beta1.ReviewResponse]
 	merge                    *connect_go.Client[v1beta1.MergeRequest, v1beta1.MergeResponse]
 	eval                     *connect_go.Client[v1beta1.EvalRequest, v1beta1.EvalResponse]
@@ -506,6 +513,11 @@ func (c *bFFServiceClient) GetFeature(ctx context.Context, req *connect_go.Reque
 	return c.getFeature.CallUnary(ctx, req)
 }
 
+// GetRepositoryContents calls lekko.bff.v1beta1.BFFService.GetRepositoryContents.
+func (c *bFFServiceClient) GetRepositoryContents(ctx context.Context, req *connect_go.Request[v1beta1.GetRepositoryContentsRequest]) (*connect_go.Response[v1beta1.GetRepositoryContentsResponse], error) {
+	return c.getRepositoryContents.CallUnary(ctx, req)
+}
+
 // AddNamespace calls lekko.bff.v1beta1.BFFService.AddNamespace.
 func (c *bFFServiceClient) AddNamespace(ctx context.Context, req *connect_go.Request[v1beta1.AddNamespaceRequest]) (*connect_go.Response[v1beta1.AddNamespaceResponse], error) {
 	return c.addNamespace.CallUnary(ctx, req)
@@ -524,6 +536,11 @@ func (c *bFFServiceClient) AddFeature(ctx context.Context, req *connect_go.Reque
 // RemoveFeature calls lekko.bff.v1beta1.BFFService.RemoveFeature.
 func (c *bFFServiceClient) RemoveFeature(ctx context.Context, req *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error) {
 	return c.removeFeature.CallUnary(ctx, req)
+}
+
+// Save calls lekko.bff.v1beta1.BFFService.Save.
+func (c *bFFServiceClient) Save(ctx context.Context, req *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
+	return c.save.CallUnary(ctx, req)
 }
 
 // GetPRInfo calls lekko.bff.v1beta1.BFFService.GetPRInfo.
@@ -558,11 +575,6 @@ func (c *bFFServiceClient) ListBranches(ctx context.Context, req *connect_go.Req
 // DeleteBranch calls lekko.bff.v1beta1.BFFService.DeleteBranch.
 func (c *bFFServiceClient) DeleteBranch(ctx context.Context, req *connect_go.Request[v1beta1.DeleteBranchRequest]) (*connect_go.Response[v1beta1.DeleteBranchResponse], error) {
 	return c.deleteBranch.CallUnary(ctx, req)
-}
-
-// Save calls lekko.bff.v1beta1.BFFService.Save.
-func (c *bFFServiceClient) Save(ctx context.Context, req *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
-	return c.save.CallUnary(ctx, req)
 }
 
 // Review calls lekko.bff.v1beta1.BFFService.Review.
@@ -642,10 +654,13 @@ type BFFServiceHandler interface {
 	// sidebar of the lekko web app.
 	ListRepositoryContents(context.Context, *connect_go.Request[v1beta1.ListRepositoryContentsRequest]) (*connect_go.Response[v1beta1.ListRepositoryContentsResponse], error)
 	GetFeature(context.Context, *connect_go.Request[v1beta1.GetFeatureRequest]) (*connect_go.Response[v1beta1.GetFeatureResponse], error)
+	GetRepositoryContents(context.Context, *connect_go.Request[v1beta1.GetRepositoryContentsRequest]) (*connect_go.Response[v1beta1.GetRepositoryContentsResponse], error)
 	AddNamespace(context.Context, *connect_go.Request[v1beta1.AddNamespaceRequest]) (*connect_go.Response[v1beta1.AddNamespaceResponse], error)
 	RemoveNamespace(context.Context, *connect_go.Request[v1beta1.RemoveNamespaceRequest]) (*connect_go.Response[v1beta1.RemoveNamespaceResponse], error)
 	AddFeature(context.Context, *connect_go.Request[v1beta1.AddFeatureRequest]) (*connect_go.Response[v1beta1.AddFeatureResponse], error)
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
+	// Saves a feature to the local repo, and runs compilation
+	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
 	// Get info about multiple PRs in a repository
 	//
 	// Deprecated: do not use.
@@ -659,8 +674,6 @@ type BFFServiceHandler interface {
 	CreateBranch(context.Context, *connect_go.Request[v1beta1.CreateBranchRequest]) (*connect_go.Response[v1beta1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect_go.Request[v1beta1.ListBranchesRequest]) (*connect_go.Response[v1beta1.ListBranchesResponse], error)
 	DeleteBranch(context.Context, *connect_go.Request[v1beta1.DeleteBranchRequest]) (*connect_go.Response[v1beta1.DeleteBranchResponse], error)
-	// Saves a feature to the local repo, and runs compilation
-	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
 	// Review opens a pull request against main using the currently committed changes.
 	Review(context.Context, *connect_go.Request[v1beta1.ReviewRequest]) (*connect_go.Response[v1beta1.ReviewResponse], error)
 	// Merges the pull request based on the given session.
@@ -801,6 +814,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 		svc.GetFeature,
 		opts...,
 	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/GetRepositoryContents", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/GetRepositoryContents",
+		svc.GetRepositoryContents,
+		opts...,
+	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/AddNamespace", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/AddNamespace",
 		svc.AddNamespace,
@@ -819,6 +837,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/RemoveFeature", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/RemoveFeature",
 		svc.RemoveFeature,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/Save", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/Save",
+		svc.Save,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetPRInfo", connect_go.NewUnaryHandler(
@@ -849,11 +872,6 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/DeleteBranch", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/DeleteBranch",
 		svc.DeleteBranch,
-		opts...,
-	))
-	mux.Handle("/lekko.bff.v1beta1.BFFService/Save", connect_go.NewUnaryHandler(
-		"/lekko.bff.v1beta1.BFFService/Save",
-		svc.Save,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/Review", connect_go.NewUnaryHandler(
@@ -993,6 +1011,10 @@ func (UnimplementedBFFServiceHandler) GetFeature(context.Context, *connect_go.Re
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetFeature is not implemented"))
 }
 
+func (UnimplementedBFFServiceHandler) GetRepositoryContents(context.Context, *connect_go.Request[v1beta1.GetRepositoryContentsRequest]) (*connect_go.Response[v1beta1.GetRepositoryContentsResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetRepositoryContents is not implemented"))
+}
+
 func (UnimplementedBFFServiceHandler) AddNamespace(context.Context, *connect_go.Request[v1beta1.AddNamespaceRequest]) (*connect_go.Response[v1beta1.AddNamespaceResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.AddNamespace is not implemented"))
 }
@@ -1007,6 +1029,10 @@ func (UnimplementedBFFServiceHandler) AddFeature(context.Context, *connect_go.Re
 
 func (UnimplementedBFFServiceHandler) RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.RemoveFeature is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.Save is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
@@ -1031,10 +1057,6 @@ func (UnimplementedBFFServiceHandler) ListBranches(context.Context, *connect_go.
 
 func (UnimplementedBFFServiceHandler) DeleteBranch(context.Context, *connect_go.Request[v1beta1.DeleteBranchRequest]) (*connect_go.Response[v1beta1.DeleteBranchResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.DeleteBranch is not implemented"))
-}
-
-func (UnimplementedBFFServiceHandler) Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
-	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.Save is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) Review(context.Context, *connect_go.Request[v1beta1.ReviewRequest]) (*connect_go.Response[v1beta1.ReviewResponse], error) {
