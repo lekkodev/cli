@@ -205,9 +205,14 @@ func genConstraint(ruleStr string, value *anypb.Any, constraints ...*featurev1be
 	if err != nil {
 		log.Fatal(err)
 	}
+	ruleASTV3, err := parser.BuildASTV3(ruleStr)
+	if err != nil {
+		log.Fatal(err)
+	}
 	return &featurev1beta1.Constraint{
 		Rule:        ruleStr,
 		RuleAst:     ruleAST,
+		RuleAstNew:  ruleASTV3,
 		Value:       value,
 		Constraints: constraints,
 	}
