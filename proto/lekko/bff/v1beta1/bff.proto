@@ -336,7 +336,9 @@ message RepositoryContents {
 message GetRepositoryContentsRequest {
   BranchKey key = 1;
   // The feature contents that should be returned.
-  // If empty, no feature is returned.
+  // If empty, no feature is returned. If either
+  // one of the following two fields are provided,
+  // the other one must be provided as well.
   string namespace_name = 2;
   string feature_name = 3;
 }
@@ -378,6 +380,7 @@ message AddNamespaceRequest {
 }
 
 message AddNamespaceResponse {
+  // Contents don't include a feature
   RepositoryContents contents = 1;
 }
 
@@ -387,6 +390,7 @@ message RemoveNamespaceRequest {
 }
 
 message RemoveNamespaceResponse {
+  // Contents don't include a feature
   RepositoryContents contents = 1;
 }
 
@@ -409,6 +413,7 @@ message AddFeatureRequest {
 }
 
 message AddFeatureResponse {
+  // Contents include the feature that was added
   RepositoryContents contents = 1;
 }
 
@@ -419,6 +424,7 @@ message RemoveFeatureRequest {
 }
 
 message RemoveFeatureResponse {
+  // Contents don't include a feature
   RepositoryContents contents = 1;
 }
 
@@ -595,6 +601,7 @@ message SaveRequest {
 }
 
 message SaveResponse {
+  // Contents include the feature that was saved
   RepositoryContents contents = 1;
 }
 

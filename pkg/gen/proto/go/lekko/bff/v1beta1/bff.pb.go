@@ -2447,7 +2447,9 @@ type GetRepositoryContentsRequest struct {
 
 	Key *BranchKey `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	// The feature contents that should be returned.
-	// If empty, no feature is returned.
+	// If empty, no feature is returned. If either
+	// one of the following two fields are provided,
+	// the other one must be provided as well.
 	NamespaceName string `protobuf:"bytes,2,opt,name=namespace_name,json=namespaceName,proto3" json:"namespace_name,omitempty"`
 	FeatureName   string `protobuf:"bytes,3,opt,name=feature_name,json=featureName,proto3" json:"feature_name,omitempty"`
 }
@@ -2824,6 +2826,7 @@ type AddNamespaceResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Contents don't include a feature
 	Contents *RepositoryContents `protobuf:"bytes,1,opt,name=contents,proto3" json:"contents,omitempty"`
 }
 
@@ -2926,6 +2929,7 @@ type RemoveNamespaceResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Contents don't include a feature
 	Contents *RepositoryContents `protobuf:"bytes,1,opt,name=contents,proto3" json:"contents,omitempty"`
 }
 
@@ -3054,6 +3058,7 @@ type AddFeatureResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Contents include the feature that was added
 	Contents *RepositoryContents `protobuf:"bytes,1,opt,name=contents,proto3" json:"contents,omitempty"`
 }
 
@@ -3164,6 +3169,7 @@ type RemoveFeatureResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Contents don't include a feature
 	Contents *RepositoryContents `protobuf:"bytes,1,opt,name=contents,proto3" json:"contents,omitempty"`
 }
 
@@ -4628,6 +4634,7 @@ type SaveResponse struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
+	// Contents include the feature that was saved
 	Contents *RepositoryContents `protobuf:"bytes,1,opt,name=contents,proto3" json:"contents,omitempty"`
 }
 
