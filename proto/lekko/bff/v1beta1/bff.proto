@@ -73,10 +73,13 @@ service BFFService {
   // sidebar of the lekko web app.
   rpc ListRepositoryContents(ListRepositoryContentsRequest) returns (ListRepositoryContentsResponse) {}
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
+  rpc GetRepositoryContents(GetRepositoryContentsRequest) returns (GetRepositoryContentsResponse) {}
   rpc AddNamespace(AddNamespaceRequest) returns (AddNamespaceResponse) {}
   rpc RemoveNamespace(RemoveNamespaceRequest) returns (RemoveNamespaceResponse) {}
   rpc AddFeature(AddFeatureRequest) returns (AddFeatureResponse) {}
   rpc RemoveFeature(RemoveFeatureRequest) returns (RemoveFeatureResponse) {}
+  // Saves a feature to the local repo, and runs compilation
+  rpc Save(SaveRequest) returns (SaveResponse) {}
 
   // Get info about multiple PRs in a repository
   rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
@@ -98,8 +101,6 @@ service BFFService {
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse) {}
   rpc DeleteBranch(DeleteBranchRequest) returns (DeleteBranchResponse) {}
 
-  // Saves a feature to the local repo, and runs compilation
-  rpc Save(SaveRequest) returns (SaveResponse) {}
   // Review opens a pull request against main using the currently committed changes.
   rpc Review(ReviewRequest) returns (ReviewResponse) {}
   // Merges the pull request based on the given session.
@@ -311,6 +312,39 @@ message ListRepositoryContentsResponse {
   Branch branch = 2;
 }
 
+message NamespaceContents {
+  message FeatureListItem {
+    string name = 1;
+  }
+
+  message NamespaceListItem {
+    string name = 1;
+    // version of the namespace in lekko, e.g. 'v1beta3'
+    string version = 2;
+    repeated FeatureListItem features = 3;
+  }
+
+  repeated NamespaceListItem namespaces = 1;
+}
+
+message RepositoryContents {
+  Branch branch = 1;
+  NamespaceContents namespace_contents = 2;
+  Feature feature = 3;
+}
+
+message GetRepositoryContentsRequest {
+  BranchKey key = 1;
+  // The feature contents that should be returned.
+  // If empty, no feature is returned.
+  string namespace_name = 2;
+  string feature_name = 3;
+}
+
+message GetRepositoryContentsResponse {
+  RepositoryContents contents = 1;
+}
+
 message GetFeatureRequest {
   // includes the branch name to fetch from. If 'main',
   // we will fetch from mysql. If not, we will fetch
@@ -343,14 +377,18 @@ message AddNamespaceRequest {
   string namespace_name = 2;
 }
 
-message AddNamespaceResponse {}
+message AddNamespaceResponse {
+  RepositoryContents contents = 1;
+}
 
 message RemoveNamespaceRequest {
   BranchKey key = 1;
   string namespace_name = 2;
 }
 
-message RemoveNamespaceResponse {}
+message RemoveNamespaceResponse {
+  RepositoryContents contents = 1;
+}
 
 enum FeatureType {
   FEATURE_TYPE_UNSPECIFIED = 0;
@@ -370,7 +408,9 @@ message AddFeatureRequest {
   lekko.feature.v1beta1.FeatureType type_new = 5;
 }
 
-message AddFeatureResponse {}
+message AddFeatureResponse {
+  RepositoryContents contents = 1;
+}
 
 message RemoveFeatureRequest {
   BranchKey key = 1;
@@ -378,7 +418,9 @@ message RemoveFeatureRequest {
   string feature_name = 3;
 }
 
-message RemoveFeatureResponse {}
+message RemoveFeatureResponse {
+  RepositoryContents contents = 1;
+}
 
 message OAuthUserRequest {
   // oauth code obtained from the provider (assuming github for now)
@@ -552,7 +594,9 @@ message SaveRequest {
   BranchKey key = 6;
 }
 
-message SaveResponse {}
+message SaveResponse {
+  RepositoryContents contents = 1;
+}
 
 message ReviewRequest {
   reserved 1;
