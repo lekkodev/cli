@@ -34,7 +34,6 @@ import (
 
 type Compiler interface {
 	Compile(context.Context, feature.NamespaceVersion) (*feature.CompiledFeature, error)
-	// Returns (persisted, error)
 	Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, ignoreBackwardsCompatibility, dryRun bool) (persisted bool, diffExists bool, err error)
 }
 
