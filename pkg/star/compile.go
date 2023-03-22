@@ -35,7 +35,7 @@ import (
 type Compiler interface {
 	Compile(context.Context, feature.NamespaceVersion) (*feature.CompiledFeature, error)
 	// Returns (persisted, error)
-	Persist(context.Context, *feature.Feature, feature.NamespaceVersion, bool) (bool, error)
+	Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, ignoreBackwardsCompatibility, dryRun bool) (persisted bool, diffExists bool, err error)
 }
 
 type compiler struct {
@@ -88,52 +88,50 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	return cf, nil
 }
 
-func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, force bool) (bool, error) {
+func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, ignoreBackwardsCompatibility, dryRun bool) (bool, bool, error) {
 	if err := nv.Supported(); err != nil {
-		return false, err
+		return false, false, err
 	}
 	fProto, err := f.ToProto()
 	if err != nil {
-		return false, errors.Wrap(err, "feature to proto")
+		return false, false, errors.Wrap(err, "feature to proto")
 	}
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
 	protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", c.ff.Name))
-	if !force { // check for backwards compatibility
-		diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
-		if err != nil {
-			return false, errors.Wrap(err, "comparing with existing proto")
-		}
-		if !diffExists {
-			// skipping i/o as no diff exists
-			return false, nil
-		}
+	diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
+	if err != nil && !ignoreBackwardsCompatibility { // exit due to backwards incompatibility
+		return false, false, errors.Wrap(err, "comparing with existing proto")
+	}
+	if !diffExists || dryRun {
+		// skipping i/o
+		return false, diffExists, nil
 	}
 
 	// Create the json file
 	jBytes, err := feature.ProtoToJSON(fProto, c.registry)
 	if err != nil {
-		return false, errors.Wrap(err, "proto to json")
+		return false, diffExists, errors.Wrap(err, "proto to json")
 	}
 	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", c.ff.Name))
 	if err := c.cw.MkdirAll(jsonGenPath, 0775); err != nil {
-		return false, errors.Wrap(err, "failed to make gen json directory")
+		return false, diffExists, errors.Wrap(err, "failed to make gen json directory")
 	}
 	if err := c.cw.WriteFile(jsonFile, jBytes, 0600); err != nil {
-		return false, errors.Wrap(err, "failed to write file")
+		return false, diffExists, errors.Wrap(err, "failed to write file")
 	}
 	// Create the proto file
 	pBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(fProto)
 	if err != nil {
-		return false, errors.Wrap(err, "failed to marshal to proto")
+		return false, diffExists, errors.Wrap(err, "failed to marshal to proto")
 	}
 	if err := c.cw.MkdirAll(protoGenPath, 0775); err != nil {
-		return false, errors.Wrap(err, "failed to make gen proto directory")
+		return false, diffExists, errors.Wrap(err, "failed to make gen proto directory")
 	}
 	if err := c.cw.WriteFile(protoBinFile, pBytes, 0600); err != nil {
-		return false, errors.Wrap(err, "failed to write file")
+		return false, diffExists, errors.Wrap(err, "failed to write file")
 	}
-	return true, nil
+	return true, diffExists, nil
 }
 
 // returns true if there is an actual semantic difference between the existing compiled proto,

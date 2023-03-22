@@ -41,6 +41,7 @@ import (
 
 func main() {
 	rootCmd.AddCommand(compileCmd())
+	rootCmd.AddCommand(verifyCmd())
 	rootCmd.AddCommand(commitCmd())
 	rootCmd.AddCommand(reviewCmd())
 	rootCmd.AddCommand(mergeCmd)
@@ -138,7 +139,7 @@ func compileCmd() *cobra.Command {
 				Registry:                     registry,
 				NamespaceFilter:              ns,
 				FeatureFilter:                f,
-				Persist:                      !dryRun,
+				DryRun:                       dryRun,
 				IgnoreBackwardsCompatibility: force,
 				// don't verify file structure, since we may have not yet generated
 				// the DSLs for newly added features.
@@ -153,6 +154,62 @@ func compileCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "skip persisting any newly compiled changes to disk.")
 	cmd.Flags().BoolVarP(&upgrade, "upgrade", "u", false, "upgrade any of the requested namespaces that are behind the latest version.")
+	return cmd
+}
+
+func verifyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "verify [namespace[/feature]]",
+		Short: "verifies features based on individual definitions",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "parse metadata")
+			}
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			var ns, f string
+			if len(args) > 0 {
+				ns, f, err = feature.ParseFeaturePath(args[0])
+				if err != nil {
+					return err
+				}
+			}
+			fcrs, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:        registry,
+				NamespaceFilter: ns,
+				FeatureFilter:   f,
+				DryRun:          true,
+				// don't verify file structure, since we may have not yet generated
+				// the DSLs for newly added features.
+				Verify: true,
+			})
+			if err != nil {
+				return errors.Wrap(err, "compile")
+			}
+			for _, fcr := range fcrs {
+				if fcr.CompilationDiffExists {
+					return errors.Errorf("Found diff in generated files: %s/%s", fcr.NamespaceName, fcr.FeatureName)
+				}
+				if fcr.FormattingDiffExists {
+					return errors.Errorf("Found formatting diff: %s/%s.star", fcr.NamespaceName, fcr.FeatureName)
+				}
+			}
+			return nil
+		},
+	}
 	return cmd
 }
 
@@ -620,7 +677,7 @@ func restoreCmd() *cobra.Command {
 			fmt.Printf("Successfully rebuilt dynamic type registry.\n")
 			if _, err := r.Compile(ctx, &repo.CompileRequest{
 				Registry:                     registry,
-				Persist:                      true,
+				DryRun:                       false,
 				IgnoreBackwardsCompatibility: force,
 			}); err != nil {
 				return errors.Wrap(err, "compile")
