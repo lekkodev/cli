@@ -29,7 +29,7 @@ const (
 )
 
 type Formatter interface {
-	Format(ctx context.Context) (persisted bool, diffExists bool, err error)
+	Format(ctx context.Context) (persisted, diffExists bool, err error)
 }
 
 type formatter struct {
@@ -48,7 +48,7 @@ func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun b
 	}
 }
 
-func (f *formatter) Format(ctx context.Context) (bool, bool, error) {
+func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err error) {
 	data, err := f.cw.GetFileContents(ctx, f.filePath)
 	if err != nil {
 		return false, false, errors.Wrapf(err, "failed to read file %s", f.filePath)
@@ -59,14 +59,14 @@ func (f *formatter) Format(ctx context.Context) (bool, bool, error) {
 		return false, false, errors.Wrap(err, "bparse")
 	}
 	ndata := build.Format(bfile)
-
-	if bytes.Equal(data, ndata) {
+	diffExists = !bytes.Equal(data, ndata)
+	if !diffExists {
 		return false, false, nil
 	}
 	if !f.dryRun {
 		if err := f.cw.WriteFile(f.filePath, ndata, 0600); err != nil {
-			return false, false, errors.Wrap(err, "failed to write file")
+			return false, diffExists, errors.Wrap(err, "failed to write file")
 		}
 	}
-	return true, !f.dryRun, nil
+	return !f.dryRun, diffExists, nil
 }
