@@ -20,6 +20,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "lekko/backend/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
+import "lekko/rules/v1beta3/rules.proto";
 
 // BFFService exposes functionality needed for the lekko UI.
 // All actions will be performed on behalf of a user, who has
@@ -80,6 +81,9 @@ service BFFService {
   rpc RemoveFeature(RemoveFeatureRequest) returns (RemoveFeatureResponse) {}
   // Saves a feature to the local repo, and runs compilation
   rpc Save(SaveRequest) returns (SaveResponse) {}
+
+  // Helper for Rules AST -> String.
+  rpc ConvertRuleToString(ConvertRuleToStringRequest) returns (ConvertRuleToStringResponse) {}
 
   // Get info about multiple PRs in a repository
   rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
@@ -601,6 +605,14 @@ message SaveResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+}
+
+message ConvertRuleToStringRequest {
+  lekko.rules.v1beta3.Rule rule = 1;
+}
+
+message ConvertRuleToStringResponse {
+  string rule_string = 1;
 }
 
 message ReviewRequest {
