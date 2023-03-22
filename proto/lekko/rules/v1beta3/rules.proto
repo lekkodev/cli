@@ -76,6 +76,8 @@ enum ComparisonOperator {
   COMPARISON_OPERATOR_CONTAINS = 9;
   // Present is the only operator that doesn't require a comparison value.
   COMPARISON_OPERATOR_PRESENT = 10;
+  // != only applies to number, string and bool values.
+  COMPARISON_OPERATOR_NOT_EQUALS = 11;
 }
 
 enum LogicalOperator {

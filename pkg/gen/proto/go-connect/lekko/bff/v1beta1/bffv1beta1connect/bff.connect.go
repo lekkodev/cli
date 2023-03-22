@@ -88,6 +88,8 @@ type BFFServiceClient interface {
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
 	// Saves a feature to the local repo, and runs compilation
 	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
+	// Helper for Rules AST -> String.
+	ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error)
 	// Get info about multiple PRs in a repository
 	//
 	// Deprecated: do not use.
@@ -274,6 +276,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/Save",
 			opts...,
 		),
+		convertRuleToString: connect_go.NewClient[v1beta1.ConvertRuleToStringRequest, v1beta1.ConvertRuleToStringResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/ConvertRuleToString",
+			opts...,
+		),
 		getPRInfo: connect_go.NewClient[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetPRInfo",
@@ -374,6 +381,7 @@ type bFFServiceClient struct {
 	addFeature               *connect_go.Client[v1beta1.AddFeatureRequest, v1beta1.AddFeatureResponse]
 	removeFeature            *connect_go.Client[v1beta1.RemoveFeatureRequest, v1beta1.RemoveFeatureResponse]
 	save                     *connect_go.Client[v1beta1.SaveRequest, v1beta1.SaveResponse]
+	convertRuleToString      *connect_go.Client[v1beta1.ConvertRuleToStringRequest, v1beta1.ConvertRuleToStringResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
 	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
 	mergePR                  *connect_go.Client[v1beta1.MergePRRequest, v1beta1.MergePRResponse]
@@ -543,6 +551,11 @@ func (c *bFFServiceClient) Save(ctx context.Context, req *connect_go.Request[v1b
 	return c.save.CallUnary(ctx, req)
 }
 
+// ConvertRuleToString calls lekko.bff.v1beta1.BFFService.ConvertRuleToString.
+func (c *bFFServiceClient) ConvertRuleToString(ctx context.Context, req *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error) {
+	return c.convertRuleToString.CallUnary(ctx, req)
+}
+
 // GetPRInfo calls lekko.bff.v1beta1.BFFService.GetPRInfo.
 //
 // Deprecated: do not use.
@@ -661,6 +674,8 @@ type BFFServiceHandler interface {
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
 	// Saves a feature to the local repo, and runs compilation
 	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
+	// Helper for Rules AST -> String.
+	ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error)
 	// Get info about multiple PRs in a repository
 	//
 	// Deprecated: do not use.
@@ -842,6 +857,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/Save", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/Save",
 		svc.Save,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/ConvertRuleToString", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/ConvertRuleToString",
+		svc.ConvertRuleToString,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/GetPRInfo", connect_go.NewUnaryHandler(
@@ -1033,6 +1053,10 @@ func (UnimplementedBFFServiceHandler) RemoveFeature(context.Context, *connect_go
 
 func (UnimplementedBFFServiceHandler) Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.Save is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.ConvertRuleToString is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) GetPRInfo(context.Context, *connect_go.Request[v1beta1.GetPRInfoRequest]) (*connect_go.Response[v1beta1.GetPRInfoResponse], error) {
