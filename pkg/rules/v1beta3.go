@@ -79,6 +79,12 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 		switch r.Atom.ComparisonOperator {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
 			return v1b3.evaluateEquals(r.Atom.GetComparisonValue(), runtimeCtxVal)
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
+			b, err := v1b3.evaluateEquals(r.Atom.GetComparisonValue(), runtimeCtxVal)
+			if err != nil {
+				return false, err
+			}
+			return !b, nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 			return v1b3.evaluateNumberComparator(r.Atom.ComparisonOperator, r.Atom.GetComparisonValue(), runtimeCtxVal)
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:

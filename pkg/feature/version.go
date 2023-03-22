@@ -27,6 +27,8 @@ const (
 	NamespaceVersionV1Beta3 NamespaceVersion = "v1beta3"
 	// Supports generating n-ary rules AST
 	NamespaceVersionV1Beta4 NamespaceVersion = "v1beta4"
+	// Supports != operator
+	NamespaceVersionV1Beta5 NamespaceVersion = "v1beta5"
 )
 
 var (
@@ -49,6 +51,7 @@ func AllNamespaceVersions() []NamespaceVersion {
 		NamespaceVersionV1Beta2,
 		NamespaceVersionV1Beta3,
 		NamespaceVersionV1Beta4,
+		NamespaceVersionV1Beta5,
 	}
 }
 
@@ -57,7 +60,7 @@ func SupportedNamespaceVersions() []NamespaceVersion {
 	all := AllNamespaceVersions()
 	start := 0
 	for i, v := range all {
-		if v == NamespaceVersionV1Beta3 { // Last supported version
+		if v == NamespaceVersionV1Beta3 { // First supported version
 			start = i
 			break
 		}

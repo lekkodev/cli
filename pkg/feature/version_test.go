@@ -26,6 +26,7 @@ func TestPriorVersionsSupported(t *testing.T) {
 	assert.NotContains(t, supported, NamespaceVersionV1Beta2)
 	assert.Contains(t, supported, NamespaceVersionV1Beta3)
 	assert.Contains(t, supported, NamespaceVersionV1Beta4)
+	assert.Contains(t, supported, NamespaceVersionV1Beta5)
 }
 
 func TestVersionOrder(t *testing.T) {
