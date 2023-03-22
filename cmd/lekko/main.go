@@ -192,9 +192,7 @@ func verifyCmd() *cobra.Command {
 				NamespaceFilter: ns,
 				FeatureFilter:   f,
 				DryRun:          true,
-				// don't verify file structure, since we may have not yet generated
-				// the DSLs for newly added features.
-				Verify: true,
+				Verify:          true,
 			})
 			if err != nil {
 				return errors.Wrap(err, "compile")
