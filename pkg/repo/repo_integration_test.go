@@ -117,7 +117,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 		Registry:        registry,
 		NamespaceFilter: namespace,
 		FeatureFilter:   featureName,
-		Persist:         true,
+		DryRun:          false,
 	})
 	require.NoError(t, err)
 	assert.Len(t, result, 1)

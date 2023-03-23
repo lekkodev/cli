@@ -29,40 +29,44 @@ const (
 )
 
 type Formatter interface {
-	Format(ctx context.Context) (bool, error)
+	Format(ctx context.Context) (persisted, diffExists bool, err error)
 }
 
 type formatter struct {
 	filePath, featureName string
+	dryRun                bool
 
 	cw fs.ConfigWriter
 }
 
-func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter) Formatter {
+func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
 		cw:          cw,
+		dryRun:      dryRun,
 	}
 }
 
-func (f *formatter) Format(ctx context.Context) (bool, error) {
+func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err error) {
 	data, err := f.cw.GetFileContents(ctx, f.filePath)
 	if err != nil {
-		return false, errors.Wrapf(err, "failed to read file %s", f.filePath)
+		return false, false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
 	parser := butils.GetParser(InputTypeAuto)
 	bfile, err := parser(f.filePath, data)
 	if err != nil {
-		return false, errors.Wrap(err, "bparse")
+		return false, false, errors.Wrap(err, "bparse")
 	}
 	ndata := build.Format(bfile)
-
-	if bytes.Equal(data, ndata) {
-		return false, nil
+	diffExists = !bytes.Equal(data, ndata)
+	if !diffExists {
+		return false, false, nil
 	}
-	if err := f.cw.WriteFile(f.filePath, ndata, 0600); err != nil {
-		return false, errors.Wrap(err, "failed to write file")
+	if !f.dryRun {
+		if err := f.cw.WriteFile(f.filePath, ndata, 0600); err != nil {
+			return false, diffExists, errors.Wrap(err, "failed to write file")
+		}
 	}
-	return true, nil
+	return !f.dryRun, diffExists, nil
 }

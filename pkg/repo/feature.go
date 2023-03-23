@@ -39,13 +39,10 @@ import (
 // Provides functionality needed for accessing and making changes to Lekko configuration.
 // This interface should make no assumptions about where the configuration is stored.
 type ConfigurationStore interface {
-	CompileFeature(ctx context.Context, registry *protoregistry.Types, namespace, featureName string, nv feature.NamespaceVersion) (*feature.CompiledFeature, error)
-	PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, nv feature.NamespaceVersion, force bool) error
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	Format(ctx context.Context) error
-	FormatFeature(ctx context.Context, ff feature.FeatureFile) error
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
@@ -82,33 +79,13 @@ func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry
 	return f, nil
 }
 
-func (r *repository) PersistFeature(ctx context.Context, registry *protoregistry.Types, namespace string, f *feature.Feature, nv feature.NamespaceVersion, force bool) error {
-	registry, err := r.registry(ctx, registry)
-	if err != nil {
-		return errors.Wrap(err, "registry")
-	}
-	ff := feature.NewFeatureFile(namespace, f.Key)
-	compiler := star.NewCompiler(registry, &ff, r)
-	persisted, err := compiler.Persist(ctx, f, nv, force)
-	if err != nil {
-		return errors.Wrap(err, "persist")
-	}
-	if persisted {
-		r.Logf("Generated diff for %s/%s\n", namespace, f.Key)
-	}
-	if err := r.FormatFeature(ctx, ff); err != nil {
-		return errors.Wrap(err, "format")
-	}
-	return nil
-}
-
 type CompileRequest struct {
 	// Registry of protobuf types. This field is optional, if it does not exist, it will be instantiated.
 	Registry *protoregistry.Types
 	// Optional fields to filter features by, so as to not compile the entire world.
 	NamespaceFilter, FeatureFilter string
 	// Whether or not to persist the successfully compiled features
-	Persist bool
+	DryRun bool
 	// If true, any generated compilation changes will overwrite previous features
 	// even if there are type mismatches
 	IgnoreBackwardsCompatibility bool
@@ -132,11 +109,13 @@ func (cr CompileRequest) Validate() error {
 }
 
 type FeatureCompilationResult struct {
-	NamespaceName    string
-	FeatureName      string
-	NamespaceVersion feature.NamespaceVersion
-	CompiledFeature  *feature.CompiledFeature
-	CompilationError error
+	NamespaceName         string
+	FeatureName           string
+	NamespaceVersion      feature.NamespaceVersion
+	CompiledFeature       *feature.CompiledFeature
+	CompilationError      error
+	CompilationDiffExists bool
+	FormattingDiffExists  bool
 }
 
 func (fcr *FeatureCompilationResult) SummaryString() string {
@@ -303,25 +282,38 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		// exit (don't persist with errors)
 		return results, results.Err()
 	}
-	if req.Persist {
-		r.Logf("-------------------\n")
-		namespaces := make(map[string]struct{})
-		for _, fcr := range results {
-			namespaces[fcr.NamespaceName] = struct{}{}
-			if err := r.PersistFeature(ctx, registry, fcr.NamespaceName, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility); err != nil {
-				return nil, errors.Wrapf(err, "persist feature %s/%s", fcr.NamespaceName, fcr.FeatureName)
-			}
+
+	// persisting
+	r.Logf("-------------------\n")
+	namespaces := make(map[string]struct{})
+	for _, fcr := range results {
+		namespaces[fcr.NamespaceName] = struct{}{}
+		ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
+		compilePersisted, compileDiffExists, err := star.NewCompiler(registry, &ff, r).Persist(ctx, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility, req.DryRun)
+		if err != nil {
+			return nil, errors.Wrap(err, "persist")
 		}
-		if req.Upgrade {
-			for ns := range namespaces {
-				if err := metadata.UpdateNamespaceMetadata(ctx, "", ns, r, func(ncrm *metadata.NamespaceConfigRepoMetadata) {
-					ncrm.Version = string(feature.LatestNamespaceVersion())
-				}); err != nil {
-					return nil, errors.Wrapf(err, "failed to upgrade namespace metadata")
-				}
+		fcr.CompilationDiffExists = compileDiffExists
+		fmtPersisted, fmtDiffExists, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r, req.DryRun).Format(ctx)
+		if err != nil {
+			return nil, errors.Wrap(err, "format")
+		}
+		fcr.FormattingDiffExists = fmtDiffExists
+		if compilePersisted || fmtPersisted {
+			r.Logf("Generated diff for %s/%s\n", fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
+		}
+	}
+
+	if req.Upgrade && !req.DryRun {
+		for ns := range namespaces {
+			if err := metadata.UpdateNamespaceMetadata(ctx, "", ns, r, func(ncrm *metadata.NamespaceConfigRepoMetadata) {
+				ncrm.Version = string(feature.LatestNamespaceVersion())
+			}); err != nil {
+				return nil, errors.Wrapf(err, "failed to upgrade namespace metadata")
 			}
 		}
 	}
+
 	// Print upgrade warning
 	if !req.Upgrade && len(oldNamespaces) > 0 {
 		r.Logf("-------------------\n")
@@ -335,6 +327,10 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			r.Logf(fmt.Sprintf("\t%s\n", oldNS))
 		}
 		r.Logf("Run '%s' to perform the upgrade.\n", logging.Bold("lekko compile --upgrade"))
+	}
+
+	if req.Upgrade && len(oldNamespaces) == 0 {
+		r.Logf("Nothing to upgrade.\n")
 	}
 
 	return results, nil
@@ -425,22 +421,14 @@ func (r *repository) Format(ctx context.Context) error {
 		}
 
 		for _, ff := range ffs {
-			if err := r.FormatFeature(ctx, ff); err != nil {
+			formatted, _, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r, false).Format(ctx)
+			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
+			if formatted {
+				r.Logf("Formatted and rewrote %s/%s\n", ff.NamespaceName, ff.Name)
+			}
 		}
-	}
-	return nil
-}
-
-func (r *repository) FormatFeature(ctx context.Context, ff feature.FeatureFile) error {
-	formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r)
-	ok, err := formatter.Format(ctx)
-	if err != nil {
-		return errors.Wrap(err, "star format")
-	}
-	if ok {
-		r.Logf("Formatted and rewrote %s/%s\n", ff.NamespaceName, ff.Name)
 	}
 	return nil
 }
