@@ -40,6 +40,7 @@ import (
 )
 
 func main() {
+	rootCmd := rootCmd()
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(verifyCmd())
 	rootCmd.AddCommand(commitCmd())
@@ -74,12 +75,28 @@ func main() {
 	}
 }
 
-var rootCmd = &cobra.Command{
-	Use:           "lekko",
-	Short:         "lekko - dynamic configuration helper",
-	Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
-	SilenceUsage:  true,
-	SilenceErrors: true,
+func rootCmd() *cobra.Command {
+	var environment string
+	cmd := &cobra.Command{
+		Use:           "lekko",
+		Short:         "lekko - dynamic configuration helper",
+		Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			switch environment {
+			case "staging":
+				lekko.URL = "https://staging.api.lekko.dev"
+			case "production":
+				lekko.URL = "https://prod.api.lekko.dev"
+			default:
+				return errors.Errorf("unknown environment: %s", environment)
+			}
+			return nil
+		},
+	}
+	cmd.PersistentFlags().StringVar(&environment, "environment", "production", "target environment [staging, production]")
+	return cmd
 }
 
 func formatCmd() *cobra.Command {
