@@ -293,8 +293,9 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		if err != nil {
 			return nil, errors.Wrap(err, "persist")
 		}
+
 		fcr.CompilationDiffExists = compileDiffExists
-		fmtPersisted, fmtDiffExists, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r, req.DryRun).Format(ctx)
+		fmtPersisted, fmtDiffExists, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, fcr.CompiledFeature.Feature.FeatureType, r, req.DryRun).Format(ctx)
 		if err != nil {
 			return nil, errors.Wrap(err, "format")
 		}
@@ -421,7 +422,7 @@ func (r *repository) Format(ctx context.Context) error {
 		}
 
 		for _, ff := range ffs {
-			formatted, _, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r, false).Format(ctx)
+			formatted, _, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, feature.FeatureType("unknown"), r, false).Format(ctx)
 			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}

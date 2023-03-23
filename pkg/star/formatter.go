@@ -20,6 +20,7 @@ import (
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
@@ -31,15 +32,17 @@ type Formatter interface {
 
 type formatter struct {
 	filePath, featureName string
+	fType                 feature.FeatureType
 	dryRun                bool
 
 	cw fs.ConfigWriter
 }
 
-func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool) Formatter {
+func NewStarFormatter(filePath, featureName string, fType feature.FeatureType, cw fs.ConfigWriter, dryRun bool) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
+		fType:       fType,
 		cw:          cw,
 		dryRun:      dryRun,
 	}
@@ -67,12 +70,19 @@ func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err
 }
 
 func (f *formatter) format(data []byte) ([]byte, error) {
-	// first try static walking
-	ndata, err := static.NewWalker(f.filePath, data).Format()
-	if err != nil && !errors.Is(err, static.ErrUnsupportedStaticParsing) {
-		return nil, errors.Wrap(err, "static parser format")
-	} else if err == nil {
-		return ndata, nil
+	// Static formatter is only supported for primitive types.
+	// Protobuf features cannot be statically parsed.
+	// Json features can be statically parsed, but static mutation
+	// is not roundtrip stable because keys in a json object can be
+	// reordered.
+	if f.fType.IsPrimitive() {
+		// first try static walking
+		ndata, err := static.NewWalker(f.filePath, data).Format()
+		if err != nil && !errors.Is(err, static.ErrUnsupportedStaticParsing) {
+			return nil, errors.Wrap(err, "static parser format")
+		} else if err == nil {
+			return ndata, nil
+		}
 	}
 	// raw formatting without static parsing
 	parser := butils.GetParser(static.InputTypeAuto)

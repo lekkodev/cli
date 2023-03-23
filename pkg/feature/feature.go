@@ -78,6 +78,17 @@ func (ft FeatureType) ToProto() featurev1beta1.FeatureType {
 	}
 }
 
+func (ft FeatureType) IsPrimitive() bool {
+	primitiveTypes := map[FeatureType]struct{}{
+		FeatureTypeBool:   {},
+		FeatureTypeString: {},
+		FeatureTypeInt:    {},
+		FeatureTypeFloat:  {},
+	}
+	_, ok := primitiveTypes[ft]
+	return ok
+}
+
 func FeatureTypeFromProto(ft featurev1beta1.FeatureType) FeatureType {
 	switch ft {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
