@@ -21,11 +21,8 @@ import (
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
-)
-
-const (
-	InputTypeAuto string = "auto"
 )
 
 type Formatter interface {
@@ -53,12 +50,10 @@ func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err
 	if err != nil {
 		return false, false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
-	parser := butils.GetParser(InputTypeAuto)
-	bfile, err := parser(f.filePath, data)
+	ndata, err := f.format(data)
 	if err != nil {
-		return false, false, errors.Wrap(err, "bparse")
+		return false, false, errors.Wrap(err, "static parser format")
 	}
-	ndata := build.Format(bfile)
 	diffExists = !bytes.Equal(data, ndata)
 	if !diffExists {
 		return false, false, nil
@@ -69,4 +64,21 @@ func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err
 		}
 	}
 	return !f.dryRun, diffExists, nil
+}
+
+func (f *formatter) format(data []byte) ([]byte, error) {
+	// first try static walking
+	ndata, err := static.NewWalker(f.filePath, data).Format()
+	if err != nil && !errors.Is(err, static.ErrUnsupportedStaticParsing) {
+		return nil, errors.Wrap(err, "static parser format")
+	} else if err == nil {
+		return ndata, nil
+	}
+	// raw formatting without static parsing
+	parser := butils.GetParser(static.InputTypeAuto)
+	bfile, err := parser(f.filePath, data)
+	if err != nil {
+		return nil, errors.Wrap(err, "bparse")
+	}
+	return build.Format(bfile), nil
 }

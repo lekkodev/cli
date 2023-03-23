@@ -20,14 +20,13 @@ import (
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func testFile(t *testing.T) *build.File {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	p := butils.GetParser(star.InputTypeAuto)
+	p := butils.GetParser(InputTypeAuto)
 	file, err := p("test.star", starBytes)
 	require.NoError(t, err, "failed to parse test star file")
 	return file
