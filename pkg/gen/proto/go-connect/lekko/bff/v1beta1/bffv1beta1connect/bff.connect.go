@@ -86,8 +86,12 @@ type BFFServiceClient interface {
 	RemoveNamespace(context.Context, *connect_go.Request[v1beta1.RemoveNamespaceRequest]) (*connect_go.Response[v1beta1.RemoveNamespaceResponse], error)
 	AddFeature(context.Context, *connect_go.Request[v1beta1.AddFeatureRequest]) (*connect_go.Response[v1beta1.AddFeatureResponse], error)
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
-	// Saves a feature to the local repo, and runs compilation
+	// Saves a feature to the local repo, and runs compilation.
+	// This method relies on static parsing to save content, which is currently
+	// not supported for protobuf features.
 	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
+	// Saves the raw starlark of a feature to the local repo, and runs compilation.
+	SaveStarlark(context.Context, *connect_go.Request[v1beta1.SaveStarlarkRequest]) (*connect_go.Response[v1beta1.SaveStarlarkResponse], error)
 	// Helper for Rules AST -> String.
 	ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error)
 	// Get info about multiple PRs in a repository
@@ -276,6 +280,11 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/Save",
 			opts...,
 		),
+		saveStarlark: connect_go.NewClient[v1beta1.SaveStarlarkRequest, v1beta1.SaveStarlarkResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.BFFService/SaveStarlark",
+			opts...,
+		),
 		convertRuleToString: connect_go.NewClient[v1beta1.ConvertRuleToStringRequest, v1beta1.ConvertRuleToStringResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.BFFService/ConvertRuleToString",
@@ -381,6 +390,7 @@ type bFFServiceClient struct {
 	addFeature               *connect_go.Client[v1beta1.AddFeatureRequest, v1beta1.AddFeatureResponse]
 	removeFeature            *connect_go.Client[v1beta1.RemoveFeatureRequest, v1beta1.RemoveFeatureResponse]
 	save                     *connect_go.Client[v1beta1.SaveRequest, v1beta1.SaveResponse]
+	saveStarlark             *connect_go.Client[v1beta1.SaveStarlarkRequest, v1beta1.SaveStarlarkResponse]
 	convertRuleToString      *connect_go.Client[v1beta1.ConvertRuleToStringRequest, v1beta1.ConvertRuleToStringResponse]
 	getPRInfo                *connect_go.Client[v1beta1.GetPRInfoRequest, v1beta1.GetPRInfoResponse]
 	getPR                    *connect_go.Client[v1beta1.GetPRRequest, v1beta1.GetPRResponse]
@@ -551,6 +561,11 @@ func (c *bFFServiceClient) Save(ctx context.Context, req *connect_go.Request[v1b
 	return c.save.CallUnary(ctx, req)
 }
 
+// SaveStarlark calls lekko.bff.v1beta1.BFFService.SaveStarlark.
+func (c *bFFServiceClient) SaveStarlark(ctx context.Context, req *connect_go.Request[v1beta1.SaveStarlarkRequest]) (*connect_go.Response[v1beta1.SaveStarlarkResponse], error) {
+	return c.saveStarlark.CallUnary(ctx, req)
+}
+
 // ConvertRuleToString calls lekko.bff.v1beta1.BFFService.ConvertRuleToString.
 func (c *bFFServiceClient) ConvertRuleToString(ctx context.Context, req *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error) {
 	return c.convertRuleToString.CallUnary(ctx, req)
@@ -672,8 +687,12 @@ type BFFServiceHandler interface {
 	RemoveNamespace(context.Context, *connect_go.Request[v1beta1.RemoveNamespaceRequest]) (*connect_go.Response[v1beta1.RemoveNamespaceResponse], error)
 	AddFeature(context.Context, *connect_go.Request[v1beta1.AddFeatureRequest]) (*connect_go.Response[v1beta1.AddFeatureResponse], error)
 	RemoveFeature(context.Context, *connect_go.Request[v1beta1.RemoveFeatureRequest]) (*connect_go.Response[v1beta1.RemoveFeatureResponse], error)
-	// Saves a feature to the local repo, and runs compilation
+	// Saves a feature to the local repo, and runs compilation.
+	// This method relies on static parsing to save content, which is currently
+	// not supported for protobuf features.
 	Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error)
+	// Saves the raw starlark of a feature to the local repo, and runs compilation.
+	SaveStarlark(context.Context, *connect_go.Request[v1beta1.SaveStarlarkRequest]) (*connect_go.Response[v1beta1.SaveStarlarkResponse], error)
 	// Helper for Rules AST -> String.
 	ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error)
 	// Get info about multiple PRs in a repository
@@ -857,6 +876,11 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 	mux.Handle("/lekko.bff.v1beta1.BFFService/Save", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.BFFService/Save",
 		svc.Save,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.BFFService/SaveStarlark", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.BFFService/SaveStarlark",
+		svc.SaveStarlark,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.BFFService/ConvertRuleToString", connect_go.NewUnaryHandler(
@@ -1053,6 +1077,10 @@ func (UnimplementedBFFServiceHandler) RemoveFeature(context.Context, *connect_go
 
 func (UnimplementedBFFServiceHandler) Save(context.Context, *connect_go.Request[v1beta1.SaveRequest]) (*connect_go.Response[v1beta1.SaveResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.Save is not implemented"))
+}
+
+func (UnimplementedBFFServiceHandler) SaveStarlark(context.Context, *connect_go.Request[v1beta1.SaveStarlarkRequest]) (*connect_go.Response[v1beta1.SaveStarlarkResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.SaveStarlark is not implemented"))
 }
 
 func (UnimplementedBFFServiceHandler) ConvertRuleToString(context.Context, *connect_go.Request[v1beta1.ConvertRuleToStringRequest]) (*connect_go.Response[v1beta1.ConvertRuleToStringResponse], error) {
