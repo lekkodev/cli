@@ -24,7 +24,6 @@ import (
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
 	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
@@ -39,7 +38,12 @@ var (
 // that hold lekko features.
 type Walker interface {
 	Build() (*feature.Feature, error)
+	// Note: this method will perform mutations based on the V3 ruleslang
+	// AST if it exists. If not, it will fall back to the ruleString
+	// provided in the feature.
 	Mutate(f *feature.Feature) ([]byte, error)
+	// Returns the formatted bytes.
+	Format() ([]byte, error)
 }
 
 type walker struct {
@@ -87,8 +91,16 @@ func (w *walker) Mutate(f *feature.Feature) ([]byte, error) {
 	return t.format(), nil
 }
 
+func (w *walker) Format() ([]byte, error) {
+	f, err := w.Build()
+	if err != nil {
+		return nil, errors.Wrap(err, "build")
+	}
+	return w.Mutate(f)
+}
+
 func (w *walker) genAST() (*build.File, error) {
-	parser := butils.GetParser(star.InputTypeAuto)
+	parser := butils.GetParser(InputTypeAuto)
 	file, err := parser(w.filename, w.starBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "parse")
@@ -150,10 +162,6 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 			if err != nil {
 				return nil, "", errors.Wrap(err, "extract struct elem value")
 			}
-			// structValueVar, ok := vVar.(structpb.Value)
-			// if ok {
-			// 	vVar = structValueVar.Kind
-			// }
 			keyVals[key] = vVar
 		}
 		return keyVals, feature.FeatureTypeJSON, nil
@@ -378,9 +386,16 @@ func (w *walker) mutateRulesFn(f *feature.Feature) rulesFn {
 			if err != nil {
 				return errors.Wrapf(err, "rule %d: gen value", i)
 			}
+			newRuleString := r.Condition
+			if r.ConditionASTV3 != nil {
+				newRuleString, err = parser.RuleToString(r.ConditionASTV3)
+				if err != nil {
+					return errors.Wrap(err, "error attempting to parse v3 rule ast to string")
+				}
+			}
 			newRule := rule{
 				conditionV: &build.StringExpr{
-					Value: r.Condition,
+					Value: newRuleString,
 				},
 				v: gen,
 			}

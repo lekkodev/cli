@@ -26,6 +26,11 @@ func AgeEqualsV3(age float64) *rulesv1beta3.Atom {
 	return AgeV3("==", age)
 }
 
+// age !=
+func AgeNotEqualsV3(age float64) *rulesv1beta3.Atom {
+	return AgeV3("!=", age)
+}
+
 // city ==
 func CityEqualsV3(city string) *rulesv1beta3.Atom {
 	return CityV3("==", city)
@@ -52,6 +57,8 @@ func atomV3(key string, op string, value *structpb.Value) *rulesv1beta3.Atom {
 	switch op {
 	case "==":
 		protoOp = rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS
+	case "!=":
+		protoOp = rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS
 	case "<":
 		protoOp = rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN
 	case ">":

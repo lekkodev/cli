@@ -69,7 +69,7 @@ func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
     default = %s,
     rules = [
         ("age == 10", %s),
-        ("city IN [\"Rome\", \"Milan\"]", %s),
+        ("city in [\"Rome\",\"Milan\"]", %s),
     ],
 )
 `, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
@@ -147,7 +147,23 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
+	f.Rules[0].ConditionASTV3 = nil // set to nil so that mutation favors the raw string
 	f.Rules[0].Condition = "age == 12"
+
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.Contains(t, string(bytes), "age == 12")
+}
+
+func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
+	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	b := testWalker(starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	// the AST takes precedence over the condition string
+	f.Rules[0].ConditionASTV3.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)

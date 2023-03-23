@@ -18,8 +18,17 @@ import (
 	"fmt"
 
 	"github.com/bazelbuild/buildtools/build"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/pkg/errors"
+	"go.starlark.net/starlark"
+)
+
+const (
+	FeatureConstructor   starlark.String = "feature"
+	FeatureVariableName  string          = "result"
+	DefaultValueAttrName string          = "default"
+	DescriptionAttrName  string          = "description"
+	RulesAttrName        string          = "rules"
+	InputTypeAuto        string          = "auto"
 )
 
 func defaultNoop(v *build.Expr) error           { return nil }
@@ -70,14 +79,14 @@ func (t *traverser) traverse() error {
 	if err != nil {
 		return err
 	}
-	defaultExpr, err := ast.get(star.DefaultValueAttrName)
+	defaultExpr, err := ast.get(DefaultValueAttrName)
 	if err != nil {
 		return err
 	}
 	if err := t.defaultFn(defaultExpr); err != nil {
 		return errors.Wrap(err, "default fn")
 	}
-	descriptionExprPtr, err := ast.get(star.DescriptionAttrName)
+	descriptionExprPtr, err := ast.get(DescriptionAttrName)
 	if err != nil {
 		return err
 	}
@@ -150,7 +159,7 @@ func (ast *starFeatureAST) unset(key string) {
 
 func (ast *starFeatureAST) parseRules(fn rulesFn) error {
 	rulesW := &rulesWrapper{}
-	rulesExprPtr, err := ast.get(star.RulesAttrName)
+	rulesExprPtr, err := ast.get(RulesAttrName)
 	if err == nil { // extract existing rules
 		v := *rulesExprPtr
 		listV, ok := v.(*build.ListExpr)
@@ -169,14 +178,14 @@ func (ast *starFeatureAST) parseRules(fn rulesFn) error {
 		return err
 	}
 	if len(rulesW.rules) == 0 {
-		ast.unset(star.RulesAttrName)
+		ast.unset(RulesAttrName)
 		return nil
 	}
 	var newList []build.Expr
 	for _, rule := range rulesW.rules {
 		newList = append(newList, rule.toExpr())
 	}
-	ast.set(star.RulesAttrName, &build.ListExpr{
+	ast.set(RulesAttrName, &build.ListExpr{
 		List:           newList,
 		ForceMultiLine: true,
 	})
@@ -189,11 +198,11 @@ func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 		switch t := expr.(type) {
 		case *build.AssignExpr:
 			lhs, ok := t.LHS.(*build.Ident)
-			if ok && lhs.Name == star.FeatureVariableName {
+			if ok && lhs.Name == FeatureVariableName {
 				rhs, ok := t.RHS.(*build.CallExpr)
 				if ok && len(rhs.List) > 0 {
 					structName, ok := rhs.X.(*build.Ident)
-					if ok && structName.Name == star.FeatureConstructor.GoString() {
+					if ok && structName.Name == FeatureConstructor.GoString() {
 						return &starFeatureAST{rhs}, nil
 					}
 				}

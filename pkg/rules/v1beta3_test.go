@@ -128,6 +128,16 @@ func TestEqualsV3(t *testing.T) {
 			hasError: true,
 		},
 		{
+			atom:     AgeNotEqualsV3(12),
+			context:  CtxBuilder().Age(25).B(),
+			expected: true,
+		},
+		{
+			atom:     AgeNotEqualsV3(12),
+			context:  CtxBuilder().Age(12).B(),
+			expected: false,
+		},
+		{
 			atom:     AgeEqualsV3(12),
 			context:  nil, // not present
 			expected: false,
