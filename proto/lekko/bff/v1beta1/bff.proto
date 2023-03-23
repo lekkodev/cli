@@ -79,8 +79,12 @@ service BFFService {
   rpc RemoveNamespace(RemoveNamespaceRequest) returns (RemoveNamespaceResponse) {}
   rpc AddFeature(AddFeatureRequest) returns (AddFeatureResponse) {}
   rpc RemoveFeature(RemoveFeatureRequest) returns (RemoveFeatureResponse) {}
-  // Saves a feature to the local repo, and runs compilation
+  // Saves a feature to the local repo, and runs compilation.
+  // This method relies on static parsing to save content, which is currently
+  // not supported for protobuf features.
   rpc Save(SaveRequest) returns (SaveResponse) {}
+  // Saves the raw starlark of a feature to the local repo, and runs compilation.
+  rpc SaveStarlark(SaveStarlarkRequest) returns (SaveStarlarkResponse) {}
 
   // Helper for Rules AST -> String.
   rpc ConvertRuleToString(ConvertRuleToStringRequest) returns (ConvertRuleToStringResponse) {}
@@ -602,6 +606,20 @@ message SaveRequest {
 }
 
 message SaveResponse {
+  Branch branch = 1;
+  NamespaceContents namespace_contents = 2;
+  Feature feature = 3;
+}
+
+message SaveStarlarkRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+  // The starlark we wish to save.
+  bytes star = 4;
+}
+
+message SaveStarlarkResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
