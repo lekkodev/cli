@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -30,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -90,7 +92,7 @@ func featureList() *cobra.Command {
 }
 
 func featureAdd() *cobra.Command {
-	var ns, featureName, fType string
+	var ns, featureName, fType, description string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add feature",
@@ -103,20 +105,26 @@ func featureAdd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			nsMDs, err := r.ListNamespaces(cmd.Context())
+			if err != nil {
+				return errors.Wrap(err, "list namespaces")
+			}
 			if len(ns) == 0 {
-				nss, err := r.ListNamespaces(cmd.Context())
-				if err != nil {
-					return errors.Wrap(err, "list namespaces")
-				}
 				var options []string
-				for _, ns := range nss {
-					options = append(options, ns.Name)
+				for _, nsMD := range nsMDs {
+					options = append(options, nsMD.Name)
 				}
 				if err := survey.AskOne(&survey.Select{
 					Message: "Namespace:",
 					Options: options,
 				}, &ns); err != nil {
 					return errors.Wrap(err, "prompt")
+				}
+			}
+			var selectedNSMD *metadata.NamespaceConfigRepoMetadata
+			for _, nsMD := range nsMDs {
+				if nsMD.Name == ns {
+					selectedNSMD = nsMD
 				}
 			}
 			if len(featureName) == 0 {
@@ -134,6 +142,49 @@ func featureAdd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
+			ctx := cmd.Context()
+			if selectedNSMD.Version == feature.NamespaceVersionV2Beta1.String() {
+				md, _, err := r.ParseMetadata(ctx)
+				if err != nil {
+					return errors.Wrap(err, "parse md")
+				}
+				registry, err := r.ReBuildDynamicTypeRegistry(ctx, md.ProtoDirectory)
+				if err != nil {
+					return errors.Wrap(err, "rebuild registry")
+				}
+				var options []string
+				registry.RangeEnums(func(et protoreflect.EnumType) bool {
+					options = append(options, string(et.Descriptor().FullName()))
+					return true
+				})
+				registry.RangeMessages(func(mt protoreflect.MessageType) bool {
+					options = append(options, string(mt.Descriptor().FullName()))
+					return true
+				})
+				sort.Strings(options)
+				var selectedType string
+				if err := survey.AskOne(&survey.Select{
+					Message: "Proto Type:",
+					Options: options,
+				}, &selectedType); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+				fmt.Println("selected:", selectedType)
+				if len(description) == 0 {
+					if err := survey.AskOne(&survey.Input{
+						Message: "Feature description:",
+					}, &description); err != nil {
+						return errors.Wrap(err, "prompt")
+					}
+				}
+				if path, err := r.AddFeatureV2(cmd.Context(), ns, featureName, feature.FeatureType(fType), selectedType, description, registry); err != nil {
+					return errors.Wrap(err, "add feature v2")
+				} else {
+					fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
+					fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
+				}
+				return nil
+			}
 			if path, err := r.AddFeature(cmd.Context(), ns, featureName, feature.FeatureType(fType)); err != nil {
 				return errors.Wrap(err, "add feature")
 			} else {
@@ -146,6 +197,7 @@ func featureAdd() *cobra.Command {
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add feature in")
 	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to add")
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of feature to create")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "description of feature")
 	return cmd
 }
 

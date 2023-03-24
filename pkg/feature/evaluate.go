@@ -144,6 +144,8 @@ type FeatureFile struct {
 	CompiledProtoBinFileName string
 	// name of the namespace directory
 	NamespaceName string
+	// Filename of the template
+	TemplateFileName string
 }
 
 type FeatureContents struct {
@@ -182,6 +184,7 @@ func NewFeatureFile(nsName, featureName string) FeatureFile {
 		StarlarkFileName:         fmt.Sprintf("%s.star", featureName),
 		CompiledJSONFileName:     filepath.Join(metadata.GenFolderPathJSON, fmt.Sprintf("%s.json", featureName)),
 		CompiledProtoBinFileName: filepath.Join(metadata.GenFolderPathProto, fmt.Sprintf("%s.proto.bin", featureName)),
+		TemplateFileName:         fmt.Sprintf("%s.json", featureName),
 	}
 }
 
@@ -259,6 +262,8 @@ func GroupFeatureFiles(
 
 func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
+	case "v2":
+		return nil
 	case "v1beta5":
 		fallthrough
 	case "v1beta4":

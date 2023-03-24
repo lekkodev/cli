@@ -17,6 +17,7 @@ syntax = "proto3";
 package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
 import "lekko/rules/v1beta2/rules.proto";
 import "lekko/rules/v1beta3/rules.proto";
 
@@ -72,4 +73,37 @@ message Constraint {
 
   // Rules AST used for rules evaluation. It is an n-ary tree.
   lekko.rules.v1beta3.Rule rule_ast_new = 5;
+}
+
+message FeatureTemplate {
+  string key = 1;
+  string description = 2;
+  TreeTemplate tree = 3;
+  FeatureType type = 4;
+}
+
+message TreeTemplate {
+  // The default value to fall back to. If there are no constraints/rules
+  // defined, this is what gets returned.
+  google.protobuf.Any value = 1;
+  repeated ConstraintTemplate constraints = 2;
+}
+
+message ConstraintTemplate {
+  // RulesLang string. All edits to ruleslang will be made to
+  // this string for now, and the ast will be derived from it.
+  string rule = 1;
+
+  // This can be empty. If non-empty, and the above rule evaluated to true,
+  // then the rules engine should set its return value to this value.
+  google.protobuf.Any value = 2;
+
+  // If this list is empty, or none of the rules pass,
+  // return the most recent concrete value we traversed.
+  repeated ConstraintTemplate constraints = 3;
+}
+
+message TestOptional {
+  bool a = 1;
+  optional bool b = 2;
 }

@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/mail"
 	"os"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/feature"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/lekko"
@@ -35,12 +37,19 @@ import (
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/spf13/cobra"
 )
 
 func main() {
 	rootCmd := rootCmd()
+	rootCmd.AddCommand(genTemplateCmd())
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(verifyCmd())
 	rootCmd.AddCommand(commitCmd())
@@ -109,6 +118,90 @@ func formatCmd() *cobra.Command {
 	return cmd
 }
 
+func genTemplateCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "gen",
+		Short: "generates v2 config template",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
+			if err != nil {
+				return err
+			}
+			ctx := cmd.Context()
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "parse metadata")
+			}
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			anyField := &anypb.Any{}
+			registry.RangeMessages(func(mt protoreflect.MessageType) bool {
+				fmt.Printf("Registry message type %s\n", mt.Descriptor().FullName())
+				if string(mt.Descriptor().FullName()) == "internal.code.v1beta1.DeploymentInfo" {
+
+					msg := mt.New()
+					if err := anypb.MarshalFrom(anyField, msg.Interface(), proto.MarshalOptions{
+						Deterministic: true,
+					}); err != nil {
+						log.Fatal(errors.Wrap(err, "anypb marshal from"))
+					}
+					fds := mt.Descriptor().Fields()
+					firstFD := fds.Get(0)
+					proto.Marshal(firstFD.Options())
+					x := &descriptorpb.FieldDescriptorProto{}
+					x.ProtoReflect().Descriptor()
+
+					// fmt.Println(mt.Descriptor().Messages())
+					// fmt.Println(mt.Descriptor().Enums())
+					// fmt.Println(mt.Descriptor().Fields())
+					// fmt.Println(mt.Descriptor().IsMapEntry())
+					// fmt.Println(mt.Descriptor().)
+				}
+				return true
+			})
+			fields := make(map[string]*anypb.Any)
+			fields["deployment_info"] = anyField
+			everywhere := wrapperspb.Bool(true)
+			anyEverywhere := &anypb.Any{}
+			anypb.MarshalFrom(anyEverywhere, everywhere, proto.MarshalOptions{
+				Deterministic: true,
+			})
+			fields["deploy_everywhere"] = anyEverywhere
+
+			tmpl := &featurev1beta1.FeatureTemplate{
+				Key:         "test",
+				Description: "testing a new style of feature",
+				Tree:        &featurev1beta1.TreeTemplate{
+					// Fields: fields,
+					// Fd:     &descriptorpb.FieldDescriptorProto{},
+				},
+				Type: featurev1beta1.FeatureType_FEATURE_TYPE_PROTO,
+			}
+
+			bytes, err := protojson.MarshalOptions{
+				Resolver:  registry,
+				Multiline: true,
+			}.Marshal(tmpl)
+			if err != nil {
+				return errors.Wrap(err, "protojson marshal")
+			}
+			if err := r.WriteFile("v2/test.json", bytes, 0600); err != nil {
+				return errors.Wrap(err, "write file")
+			}
+
+			return nil
+		},
+	}
+	return cmd
+}
+
 func compileCmd() *cobra.Command {
 	var force, dryRun, upgrade bool
 	cmd := &cobra.Command{
@@ -133,6 +226,17 @@ func compileCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "rebuild type registry")
 			}
+			registry.RangeMessages(func(mt protoreflect.MessageType) bool {
+				// fmt.Printf("Registry message type %s\n", mt.Descriptor().FullName())
+				// if string(mt.Descriptor().FullName()) == "internal.config.v1beta1.ProductMetadata" {
+				// fmt.Println(mt.Descriptor().Messages())
+				// fmt.Println(mt.Descriptor().Enums())
+				// fmt.Println(mt.Descriptor().Fields())
+				// fmt.Println(mt.Descriptor().IsMapEntry())
+				// fmt.Println(mt.Descriptor().)
+				// }
+				return true
+			})
 			var ns, f string
 			if len(args) > 0 {
 				ns, f, err = feature.ParseFeaturePath(args[0])

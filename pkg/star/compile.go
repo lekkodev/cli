@@ -28,8 +28,10 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 type Compiler interface {
@@ -55,8 +57,93 @@ func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.C
 	}
 }
 
+func (c *compiler) fieldsModule(ctx context.Context, tmpl *featurev1beta1.FeatureTemplate) (*starlarkstruct.Module, error) {
+	msg, err := anypb.UnmarshalNew(tmpl.Tree.Value, proto.UnmarshalOptions{
+		Resolver: c.registry,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "anypb unmarshal")
+	}
+	starProtoValue, err := protomodule.NewMessage(msg)
+	if err != nil {
+		return nil, errors.Wrap(err, "protomodule new msg")
+	}
+
+	// members := make(map[string]starlark.Value)
+	// for key, anyField := range tmpl.Tree.Fields {
+	// 	msg, err := anypb.UnmarshalNew(anyField, proto.UnmarshalOptions{
+	// 		Resolver: c.registry,
+	// 	})
+	// 	if err != nil {
+	// 		return nil, errors.Wrap(err, "anypb unmarshal")
+	// 	}
+
+	// 	bv, ok := msg.(*wrapperspb.BoolValue)
+
+	// 	b := wrapperspb.BoolValue{}
+	// 	if err := anyField.UnmarshalTo(&b); err == nil {
+	// 		fmt.Println("is bool val, ", ok, bv)
+	// 		members[key] = starlark.Bool(b.Value)
+	// 		continue
+	// 	}
+
+	// 	starProto, err := protomodule.NewMessage(msg)
+	// 	if err != nil {
+	// 		return nil, err
+	// 	}
+	// 	members[key] = starProto
+	// }
+	// sv := wrapperspb.String("blah")
+	// msg, err := protomodule.NewMessage(sv)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	return &starlarkstruct.Module{
+		Name: "template",
+		Members: map[string]starlark.Value{
+			"mask": starProtoValue,
+		},
+		// Members: map[string]starlark.Value{
+		// 	"deploy_everywhere": starlark.True,
+		// 	"pods":              starlark.MakeInt(4),
+		// 	// "env":               msg,
+		// 	"str": msg,
+		// },
+	}, nil
+}
+
 func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*feature.CompiledFeature, error) {
+	// if nv == feature.NamespaceVersionV2 {
+	// 	tmpl, err := c.featureTemplate(ctx)
+	// 	if err != nil {
+	// 		return nil, errors.Wrap(err, "feature template")
+	// 	}
+	// 	f, err := templateToFeature(tmpl)
+	// 	if err != nil {
+	// 		return nil, errors.Wrap(err, "template to feature")
+	// 	}
+	// 	return &feature.CompiledFeature{
+	// 		Feature:          f,
+	// 		TestResults:      nil,
+	// 		ValidatorResults: nil,
+	// 	}, nil
+	// }
 	// Execute the starlark file to retrieve its contents (globals)
+
+	// testing merge behavior
+	bf, bt := false, true
+	bva := &featurev1beta1.TestOptional{
+		A: bf,
+		B: &bt,
+	}
+	bvb := &featurev1beta1.TestOptional{
+		A: bt,
+		B: &bf,
+	}
+	proto.Merge(bva, bvb)
+	fmt.Println(bva.String())
+
 	thread := &starlark.Thread{
 		Name: "compile",
 	}
@@ -69,13 +156,40 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	if err != nil {
 		return nil, errors.Wrap(err, "new assert module")
 	}
+	tmplBytes, err := c.cw.GetFileContents(ctx, c.ff.RootPath(fmt.Sprintf("%s.json", c.ff.Name)))
+	if err != nil {
+		return nil, errors.Wrap(err, "read json file")
+	}
+	tmpl := &featurev1beta1.FeatureTemplate{}
+	err = protojson.UnmarshalOptions{Resolver: c.registry}.Unmarshal(tmplBytes, tmpl)
+	if err != nil {
+		return nil, errors.Wrap(err, "protojson unmarshal")
+	}
+	fieldsMod, err := c.fieldsModule(ctx, tmpl)
+	if err != nil {
+		return nil, errors.Wrap(err, "fields mod")
+	}
 	globals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
-		"proto":   protoModule,
-		"assert":  assertModule,
-		"feature": starlark.NewBuiltin("feature", makeFeature),
+		"proto":    protoModule,
+		"assert":   assertModule,
+		"feature":  starlark.NewBuiltin("feature", makeFeature),
+		"template": fieldsMod,
 	})
+	// fmt.Println("Globals", globals["value"])
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
+	}
+	fmt.Println("globals value", globals["value"])
+	message, ok := protomodule.AsProtoMessage(globals["value"])
+	if ok {
+		fmt.Printf("Proto value: %v\n", message)
+
+		any, err := feature.ValToAny(message, feature.FeatureTypeProto)
+		if err != nil {
+			fmt.Printf("err: %v\n", err)
+		} else {
+			fmt.Printf("ANy: %v\n", any.String())
+		}
 	}
 	cf, err := newFeatureBuilder(c.ff.Name, globals, nv).Build()
 	if err != nil {
@@ -125,6 +239,31 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.N
 		return false, diffExists, errors.Wrap(err, "failed to write file")
 	}
 	return true, diffExists, nil
+}
+
+func (c *compiler) featureTemplate(ctx context.Context) (*featurev1beta1.FeatureTemplate, error) {
+	tmpl := &featurev1beta1.FeatureTemplate{}
+	bytes, err := c.cw.GetFileContents(ctx, c.ff.TemplateFileName)
+	if err != nil {
+		return nil, errors.Wrap(err, "get template file contents")
+	}
+	err = protojson.UnmarshalOptions{}.Unmarshal(bytes, tmpl)
+	if err != nil {
+		return nil, errors.Wrap(err, "protojson unmarshal")
+	}
+	return tmpl, nil
+}
+
+func templateToFeature(tmpl *featurev1beta1.FeatureTemplate) (*feature.Feature, error) {
+	ret := &feature.Feature{
+		Key:         tmpl.Key,
+		Description: tmpl.Description,
+		Value:       nil,
+		FeatureType: "",
+		Rules:       []*feature.Rule{},
+		UnitTests:   []*feature.UnitTest{},
+	}
+	return ret, nil
 }
 
 // returns true if there is an actual semantic difference between the existing compiled proto,

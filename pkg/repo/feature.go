@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -27,11 +28,15 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
+	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -44,6 +49,7 @@ type ConfigurationStore interface {
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	Format(ctx context.Context) error
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error)
+	AddFeatureV2(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoFullName, description string, registry *protoregistry.Types) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
@@ -484,6 +490,63 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 		return "", fmt.Errorf("failed to add feature: %v", err)
 	}
 	return featurePath, nil
+}
+
+func (r *repository) AddFeatureV2(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoFullname, description string, registry *protoregistry.Types) (string, error) {
+	if !isValidName(featureName) {
+		return "", errors.Wrap(ErrInvalidName, "feature")
+	}
+	starPath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
+	_, err := r.GetFileContents(ctx, starPath)
+	if err == nil {
+		return "", fmt.Errorf("feature named %s already exists", featureName)
+	}
+	// write the template file
+	defaultAny := &anypb.Any{}
+	mt, err := registry.FindMessageByName(protoreflect.FullName(protoFullname))
+	if err != nil {
+		return "", errors.Wrapf(err, "couldn't find proto message of name %s", protoFullname)
+	}
+
+	if err := anypb.MarshalFrom(defaultAny, mt.New().Interface(), proto.MarshalOptions{
+		Deterministic: true,
+	}); err != nil {
+		return "", errors.Wrap(err, "anypb marshal from")
+	}
+	tmpl := &featurev1beta1.FeatureTemplate{
+		Key:         featureName,
+		Description: description,
+		Type:        featurev1beta1.FeatureType_FEATURE_TYPE_PROTO,
+		Tree: &featurev1beta1.TreeTemplate{
+			Value: defaultAny,
+		},
+	}
+	bytes, err := protojson.MarshalOptions{
+		Resolver:  registry,
+		Multiline: true,
+	}.Marshal(tmpl)
+	if err != nil {
+		return "", errors.Wrap(err, "protojson marshal")
+	}
+	if err := r.WriteFile(path.Join(ns, fmt.Sprintf("%s.json", featureName)), bytes, 0600); err != nil {
+		return "", errors.Wrap(err, "write file")
+	}
+	// write the star file
+	protoStar := `pb = proto.package("%s")
+
+value = template.mask
+
+`
+	parts := strings.Split(protoFullname, ".")
+	pkg := strings.Join(parts[0:len(parts)-1], ".")
+	template := fmt.Sprintf(protoStar, pkg)
+	if err != nil {
+		return "", errors.Wrap(err, "get template")
+	}
+	if err := r.WriteFile(path.Join(ns, fmt.Sprintf("%s.star", featureName)), []byte(template), 0600); err != nil {
+		return "", fmt.Errorf("failed to add feature: %v", err)
+	}
+	return "", nil
 }
 
 // Removes the given feature. If the namespace or feature doesn't exist, returns
