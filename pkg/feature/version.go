@@ -16,7 +16,6 @@ package feature
 
 import (
 	"errors"
-	"fmt"
 )
 
 type NamespaceVersion string
@@ -32,16 +31,12 @@ const (
 )
 
 var (
-	ErrUnsupportedVersion error = errors.New("namespace version is unsupported, please upgrade")
+	ErrDeprecatedVersion error = errors.New("namespace version is deprecated, please upgrade")
+	ErrUnknownVersion    error = errors.New("namespace version is unknown")
 )
 
-func NewNamespaceVersion(v string) (*NamespaceVersion, error) {
-	for _, nv := range AllNamespaceVersions() {
-		if string(nv) == v {
-			return &nv, nil
-		}
-	}
-	return nil, fmt.Errorf("version %s not found", v)
+func NewNamespaceVersion(v string) NamespaceVersion {
+	return NamespaceVersion(v)
 }
 
 // Returns all namespace versions in the order that they were released
@@ -85,11 +80,14 @@ func (nv NamespaceVersion) Supported() error {
 			return nil
 		}
 	}
-	return ErrUnsupportedVersion
+	if nv.Before(all[0]) {
+		return ErrDeprecatedVersion
+	}
+	return ErrUnknownVersion
 }
 
 func (nv NamespaceVersion) Before(cmp NamespaceVersion) bool {
-	var myIdx, cmpIdx int
+	myIdx, cmpIdx := -1, -1
 	for i, v := range AllNamespaceVersions() {
 		if v == nv {
 			myIdx = i
@@ -98,7 +96,7 @@ func (nv NamespaceVersion) Before(cmp NamespaceVersion) bool {
 			cmpIdx = i
 		}
 	}
-	return myIdx < cmpIdx
+	return myIdx >= 0 && myIdx < cmpIdx
 }
 
 func (nv NamespaceVersion) String() string {

@@ -273,8 +273,6 @@ func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) 
 		if len(f.StarlarkFileName) == 0 {
 			return fmt.Errorf("empty starlark file for feature: %s", f.Name)
 		}
-	default:
-		return fmt.Errorf("unknown namespace version %s", nsMD.Version)
 	}
 	return nil
 }
