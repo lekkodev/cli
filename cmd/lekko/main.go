@@ -40,6 +40,7 @@ import (
 )
 
 func main() {
+	rootCmd := rootCmd()
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(verifyCmd())
 	rootCmd.AddCommand(commitCmd())
@@ -74,12 +75,16 @@ func main() {
 	}
 }
 
-var rootCmd = &cobra.Command{
-	Use:           "lekko",
-	Short:         "lekko - dynamic configuration helper",
-	Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
-	SilenceUsage:  true,
-	SilenceErrors: true,
+func rootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:           "lekko",
+		Short:         "lekko - dynamic configuration helper",
+		Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+	cmd.PersistentFlags().StringVar(&lekko.URL, "backend-url", "https://prod.api.lekko.dev", "Lekko backend url")
+	return cmd
 }
 
 func formatCmd() *cobra.Command {
