@@ -363,7 +363,7 @@ var mergeCmd = &cobra.Command{
 			if err != nil {
 				return errors.Wrap(err, "get remote url")
 			}
-			owner, repo, err := parseOwnerRepo(u)
+			owner, repo, err := gh.ParseOwnerRepo(u)
 			if err != nil {
 				return errors.Wrap(err, "parse owner repo")
 			}
@@ -371,19 +371,6 @@ var mergeCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func parseOwnerRepo(githubURL string) (string, string, error) {
-	parts := strings.Split(githubURL, "/")
-	n := len(parts)
-	if n < 3 {
-		return "", "", errors.New("invalid github repo url")
-	}
-	owner, repo := parts[n-2], parts[n-1]
-	if idx := strings.Index(repo, ".git"); idx >= 0 {
-		repo = repo[0:idx]
-	}
-	return owner, repo, nil
 }
 
 func rolloutsURL(team, owner, repo string) string {

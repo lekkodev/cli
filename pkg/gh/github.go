@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/google/go-github/v47/github"
@@ -81,4 +82,31 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
 	}
 	return repo.GetCloneURL(), nil
+}
+
+func ParseOwnerRepo(githubURL string) (string, string, error) {
+	// TODO: make this exhaustive and check the git standard for remotes, or do it the URL way.
+	// ssh url
+	if strings.Contains(githubURL, "@") {
+		parts := strings.Split(strings.Split(githubURL, ":")[1], "/")
+		if len(parts) != 2 {
+			return "", "", fmt.Errorf("unknown ssh github repo format: %s", githubURL)
+		}
+		owner, repo := parts[0], parts[1]
+		if idx := strings.Index(repo, ".git"); idx >= 0 {
+			repo = repo[0:idx]
+		}
+		return owner, repo, nil
+	}
+	// https url
+	parts := strings.Split(githubURL, "/")
+	n := len(parts)
+	if n < 3 {
+		return "", "", fmt.Errorf("invalid github repo url %s", githubURL)
+	}
+	owner, repo := parts[n-2], parts[n-1]
+	if idx := strings.Index(repo, ".git"); idx >= 0 {
+		repo = repo[0:idx]
+	}
+	return owner, repo, nil
 }
