@@ -67,7 +67,15 @@ func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry
 		return nil, errors.Errorf("invalid name '%s'", featureName)
 	}
 	ff := feature.NewFeatureFile(namespace, featureName)
-	registry, err := r.registry(ctx, registry)
+	err := nv.Supported()
+	if errors.Is(err, feature.ErrUnknownVersion) {
+		r.Logf("Ignoring %s/%s with version %s: %v\n", ff.NamespaceName, ff.Name, nv.String(), err)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	registry, err = r.registry(ctx, registry)
 	if err != nil {
 		return nil, errors.Wrap(err, "registry")
 	}
@@ -126,7 +134,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 		return logging.Red(fmt.Sprintf("%s %s", s, "✖"))
 	}
 	var subs []string
-	if fcr.CompilationError != nil {
+	if fcr.CompilationError != nil || fcr.CompiledFeature == nil {
 		subs = append(subs, stylizeStr("Compile", false))
 	} else {
 		subs = append(subs, stylizeStr(fmt.Sprintf("Compile (%s)", fcr.CompiledFeature.Feature.FeatureType), true))
@@ -155,6 +163,9 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 func (fcr *FeatureCompilationResult) Err() error {
 	if fcr.CompilationError != nil {
 		return fcr.CompilationError
+	}
+	if fcr.CompiledFeature == nil {
+		return nil
 	}
 	for _, r := range fcr.CompiledFeature.ValidatorResults {
 		if !r.Passed() {
@@ -199,9 +210,13 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		if req.Upgrade {
 			desiredVersion = feature.LatestNamespaceVersion()
 		}
+		if err := desiredVersion.Supported(); errors.Is(err, feature.ErrUnknownVersion) {
+			r.Logf("Ignoring %s/%s with version %s: %v\n", vff.ff.NamespaceName, vff.ff.Name, desiredVersion.String(), err)
+			continue // don't compile unknown versions to preserve forwards compatibility.
+		}
 		results = append(results, &FeatureCompilationResult{NamespaceName: vff.ff.NamespaceName, FeatureName: vff.ff.Name, NamespaceVersion: desiredVersion})
 	}
-	r.Logf("Found %d features across %d namespaces\n", len(vffs), numNamespaces)
+	r.Logf("Found %d features across %d namespaces\n", len(results), numNamespaces)
 	r.Logf("Compiling...\n")
 	registry, err := r.registry(ctx, req.Registry)
 	if err != nil {
@@ -288,6 +303,13 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	namespaces := make(map[string]struct{})
 	for _, fcr := range results {
 		namespaces[fcr.NamespaceName] = struct{}{}
+		err := fcr.NamespaceVersion.Supported()
+		if errors.Is(err, feature.ErrUnknownVersion) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
 		ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
 		compilePersisted, compileDiffExists, err := star.NewCompiler(registry, &ff, r).Persist(ctx, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility, req.DryRun)
 		if err != nil {
@@ -354,7 +376,7 @@ func (r *repository) findVersionedFeatureFiles(ctx context.Context, namespaceFil
 			continue
 		}
 		numNamespaces++
-		nv, err := feature.NewNamespaceVersion(nsMD.Version)
+		nv := feature.NewNamespaceVersion(nsMD.Version)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -373,7 +395,7 @@ func (r *repository) findVersionedFeatureFiles(ctx context.Context, namespaceFil
 			}
 			results = append(results, &versionedFeatureFile{
 				ff: &ff,
-				nv: *nv,
+				nv: nv,
 			})
 		}
 	}

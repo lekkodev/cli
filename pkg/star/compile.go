@@ -56,9 +56,6 @@ func NewCompiler(registry *protoregistry.Types, ff *feature.FeatureFile, cw fs.C
 }
 
 func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*feature.CompiledFeature, error) {
-	if err := nv.Supported(); err != nil {
-		return nil, err
-	}
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
@@ -88,9 +85,6 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 }
 
 func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, ignoreBackwardsCompatibility, dryRun bool) (bool, bool, error) {
-	if err := nv.Supported(); err != nil {
-		return false, false, err
-	}
 	fProto, err := f.ToProto()
 	if err != nil {
 		return false, false, errors.Wrap(err, "feature to proto")
