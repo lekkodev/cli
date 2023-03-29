@@ -120,6 +120,7 @@ service BFFService {
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
   rpc GetRollout(GetRolloutRequest) returns (GetRolloutResponse) {}
+  rpc GetInteger(GetIntegerRequest) returns (GetIntegerResponse) {}
 }
 
 message GetUserLoggedInInfoRequest {}
@@ -767,4 +768,12 @@ message Rollout {
 
 message GetRolloutResponse {
   Rollout rollout = 1;
+}
+
+message GetIntegerRequest {
+  int32 request_id = 1;
+}
+
+message GetIntegerResponse {
+  int32 integer = 1;
 }
