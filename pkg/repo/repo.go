@@ -303,10 +303,18 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 }
 
 func (r *repository) Pull(ap AuthProvider) error {
-	if err := r.wt.Pull(&git.PullOptions{
+	headref := &plumbing.Reference{}
+	var headreferr error
+	headref, headreferr = r.repo.Storer.Reference(plumbing.HEAD)
+	remoteref := &plumbing.Reference{}
+	var remotereferr error
+	remoteref, remotereferr = r.repo.Storer.Reference(plumbing.NewRemoteReferenceName(RemoteName, headref.Name().Short()))
+	err := r.wt.Pull(&git.PullOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
-	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	})
+	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v\n", headref.String(), headreferr, remoteref, remotereferr, err)
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
 	}
 	return nil
