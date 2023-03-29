@@ -305,11 +305,16 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 func (r *repository) Pull(ap AuthProvider) error {
 	headref := &plumbing.Reference{}
 	var headreferr error
-	headref, headreferr = r.repo.Storer.Reference(plumbing.HEAD)
+	branchName, err := r.BranchName()
+	if err != nil {
+		fmt.Printf("error getting branch: %v\n", err)
+		return nil
+	}
+	headref, headreferr = r.repo.Storer.Reference(plumbing.NewBranchReferenceName(branchName))
 	remoteref := &plumbing.Reference{}
 	var remotereferr error
-	remoteref, remotereferr = r.repo.Storer.Reference(plumbing.NewRemoteReferenceName(RemoteName, headref.Name().Short()))
-	err := r.wt.Pull(&git.PullOptions{
+	remoteref, remotereferr = r.repo.Storer.Reference(plumbing.NewRemoteReferenceName(RemoteName, branchName))
+	err = r.wt.Pull(&git.PullOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
 	})
