@@ -20,7 +20,7 @@ package repo
 import (
 	"context"
 	"fmt"
-	"os"
+	"net/http"
 	"path/filepath"
 	"testing"
 	"time"
@@ -55,7 +55,7 @@ func (ap *authProvider) GetToken() string    { return ap.token }
 func newAuthProvider() *authProvider {
 	return &authProvider{
 		user:  "lekkoci",
-		token: os.Getenv("GITHUB_TOKEN"),
+		token: "ghu_vVs1BPg6RdYwvlld1C8eAaAJt6i1xs08BmHb",
 	}
 }
 
@@ -80,8 +80,8 @@ func TestRepoIntegration(t *testing.T) {
 	var branchName string
 	t.Run("Review", func(t *testing.T) { branchName = testReview(ctx, t, r, ghCli, ap) })
 	require.NotEmpty(t, branchName)
-	t.Cleanup(func() { cleanupRemoteBranch(ctx, t, ghCli, branchName) }) // ensure we clean up branch even if the test fails
-	var ephemeralRepo *repository                                        // in-mem repo meant to simulate ones created in our backend.
+	t.Cleanup(func() { cleanupRemoteBranch(t, ghCli, branchName) }) // ensure we clean up branch even if the test fails
+	var ephemeralRepo *repository                                   // in-mem repo meant to simulate ones created in our backend.
 	t.Run("Ephemeral", func(t *testing.T) { ephemeralRepo = testEphemeral(ctx, t, ap, branchName) })
 	require.NotNil(t, ephemeralRepo)
 	var latestHash string
@@ -231,10 +231,12 @@ func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvid
 	assert.Equal(t, restoreFeatureDescription, f.Description)
 }
 
-func cleanupRemoteBranch(ctx context.Context, t *testing.T, ghCli *gh.GithubClient, branchName string) {
+func cleanupRemoteBranch(t *testing.T, ghCli *gh.GithubClient, branchName string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	resp, err := ghCli.Git.DeleteRef(ctx, integrationTestOwnerName, integrationTestRepoName, branchName)
 	if err != nil {
-		if resp != nil && resp.StatusCode == 404 {
+		if resp != nil && resp.StatusCode == http.StatusUnprocessableEntity /* ref does not exist */ {
 			return
 		}
 		t.Logf("Failed to delete branch %s after integration test: %v\n", branchName, err)
