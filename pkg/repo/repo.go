@@ -330,17 +330,26 @@ func (r *repository) Pull(ap AuthProvider) error {
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrap(err, "iter")
+		return errors.Wrap(err, "iter commits")
 	}
 	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
 		commits[i], commits[j] = commits[j], commits[i]
 	}
+	refIter, err := r.repo.Storer.IterReferences()
+	if err != nil {
+		return errors.Wrap(err, "iter references")
+	}
+	references := make([]string, 0)
+	refIter.ForEach(func(r *plumbing.Reference) error {
+		references = append(references, r.String())
+		return nil
+	})
 	err = r.wt.Pull(&git.PullOptions{
 		RemoteName:    RemoteName,
 		ReferenceName: plumbing.NewRemoteReferenceName(RemoteName, branchName),
 		Auth:          basicAuth(ap),
 	})
-	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits)
+	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v | references:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits, references)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
 	}
