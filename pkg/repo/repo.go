@@ -336,8 +336,9 @@ func (r *repository) Pull(ap AuthProvider) error {
 		commits[i], commits[j] = commits[j], commits[i]
 	}
 	err = r.wt.Pull(&git.PullOptions{
-		RemoteName: RemoteName,
-		Auth:       basicAuth(ap),
+		RemoteName:    RemoteName,
+		ReferenceName: plumbing.NewRemoteReferenceName(RemoteName, branchName),
+		Auth:          basicAuth(ap),
 	})
 	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
