@@ -314,7 +314,8 @@ func (r *repository) Pull(ap AuthProvider) error {
 	headref, headreferr = r.repo.Storer.Reference(plumbing.NewBranchReferenceName(branchName))
 	remoteref := &plumbing.Reference{}
 	var remotereferr error
-	remoteref, remotereferr = r.repo.Storer.Reference(plumbing.NewRemoteReferenceName(RemoteName, branchName))
+	remoterefname := plumbing.NewRemoteReferenceName(RemoteName, branchName)
+	remoteref, remotereferr = r.repo.Storer.Reference(remoterefname)
 	c, err := object.GetCommit(r.repo.Storer, remoteref.Hash())
 	if err != nil {
 		return errors.Wrap(err, "get commit")
@@ -344,10 +345,30 @@ func (r *repository) Pull(ap AuthProvider) error {
 		references = append(references, r.String())
 		return nil
 	})
+	remote, err := r.repo.Remote(RemoteName)
+	if err != nil {
+		return errors.Wrap(err, "remote")
+	}
+	if err := remote.Fetch(&git.FetchOptions{
+		RemoteName: RemoteName,
+		Auth:       basicAuth(ap),
+	}); err != nil {
+		return errors.Wrap(err, "fetch")
+	}
+	fetchlistrefs, err := remote.List(&git.ListOptions{
+		Auth: basicAuth(ap),
+	})
+	if err != nil {
+		return errors.Wrap(err, "fetch list refs")
+	}
+	fetchlistrefStrings := make([]string, 0)
+	for _, flr := range fetchlistrefs {
+		fetchlistrefStrings = append(fetchlistrefStrings, flr.String())
+	}
+	fmt.Println("fetch list refs, ", fetchlistrefStrings)
 	err = r.wt.Pull(&git.PullOptions{
-		RemoteName:    RemoteName,
-		ReferenceName: plumbing.NewRemoteReferenceName(RemoteName, branchName),
-		Auth:          basicAuth(ap),
+		RemoteName: RemoteName,
+		Auth:       basicAuth(ap),
 	})
 	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v | references:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits, references)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
