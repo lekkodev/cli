@@ -118,7 +118,6 @@ type BFFServiceClient interface {
 	Restore(context.Context, *connect_go.Request[v1beta1.RestoreRequest]) (*connect_go.Response[v1beta1.RestoreResponse], error)
 	GetRepositoryLogs(context.Context, *connect_go.Request[v1beta1.GetRepositoryLogsRequest]) (*connect_go.Response[v1beta1.GetRepositoryLogsResponse], error)
 	GetRollout(context.Context, *connect_go.Request[v1beta1.GetRolloutRequest]) (*connect_go.Response[v1beta1.GetRolloutResponse], error)
-	GetInteger(context.Context, *connect_go.Request[v1beta1.GetIntegerRequest]) (*connect_go.Response[v1beta1.GetIntegerResponse], error)
 }
 
 // NewBFFServiceClient constructs a client for the lekko.bff.v1beta1.BFFService service. By default,
@@ -356,11 +355,6 @@ func NewBFFServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts 
 			baseURL+"/lekko.bff.v1beta1.BFFService/GetRollout",
 			opts...,
 		),
-		getInteger: connect_go.NewClient[v1beta1.GetIntegerRequest, v1beta1.GetIntegerResponse](
-			httpClient,
-			baseURL+"/lekko.bff.v1beta1.BFFService/GetInteger",
-			opts...,
-		),
 	}
 }
 
@@ -411,7 +405,6 @@ type bFFServiceClient struct {
 	restore                  *connect_go.Client[v1beta1.RestoreRequest, v1beta1.RestoreResponse]
 	getRepositoryLogs        *connect_go.Client[v1beta1.GetRepositoryLogsRequest, v1beta1.GetRepositoryLogsResponse]
 	getRollout               *connect_go.Client[v1beta1.GetRolloutRequest, v1beta1.GetRolloutResponse]
-	getInteger               *connect_go.Client[v1beta1.GetIntegerRequest, v1beta1.GetIntegerResponse]
 }
 
 // GetUserLoggedInInfo calls lekko.bff.v1beta1.BFFService.GetUserLoggedInInfo.
@@ -647,11 +640,6 @@ func (c *bFFServiceClient) GetRollout(ctx context.Context, req *connect_go.Reque
 	return c.getRollout.CallUnary(ctx, req)
 }
 
-// GetInteger calls lekko.bff.v1beta1.BFFService.GetInteger.
-func (c *bFFServiceClient) GetInteger(ctx context.Context, req *connect_go.Request[v1beta1.GetIntegerRequest]) (*connect_go.Response[v1beta1.GetIntegerResponse], error) {
-	return c.getInteger.CallUnary(ctx, req)
-}
-
 // BFFServiceHandler is an implementation of the lekko.bff.v1beta1.BFFService service.
 type BFFServiceHandler interface {
 	// User management
@@ -731,7 +719,6 @@ type BFFServiceHandler interface {
 	Restore(context.Context, *connect_go.Request[v1beta1.RestoreRequest]) (*connect_go.Response[v1beta1.RestoreResponse], error)
 	GetRepositoryLogs(context.Context, *connect_go.Request[v1beta1.GetRepositoryLogsRequest]) (*connect_go.Response[v1beta1.GetRepositoryLogsResponse], error)
 	GetRollout(context.Context, *connect_go.Request[v1beta1.GetRolloutRequest]) (*connect_go.Response[v1beta1.GetRolloutResponse], error)
-	GetInteger(context.Context, *connect_go.Request[v1beta1.GetIntegerRequest]) (*connect_go.Response[v1beta1.GetIntegerResponse], error)
 }
 
 // NewBFFServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -966,11 +953,6 @@ func NewBFFServiceHandler(svc BFFServiceHandler, opts ...connect_go.HandlerOptio
 		svc.GetRollout,
 		opts...,
 	))
-	mux.Handle("/lekko.bff.v1beta1.BFFService/GetInteger", connect_go.NewUnaryHandler(
-		"/lekko.bff.v1beta1.BFFService/GetInteger",
-		svc.GetInteger,
-		opts...,
-	))
 	return "/lekko.bff.v1beta1.BFFService/", mux
 }
 
@@ -1155,8 +1137,4 @@ func (UnimplementedBFFServiceHandler) GetRepositoryLogs(context.Context, *connec
 
 func (UnimplementedBFFServiceHandler) GetRollout(context.Context, *connect_go.Request[v1beta1.GetRolloutRequest]) (*connect_go.Response[v1beta1.GetRolloutResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetRollout is not implemented"))
-}
-
-func (UnimplementedBFFServiceHandler) GetInteger(context.Context, *connect_go.Request[v1beta1.GetIntegerRequest]) (*connect_go.Response[v1beta1.GetIntegerResponse], error) {
-	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.BFFService.GetInteger is not implemented"))
 }

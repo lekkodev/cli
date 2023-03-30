@@ -19,6 +19,7 @@ package repo
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -50,7 +51,7 @@ func (ap *authProvider) GetToken() string    { return ap.token }
 func newAuthProvider() *authProvider {
 	return &authProvider{
 		user:  "lekkoci",
-		token: "ghu_vVs1BPg6RdYwvlld1C8eAaAJt6i1xs08BmHb",
+		token: os.Getenv("GITHUB_TOKEN"),
 	}
 }
 
@@ -143,9 +144,6 @@ func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchNam
 	require.NoError(t, err)
 	assert.Equal(t, branchName, currentBranchName)
 	assertUpToDate(t, r, branchName)
-	for i := 0; i < 3; i++ {
-		t.Logf("Pull err: %v\n", r.ourPull(ap))
-	}
 }
 
 func testCleanup(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider, branchName string) {

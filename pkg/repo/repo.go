@@ -27,7 +27,6 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
-	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
@@ -75,8 +74,8 @@ type GitRepository interface {
 	// (non-master) branch. Will switch the current branch back to main, and
 	// pull from remote to ensure we are on the latest commit.
 	Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error
-	// Pull the latest changes from the branch that HEAD is set up to track.
-	Pull(ap AuthProvider) error
+	// Pull the latest changes from the given branch name.
+	Pull(ap AuthProvider, branchName string) error
 	// Returns the hash of the current commit that HEAD is pointing to.
 	Hash() (string, error)
 	BranchName() (string, error)
@@ -303,97 +302,12 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 	return nil
 }
 
-func (r *repository) ourPull(ap AuthProvider) error {
-	headRef, err := r.repo.Reference(plumbing.HEAD, false)
-	if err != nil {
-		return errors.Wrap(err, "symbolic ref")
-	}
-	headResolvedRef, err := r.repo.Reference(plumbing.HEAD, true)
-	if err != nil {
-		return errors.Wrap(err, "resolved ref")
-	}
-	fmt.Printf("symbolic head: %v\nresolvedhead: %v\n", refString(headRef), refString(headResolvedRef))
-	return r.Pull(ap)
-}
-
-func refString(ref *plumbing.Reference) string {
-	return fmt.Sprintf("Name:%s,Hash:%s,Target:%s,Type:%s\n", ref.Hash(), ref.Name(), ref.Target(), ref.Type())
-}
-
-func (r *repository) Pull(ap AuthProvider) error {
-	headref := &plumbing.Reference{}
-	var headreferr error
-	branchName, err := r.BranchName()
-	if err != nil {
-		fmt.Printf("error getting branch: %v\n", err)
-		return nil
-	}
-	headref, headreferr = r.repo.Storer.Reference(plumbing.NewBranchReferenceName(branchName))
-	remoteref := &plumbing.Reference{}
-	var remotereferr error
-	remoterefname := plumbing.NewRemoteReferenceName(RemoteName, branchName)
-	remoteref, remotereferr = r.repo.Storer.Reference(remoterefname)
-	c, err := object.GetCommit(r.repo.Storer, remoteref.Hash())
-	if err != nil {
-		return errors.Wrap(err, "get commit")
-	}
-	depth := 5
-	commits := make([]string, 0)
-	iter := object.NewCommitPreorderIter(c, nil, nil)
-	if err = iter.ForEach(func(c *object.Commit) error {
-		commits = append(commits, c.Hash.String())
-		depth--
-		if depth == 0 {
-			return storer.ErrStop
-		}
-		return nil
-	}); err != nil {
-		return errors.Wrap(err, "iter commits")
-	}
-	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
-		commits[i], commits[j] = commits[j], commits[i]
-	}
-	refIter, err := r.repo.Storer.IterReferences()
-	if err != nil {
-		return errors.Wrap(err, "iter references")
-	}
-	references := make([]string, 0)
-	refIter.ForEach(func(r *plumbing.Reference) error {
-		references = append(references, r.String())
-		return nil
-	})
-	remote, err := r.repo.Remote(RemoteName)
-	if err != nil {
-		return errors.Wrap(err, "remote")
-	}
-	if err := remote.Fetch(&git.FetchOptions{
-		RemoteName: RemoteName,
-		Auth:       basicAuth(ap),
-	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return errors.Wrap(err, "fetch")
-	}
-	fetchlistrefs, err := remote.List(&git.ListOptions{
-		Auth: basicAuth(ap),
-	})
-	if err != nil {
-		return errors.Wrap(err, "fetch list refs")
-	}
-	fetchlistrefStrings := make([]string, 0)
-	var localHeadFetchRef *plumbing.Reference
-	for _, flr := range fetchlistrefs {
-		if flr.Name() == plumbing.NewBranchReferenceName(branchName) {
-			localHeadFetchRef = flr
-		}
-		fetchlistrefStrings = append(fetchlistrefStrings, flr.String())
-	}
-	fmt.Printf("local head ref from local:%v\nlocal head ref from fetch:%v\n", refString(headref), refString(localHeadFetchRef))
-	err = r.wt.Pull(&git.PullOptions{
-		RemoteName: RemoteName,
-		Auth:       basicAuth(ap),
+func (r *repository) Pull(ap AuthProvider, branchName string) error {
+	if err := r.wt.Pull(&git.PullOptions{
+		RemoteName:    RemoteName,
+		Auth:          basicAuth(ap),
 		ReferenceName: plumbing.NewBranchReferenceName(branchName),
-	})
-	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v | references:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits, references)
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
 	}
 	return nil
@@ -493,7 +407,7 @@ func (r *repository) ensureMainBranch(ap AuthProvider) error {
 		}
 		return nil
 	}
-	if err := r.Pull(ap); err != nil {
+	if err := r.Pull(ap, MainBranchName); err != nil {
 		return errors.Wrap(err, "pull main")
 	}
 	return nil
