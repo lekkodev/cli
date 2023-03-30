@@ -27,6 +27,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/go-git/go-git/v5/plumbing/storer"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
@@ -314,11 +315,31 @@ func (r *repository) Pull(ap AuthProvider) error {
 	remoteref := &plumbing.Reference{}
 	var remotereferr error
 	remoteref, remotereferr = r.repo.Storer.Reference(plumbing.NewRemoteReferenceName(RemoteName, branchName))
+	c, err := object.GetCommit(r.repo.Storer, remoteref.Hash())
+	if err != nil {
+		return errors.Wrap(err, "get commit")
+	}
+	depth := 5
+	commits := make([]string, 0)
+	iter := object.NewCommitPreorderIter(c, nil, nil)
+	if err = iter.ForEach(func(c *object.Commit) error {
+		commits = append(commits, c.Hash.String())
+		depth--
+		if depth == 0 {
+			return storer.ErrStop
+		}
+		return nil
+	}); err != nil {
+		return errors.Wrap(err, "iter")
+	}
+	for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
+		commits[i], commits[j] = commits[j], commits[i]
+	}
 	err = r.wt.Pull(&git.PullOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
 	})
-	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v\n", headref.String(), headreferr, remoteref, remotereferr, err)
+	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
 	}
