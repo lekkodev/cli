@@ -303,6 +303,23 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 	return nil
 }
 
+func (r *repository) ourPull(ap AuthProvider) error {
+	headRef, err := r.repo.Reference(plumbing.HEAD, false)
+	if err != nil {
+		return errors.Wrap(err, "symbolic ref")
+	}
+	headResolvedRef, err := r.repo.Reference(plumbing.HEAD, true)
+	if err != nil {
+		return errors.Wrap(err, "resolved ref")
+	}
+	fmt.Printf("symbolic head: %v\nresolvedhead: %v\n", refString(headRef), refString(headResolvedRef))
+	return r.Pull(ap)
+}
+
+func refString(ref *plumbing.Reference) string {
+	return fmt.Sprintf("Name:%s,Hash:%s,Target:%s,Type:%s\n", ref.Hash(), ref.Name(), ref.Target(), ref.Type())
+}
+
 func (r *repository) Pull(ap AuthProvider) error {
 	headref := &plumbing.Reference{}
 	var headreferr error
@@ -352,7 +369,7 @@ func (r *repository) Pull(ap AuthProvider) error {
 	if err := remote.Fetch(&git.FetchOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
-	}); err != nil {
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "fetch")
 	}
 	fetchlistrefs, err := remote.List(&git.ListOptions{
@@ -362,13 +379,18 @@ func (r *repository) Pull(ap AuthProvider) error {
 		return errors.Wrap(err, "fetch list refs")
 	}
 	fetchlistrefStrings := make([]string, 0)
+	var localHeadFetchRef *plumbing.Reference
 	for _, flr := range fetchlistrefs {
+		if flr.Name() == plumbing.NewBranchReferenceName(branchName) {
+			localHeadFetchRef = flr
+		}
 		fetchlistrefStrings = append(fetchlistrefStrings, flr.String())
 	}
-	fmt.Println("fetch list refs, ", fetchlistrefStrings)
+	fmt.Printf("local head ref from local:%v\nlocal head ref from fetch:%v\n", refString(headref), refString(localHeadFetchRef))
 	err = r.wt.Pull(&git.PullOptions{
 		RemoteName: RemoteName,
 		Auth:       basicAuth(ap),
+		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	})
 	fmt.Printf("Pull: headref:%v, err:%v | remoteref:%v, err:%v | err %v | commits in order:%v | references:%v\n", headref.String(), headreferr, remoteref, remotereferr, err, commits, references)
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
