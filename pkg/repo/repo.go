@@ -74,8 +74,8 @@ type GitRepository interface {
 	// (non-master) branch. Will switch the current branch back to main, and
 	// pull from remote to ensure we are on the latest commit.
 	Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error
-	// Pull the latest changes from the branch that HEAD is set up to track.
-	Pull(ap AuthProvider) error
+	// Pull the latest changes from the given branch name.
+	Pull(ap AuthProvider, branchName string) error
 	// Returns the hash of the current commit that HEAD is pointing to.
 	Hash() (string, error)
 	BranchName() (string, error)
@@ -302,10 +302,11 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 	return nil
 }
 
-func (r *repository) Pull(ap AuthProvider) error {
+func (r *repository) Pull(ap AuthProvider, branchName string) error {
 	if err := r.wt.Pull(&git.PullOptions{
-		RemoteName: RemoteName,
-		Auth:       basicAuth(ap),
+		RemoteName:    RemoteName,
+		Auth:          basicAuth(ap),
+		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
 	}
@@ -406,7 +407,7 @@ func (r *repository) ensureMainBranch(ap AuthProvider) error {
 		}
 		return nil
 	}
-	if err := r.Pull(ap); err != nil {
+	if err := r.Pull(ap, MainBranchName); err != nil {
 		return errors.Wrap(err, "pull main")
 	}
 	return nil
