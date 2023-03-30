@@ -19,6 +19,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -37,6 +38,9 @@ const (
 	integrationTestRepoName  = "integration-test"
 	integrationTestURL       = "https://github.com/" + integrationTestOwnerName + "/" + integrationTestRepoName
 	// https://github.com/lekkodev/integration-test/commit/3954443a24b9053c3fb67ad453c4035e9f5aa4ed
+	namespaceName             = "default"
+	featureName1              = "test"
+	featureName2              = "test-1"
 	restoreCommitHash         = "3954443a24b9053c3fb67ad453c4035e9f5aa4ed"
 	restoreFeatureDescription = "int-test-description"
 )
@@ -76,7 +80,13 @@ func TestRepoIntegration(t *testing.T) {
 	var branchName string
 	t.Run("Review", func(t *testing.T) { branchName = testReview(ctx, t, r, ghCli, ap) })
 	require.NotEmpty(t, branchName)
-	t.Run("Ephemeral", func(t *testing.T) { testEphemeral(ctx, t, ap, branchName) })
+	t.Cleanup(func() { cleanupRemoteBranch(ctx, t, ghCli, branchName) }) // ensure we clean up branch even if the test fails
+	var ephemeralRepo *repository                                        // in-mem repo meant to simulate ones created in our backend.
+	t.Run("Ephemeral", func(t *testing.T) { ephemeralRepo = testEphemeral(ctx, t, ap, branchName) })
+	require.NotNil(t, ephemeralRepo)
+	var latestHash string
+	t.Run("Push-to-existing", func(t *testing.T) { latestHash = testPushToExistingPR(ctx, t, r, ap, branchName) })
+	t.Run("SyncEphemeral", func(t *testing.T) { testSyncEphemeral(ctx, t, ephemeralRepo, ap, branchName, latestHash) })
 	t.Run("Cleanup", func(t *testing.T) { testCleanup(ctx, t, r, ghCli, ap, branchName) })
 	t.Run("Restore", func(t *testing.T) { testRestore(ctx, t, tmpDir, ap) })
 }
@@ -104,8 +114,7 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 
 func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider) string {
 	// Add feature, so we have some changes in our working directory.
-	namespace, featureName := "default", "test"
-	path, err := r.AddFeature(ctx, namespace, featureName, feature.FeatureTypeBool)
+	path, err := r.AddFeature(ctx, namespaceName, featureName1, feature.FeatureTypeBool)
 	require.NoError(t, err)
 	t.Logf("wrote feature to path %s\n", path)
 	// Compile
@@ -115,8 +124,8 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	require.NoError(t, err)
 	result, err := r.Compile(ctx, &CompileRequest{
 		Registry:        registry,
-		NamespaceFilter: namespace,
-		FeatureFilter:   featureName,
+		NamespaceFilter: namespaceName,
+		FeatureFilter:   featureName1,
 		DryRun:          false,
 	})
 	require.NoError(t, err)
@@ -135,7 +144,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	return branchName
 }
 
-func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchName string) {
+func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchName string) *repository {
 	cr, err := NewEphemeral(integrationTestURL, ap, branchName)
 	require.NoError(t, err)
 	r, ok := cr.(*repository)
@@ -144,6 +153,48 @@ func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchNam
 	require.NoError(t, err)
 	assert.Equal(t, branchName, currentBranchName)
 	assertUpToDate(t, r, branchName)
+	return r
+}
+
+func testPushToExistingPR(ctx context.Context, t *testing.T, r *repository, ap AuthProvider, branchName string) string {
+	// Add feature, so we have some changes in our working directory.
+	path, err := r.AddFeature(ctx, namespaceName, featureName2, feature.FeatureTypeBool)
+	require.NoError(t, err)
+	t.Logf("wrote feature to path %s\n", path)
+	// Compile
+	rootMD, _, err := r.ParseMetadata(ctx)
+	require.NoError(t, err)
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	require.NoError(t, err)
+	result, err := r.Compile(ctx, &CompileRequest{
+		Registry:        registry,
+		NamespaceFilter: namespaceName,
+		FeatureFilter:   featureName2,
+		DryRun:          false,
+	})
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	require.NoError(t, result[0].Err())
+	// commit
+	hash, err := r.Commit(ctx, ap, fmt.Sprintf("add feature %s", featureName2))
+	require.NoError(t, err)
+	require.NotEmpty(t, hash)
+	return hash
+}
+
+func testSyncEphemeral(ctx context.Context, t *testing.T, e *repository, ap AuthProvider, branchName, latestHash string) {
+	currentBranchName, err := e.BranchName()
+	require.NoError(t, err)
+	require.Equal(t, branchName, currentBranchName)
+	currentHash, err := e.Hash()
+	require.NoError(t, err)
+	require.NotEqual(t, latestHash, currentHash, "we should be behind the remote")
+	// Pull
+	require.NoError(t, e.Pull(ap, branchName))
+	currentHash, err = e.Hash()
+	require.NoError(t, err)
+	require.Equal(t, latestHash, currentHash, "we should be up to date with the remote")
+	assertUpToDate(t, e, branchName)
 }
 
 func testCleanup(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider, branchName string) {
@@ -178,4 +229,14 @@ func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvid
 	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star).Build()
 	require.NoError(t, err)
 	assert.Equal(t, restoreFeatureDescription, f.Description)
+}
+
+func cleanupRemoteBranch(ctx context.Context, t *testing.T, ghCli *gh.GithubClient, branchName string) {
+	resp, err := ghCli.Git.DeleteRef(ctx, integrationTestOwnerName, integrationTestRepoName, branchName)
+	if err != nil {
+		if resp != nil && resp.StatusCode == 404 {
+			return
+		}
+		t.Logf("Failed to delete branch %s after integration test: %v\n", branchName, err)
+	}
 }
