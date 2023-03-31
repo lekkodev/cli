@@ -28,6 +28,8 @@ service AuthService {
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
   // Returns a response indicating if the account already existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
+  // ConfirmUser will confirm a new user
+  rpc ConfirmUser(ConfirmUserRequest) returns (ConfirmUserResponse) {}
 
   /* The following rpcs implement part of the OAuth 2.0 Device Authorization Grant
      * https://www.ietf.org/rfc/rfc8628.html
@@ -54,11 +56,19 @@ message LogoutResponse {}
 message RegisterUserRequest {
   string username = 1;
   string password = 2;
+  string confirm_password = 3;
 }
 
 message RegisterUserResponse {
   bool account_existed = 1;
 }
+
+message ConfirmUserRequest {
+  string username = 1;
+  string code = 2;
+}
+
+message ConfirmUserResponse {}
 
 message GetDeviceCodeRequest {
   // The identifier given to the client (in our case, a hardcoded id shipped with lekko cli)

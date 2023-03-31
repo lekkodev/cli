@@ -49,6 +49,8 @@ type AuthServiceClient interface {
 	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
 	// Returns a response indicating if the account already existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
+	// ConfirmUser will confirm a new user
+	ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error)
 	// An rpc that a 3rd party device makes to our backend to obtain device and user
 	// codes to complete device oauth.
 	GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error)
@@ -82,6 +84,11 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 			baseURL+"/lekko.bff.v1beta1.AuthService/RegisterUser",
 			opts...,
 		),
+		confirmUser: connect_go.NewClient[v1beta1.ConfirmUserRequest, v1beta1.ConfirmUserResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.AuthService/ConfirmUser",
+			opts...,
+		),
 		getDeviceCode: connect_go.NewClient[v1beta1.GetDeviceCodeRequest, v1beta1.GetDeviceCodeResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.AuthService/GetDeviceCode",
@@ -100,6 +107,7 @@ type authServiceClient struct {
 	login          *connect_go.Client[v1beta1.LoginRequest, v1beta1.LoginResponse]
 	logout         *connect_go.Client[v1beta1.LogoutRequest, v1beta1.LogoutResponse]
 	registerUser   *connect_go.Client[v1beta1.RegisterUserRequest, v1beta1.RegisterUserResponse]
+	confirmUser    *connect_go.Client[v1beta1.ConfirmUserRequest, v1beta1.ConfirmUserResponse]
 	getDeviceCode  *connect_go.Client[v1beta1.GetDeviceCodeRequest, v1beta1.GetDeviceCodeResponse]
 	getAccessToken *connect_go.Client[v1beta1.GetAccessTokenRequest, v1beta1.GetAccessTokenResponse]
 }
@@ -117,6 +125,11 @@ func (c *authServiceClient) Logout(ctx context.Context, req *connect_go.Request[
 // RegisterUser calls lekko.bff.v1beta1.AuthService.RegisterUser.
 func (c *authServiceClient) RegisterUser(ctx context.Context, req *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error) {
 	return c.registerUser.CallUnary(ctx, req)
+}
+
+// ConfirmUser calls lekko.bff.v1beta1.AuthService.ConfirmUser.
+func (c *authServiceClient) ConfirmUser(ctx context.Context, req *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error) {
+	return c.confirmUser.CallUnary(ctx, req)
 }
 
 // GetDeviceCode calls lekko.bff.v1beta1.AuthService.GetDeviceCode.
@@ -139,6 +152,8 @@ type AuthServiceHandler interface {
 	Logout(context.Context, *connect_go.Request[v1beta1.LogoutRequest]) (*connect_go.Response[v1beta1.LogoutResponse], error)
 	// Returns a response indicating if the account already existed.
 	RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error)
+	// ConfirmUser will confirm a new user
+	ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error)
 	// An rpc that a 3rd party device makes to our backend to obtain device and user
 	// codes to complete device oauth.
 	GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error)
@@ -169,6 +184,11 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect_go.HandlerOpt
 		svc.RegisterUser,
 		opts...,
 	))
+	mux.Handle("/lekko.bff.v1beta1.AuthService/ConfirmUser", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.AuthService/ConfirmUser",
+		svc.ConfirmUser,
+		opts...,
+	))
 	mux.Handle("/lekko.bff.v1beta1.AuthService/GetDeviceCode", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.AuthService/GetDeviceCode",
 		svc.GetDeviceCode,
@@ -195,6 +215,10 @@ func (UnimplementedAuthServiceHandler) Logout(context.Context, *connect_go.Reque
 
 func (UnimplementedAuthServiceHandler) RegisterUser(context.Context, *connect_go.Request[v1beta1.RegisterUserRequest]) (*connect_go.Response[v1beta1.RegisterUserResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.RegisterUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.ConfirmUser is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) GetDeviceCode(context.Context, *connect_go.Request[v1beta1.GetDeviceCodeRequest]) (*connect_go.Response[v1beta1.GetDeviceCodeResponse], error) {
