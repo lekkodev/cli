@@ -57,6 +57,7 @@ func main() {
 	authCmd.AddCommand(logoutCmd())
 	authCmd.AddCommand(statusCmd)
 	authCmd.AddCommand(registerCmd())
+	authCmd.AddCommand(confirmUserCmd())
 	authCmd.AddCommand(tokensCmd)
 	rootCmd.AddCommand(authCmd)
 	// exp
@@ -440,7 +441,7 @@ func logoutCmd() *cobra.Command {
 }
 
 func registerCmd() *cobra.Command {
-	var email, password string
+	var email, password, confirmPassword string
 	cmd := &cobra.Command{
 		Use:   "register",
 		Short: "register an account with lekko",
@@ -461,8 +462,46 @@ func registerCmd() *cobra.Command {
 			}, &password); err != nil {
 				return errors.Wrap(err, "prompt password")
 			}
+			if err := survey.AskOne(&survey.Password{
+				Message: "Confirm Password:",
+			}, &confirmPassword); err != nil {
+				return errors.Wrap(err, "prompt confirm password")
+			}
+
+			if password != confirmPassword {
+				return errors.New("passwords don't match")
+			}
 			auth := oauth.NewOAuth(lekko.NewBFFClient(secrets.NewSecretsOrFail()))
-			if err := auth.Register(cmd.Context(), email, password); err != nil {
+			if err := auth.Register(cmd.Context(), email, password, confirmPassword); err != nil {
+				return err
+			}
+			fmt.Println("Run `lekko auth confirm` to confirm account.")
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
+	return cmd
+}
+
+func confirmUserCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "confirm",
+		Short: "confirm a new user account",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var email, code string
+			rs := secrets.NewSecretsOrFail()
+			if err := survey.AskOne(&survey.Input{
+				Message: "Email:",
+			}, &email); err != nil {
+				return errors.Wrap(err, "prompt email")
+			}
+
+			if err := survey.AskOne(&survey.Input{
+				Message: "Verification Code:",
+			}, &code); err != nil {
+				return errors.Wrap(err, "prompt code")
+			}
+			if err := oauth.NewOAuth(lekko.NewBFFClient(rs)).ConfirmUser(cmd.Context(), email, code); err != nil {
 				return err
 			}
 			fmt.Println("Account registered with lekko.")
@@ -470,7 +509,6 @@ func registerCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
 	return cmd
 }
 

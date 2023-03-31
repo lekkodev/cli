@@ -100,16 +100,28 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 	return nil
 }
 
-func (a *OAuth) Register(ctx context.Context, username, password string) error {
+func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
 	resp, err := a.lekkoAuthClient.RegisterUser(ctx, connect.NewRequest(&bffv1beta1.RegisterUserRequest{
-		Username: username,
-		Password: password,
+		Username:        username,
+		Password:        password,
+		ConfirmPassword: confirmPassword,
 	}))
 	if err != nil {
 		return errors.Wrap(err, "register user")
 	}
 	if resp.Msg.GetAccountExisted() {
 		return errors.Errorf("Account with user '%s' already exists", username)
+	}
+	return nil
+}
+
+func (a *OAuth) ConfirmUser(ctx context.Context, username, code string) error {
+	_, err := a.lekkoAuthClient.ConfirmUser(ctx, connect.NewRequest(&bffv1beta1.ConfirmUserRequest{
+		Username: username,
+		Code:     code,
+	}))
+	if err != nil {
+		return errors.Wrap(err, "confirm user")
 	}
 	return nil
 }
