@@ -186,6 +186,7 @@ type Rule struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Rule:
+	//
 	//	*Rule_Atom
 	//	*Rule_Not
 	//	*Rule_LogicalExpression

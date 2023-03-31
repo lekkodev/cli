@@ -804,6 +804,7 @@ type Value struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Kind:
+	//
 	//	*Value_BoolValue
 	//	*Value_IntValue
 	//	*Value_DoubleValue
