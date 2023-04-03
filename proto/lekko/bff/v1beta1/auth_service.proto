@@ -20,6 +20,10 @@ import "google/protobuf/timestamp.proto";
 
 // Services FE Auth.
 service AuthService {
+  // ConfirmUser will confirm a new user
+  rpc ConfirmUser(ConfirmUserRequest) returns (ConfirmUserResponse) {}
+  // ForgotPassword starts a password reset flow for a user
+  rpc ForgotPassword(ForgotPasswordRequest) returns (ForgotPasswordResponse) {}
   // We will return required auth info in a cookie
   // that is sent to the same origin for other requests
   // inside the bff service.
@@ -28,8 +32,8 @@ service AuthService {
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
   // Returns a response indicating if the account already existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
-  // ConfirmUser will confirm a new user
-  rpc ConfirmUser(ConfirmUserRequest) returns (ConfirmUserResponse) {}
+  // ResendVerificationCode triggers a verification code request
+  rpc ResendVerificationCode(ResendVerificationCodeRequest) returns (ResendVerificationCodeResponse) {}
 
   /* The following rpcs implement part of the OAuth 2.0 Device Authorization Grant
      * https://www.ietf.org/rfc/rfc8628.html
@@ -69,6 +73,18 @@ message ConfirmUserRequest {
 }
 
 message ConfirmUserResponse {}
+
+message ForgotPasswordRequest {
+  string username = 1;
+}
+
+message ForgotPasswordResponse {}
+
+message ResendVerificationCodeRequest {
+  string username = 1;
+}
+
+message ResendVerificationCodeResponse {}
 
 message GetDeviceCodeRequest {
   // The identifier given to the client (in our case, a hardcoded id shipped with lekko cli)
