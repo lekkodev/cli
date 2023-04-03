@@ -17,9 +17,9 @@ package repo
 import (
 	"context"
 
-	"github.com/bufbuild/connect-go"
-	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
-	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	connect_go "github.com/bufbuild/connect-go"
 	"github.com/pkg/errors"
 )
 
@@ -43,7 +43,7 @@ type Repository struct {
 }
 
 func (r *RepoCmd) List(ctx context.Context) ([]*Repository, error) {
-	resp, err := r.lekkoBFFClient.ListRepositories(ctx, connect.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
+	resp, err := r.lekkoBFFClient.ListRepositories(ctx, connect_go.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list repos")
 	}
@@ -67,7 +67,7 @@ func repoFromProto(repo *bffv1beta1.Repository) *Repository {
 }
 
 func (r *RepoCmd) Create(ctx context.Context, owner, repo string) (string, error) {
-	resp, err := r.lekkoBFFClient.CreateRepository(ctx, connect.NewRequest(&bffv1beta1.CreateRepositoryRequest{
+	resp, err := r.lekkoBFFClient.CreateRepository(ctx, connect_go.NewRequest(&bffv1beta1.CreateRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,
@@ -80,7 +80,7 @@ func (r *RepoCmd) Create(ctx context.Context, owner, repo string) (string, error
 }
 
 func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote bool) error {
-	_, err := r.lekkoBFFClient.DeleteRepository(ctx, connect.NewRequest(&bffv1beta1.DeleteRepositoryRequest{
+	_, err := r.lekkoBFFClient.DeleteRepository(ctx, connect_go.NewRequest(&bffv1beta1.DeleteRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,

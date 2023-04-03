@@ -19,9 +19,9 @@ import (
 	"os"
 	"text/tabwriter"
 
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/apikey"
-	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"

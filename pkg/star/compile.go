@@ -19,9 +19,9 @@ import (
 	"fmt"
 	"path/filepath"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
-	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"

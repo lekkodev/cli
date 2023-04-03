@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bufbuild/connect-go"
-	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	connect_go "github.com/bufbuild/connect-go"
 )
 
 const (
@@ -45,15 +45,15 @@ type AuthCredentials interface {
 
 func NewBFFClient(creds AuthCredentials) bffv1beta1connect.BFFServiceClient {
 	interceptor := NewUserAuthInterceptor(creds)
-	return bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, URL, connect.WithInterceptors(interceptor))
+	return bffv1beta1connect.NewBFFServiceClient(http.DefaultClient, URL, connect_go.WithInterceptors(interceptor))
 }
 
-func NewUserAuthInterceptor(a AuthCredentials) connect.UnaryInterceptorFunc {
-	interceptor := func(next connect.UnaryFunc) connect.UnaryFunc {
-		return connect.UnaryFunc(func(
+func NewUserAuthInterceptor(a AuthCredentials) connect_go.UnaryInterceptorFunc {
+	interceptor := func(next connect_go.UnaryFunc) connect_go.UnaryFunc {
+		return connect_go.UnaryFunc(func(
 			ctx context.Context,
-			req connect.AnyRequest,
-		) (connect.AnyResponse, error) {
+			req connect_go.AnyRequest,
+		) (connect_go.AnyResponse, error) {
 			if a.HasLekkoToken() {
 				req.Header().Set(AuthorizationHeaderKey, fmt.Sprintf("Bearer %s", a.GetLekkoToken()))
 				if lekkoTeam := a.GetLekkoTeam(); len(lekkoTeam) > 0 {
@@ -69,5 +69,5 @@ func NewUserAuthInterceptor(a AuthCredentials) connect.UnaryInterceptorFunc {
 			return next(ctx, req)
 		})
 	}
-	return connect.UnaryInterceptorFunc(interceptor)
+	return connect_go.UnaryInterceptorFunc(interceptor)
 }

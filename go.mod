@@ -3,13 +3,15 @@ module github.com/lekkodev/cli
 go 1.19
 
 require (
+	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.6.0-20230404170739-04ec1002972a.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230404170739-04ec1002972a.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
-	github.com/bufbuild/connect-go v0.3.0
+	github.com/bufbuild/connect-go v1.6.0
 	github.com/cli/browser v1.0.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/lekkodev/rules v1.5.2-0.20230404201618-45471f5f1657
+	github.com/lekkodev/rules v1.5.2-0.20230404221103-5b5ef75b9fd6
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.7.0

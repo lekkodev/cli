@@ -17,7 +17,7 @@ package rules
 import (
 	"log"
 
-	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
+	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 

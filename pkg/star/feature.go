@@ -17,11 +17,11 @@ package star
 import (
 	"fmt"
 
+	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/lekkodev/cli/pkg/feature"
-	rulesv1beta2 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta2"
-	rulesv1beta3 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta3"
-
 	"github.com/lekkodev/rules/pkg/parser"
+
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/lib/json"
@@ -142,7 +142,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 func (fb *featureBuilder) getValidator(featureVal *starlarkstruct.Struct) (starlark.Callable, error) {
 	validator, err := featureVal.Attr(validatorAttrName)
 	if err != nil {
-		// no validator provided
+		//lint:ignore nilerr no validator provided
 		return nil, nil
 	}
 	validatorCallable, ok := validator.(starlark.Callable)
@@ -252,7 +252,7 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {
 	rulesVal, err := featureVal.Attr(RulesAttrName)
 	if err != nil {
-		// Attr returns nil, err when not present, which is terrible.
+		//lint:ignore nilerr Attr returns nil, err when not present, which is terrible.
 		return nil, nil
 	}
 	seq, ok := rulesVal.(starlark.Sequence)
@@ -367,7 +367,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {
 	testVal, err := featureVal.Attr(unitTestsAttrName)
 	if err != nil {
-		// Attr returns nil, err when not present, which is terrible.
+		//lint:ignore nilerr Attr returns nil, err when not present, which is terrible.
 		return nil
 	}
 	seq, ok := testVal.(starlark.Sequence)
