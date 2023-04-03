@@ -26,7 +26,10 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
+	"github.com/stripe/skycfg"
+	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -51,11 +54,57 @@ type walker struct {
 	starBytes []byte
 }
 
-func NewWalker(filename string, starBytes []byte) Walker {
+func NewWalker(filename string, starBytes []byte) *walker {
 	return &walker{
 		filename:  filename,
 		starBytes: starBytes,
 	}
+}
+
+func (w *walker) Test(registry *protoregistry.Types) (string, error) {
+	ast, err := w.genAST()
+	if err != nil {
+		return "", errors.Wrap(err, "gen ast")
+	}
+	ret := ""
+	t := newTraverser(ast).
+		withDefaultFn(func(vPtr *build.Expr) error {
+			if vPtr == nil {
+				return fmt.Errorf("received nil value")
+			}
+			v := *vPtr
+			switch t := v.(type) {
+			case *build.CallExpr:
+
+				ret = build.FormatString(t)
+				thread := &starlark.Thread{
+					Name: "compile",
+				}
+				protoModule := protomodule.NewModule(registry)
+				globals, err := starlark.ExecFile(thread, "", fmt.Sprintf("pb = proto.package(\"google.protobuf\")\nres =%s", build.FormatString(t)), starlark.StringDict{
+					"proto": protoModule,
+				})
+				if err != nil {
+					return err
+				}
+				proto, ok := skycfg.AsProtoMessage(globals["res"])
+				if !ok {
+					return fmt.Errorf("no proto message found %T %v", globals["res"], globals["res"])
+				}
+				slV, err := skycfg.NewProtoMessage(proto)
+				if err != nil {
+					return err
+				}
+				ret = fmt.Sprintf("%+v", slV)
+			default:
+				return fmt.Errorf("%+v", v)
+			}
+			return nil
+		})
+	if err := t.traverse(); err != nil {
+		return "", errors.Wrap(err, "traverse")
+	}
+	return ret, nil
 }
 
 func (w *walker) Build() (*feature.Feature, error) {
