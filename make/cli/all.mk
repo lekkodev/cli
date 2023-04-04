@@ -31,6 +31,6 @@ bufgenerateclean:: bufgeneratecleango
 
 .PHONY: bufgeneratego
 bufgeneratego:
-	buf generate
+	@echo "Skipping buf generate"
 
 bufgeneratesteps:: bufgeneratego
