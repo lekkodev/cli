@@ -9,7 +9,7 @@ require (
 	github.com/cli/browser v1.0.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/lekkodev/rules v1.5.2-0.20230404195916-257065346aa9
+	github.com/lekkodev/rules v1.5.2-0.20230404201618-45471f5f1657
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.7.0
@@ -21,7 +21,6 @@ require (
 )
 
 require (
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230331213330-4bc53e9658b8.1 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20210428141323-04723f9f07d7 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
