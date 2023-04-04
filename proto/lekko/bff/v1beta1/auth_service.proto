@@ -22,6 +22,8 @@ import "google/protobuf/timestamp.proto";
 service AuthService {
   // ConfirmUser will confirm a new user
   rpc ConfirmUser(ConfirmUserRequest) returns (ConfirmUserResponse) {}
+  // ConfirmForgotPassword takes the verification code from ForgotPassword and actually changes the password
+  rpc ConfirmForgotPassword(ConfirmForgotPasswordRequest) returns (ConfirmForgotPasswordResponse) {}
   // ForgotPassword starts a password reset flow for a user
   rpc ForgotPassword(ForgotPasswordRequest) returns (ForgotPasswordResponse) {}
   // We will return required auth info in a cookie
@@ -73,6 +75,15 @@ message ConfirmUserRequest {
 }
 
 message ConfirmUserResponse {}
+
+message ConfirmForgotPasswordRequest {
+  string verification_code = 1;
+  string username = 2;
+  string new_password = 3;
+  string confirm_new_password = 4;
+}
+
+message ConfirmForgotPasswordResponse {}
 
 message ForgotPasswordRequest {
   string username = 1;

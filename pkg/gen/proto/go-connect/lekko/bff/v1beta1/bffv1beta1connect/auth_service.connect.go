@@ -43,6 +43,8 @@ const (
 type AuthServiceClient interface {
 	// ConfirmUser will confirm a new user
 	ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error)
+	// ConfirmForgotPassword takes the verification code from ForgotPassword and actually changes the password
+	ConfirmForgotPassword(context.Context, *connect_go.Request[v1beta1.ConfirmForgotPasswordRequest]) (*connect_go.Response[v1beta1.ConfirmForgotPasswordResponse], error)
 	// ForgotPassword starts a password reset flow for a user
 	ForgotPassword(context.Context, *connect_go.Request[v1beta1.ForgotPasswordRequest]) (*connect_go.Response[v1beta1.ForgotPasswordResponse], error)
 	// We will return required auth info in a cookie
@@ -76,6 +78,11 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 		confirmUser: connect_go.NewClient[v1beta1.ConfirmUserRequest, v1beta1.ConfirmUserResponse](
 			httpClient,
 			baseURL+"/lekko.bff.v1beta1.AuthService/ConfirmUser",
+			opts...,
+		),
+		confirmForgotPassword: connect_go.NewClient[v1beta1.ConfirmForgotPasswordRequest, v1beta1.ConfirmForgotPasswordResponse](
+			httpClient,
+			baseURL+"/lekko.bff.v1beta1.AuthService/ConfirmForgotPassword",
 			opts...,
 		),
 		forgotPassword: connect_go.NewClient[v1beta1.ForgotPasswordRequest, v1beta1.ForgotPasswordResponse](
@@ -119,6 +126,7 @@ func NewAuthServiceClient(httpClient connect_go.HTTPClient, baseURL string, opts
 // authServiceClient implements AuthServiceClient.
 type authServiceClient struct {
 	confirmUser            *connect_go.Client[v1beta1.ConfirmUserRequest, v1beta1.ConfirmUserResponse]
+	confirmForgotPassword  *connect_go.Client[v1beta1.ConfirmForgotPasswordRequest, v1beta1.ConfirmForgotPasswordResponse]
 	forgotPassword         *connect_go.Client[v1beta1.ForgotPasswordRequest, v1beta1.ForgotPasswordResponse]
 	login                  *connect_go.Client[v1beta1.LoginRequest, v1beta1.LoginResponse]
 	logout                 *connect_go.Client[v1beta1.LogoutRequest, v1beta1.LogoutResponse]
@@ -131,6 +139,11 @@ type authServiceClient struct {
 // ConfirmUser calls lekko.bff.v1beta1.AuthService.ConfirmUser.
 func (c *authServiceClient) ConfirmUser(ctx context.Context, req *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error) {
 	return c.confirmUser.CallUnary(ctx, req)
+}
+
+// ConfirmForgotPassword calls lekko.bff.v1beta1.AuthService.ConfirmForgotPassword.
+func (c *authServiceClient) ConfirmForgotPassword(ctx context.Context, req *connect_go.Request[v1beta1.ConfirmForgotPasswordRequest]) (*connect_go.Response[v1beta1.ConfirmForgotPasswordResponse], error) {
+	return c.confirmForgotPassword.CallUnary(ctx, req)
 }
 
 // ForgotPassword calls lekko.bff.v1beta1.AuthService.ForgotPassword.
@@ -172,6 +185,8 @@ func (c *authServiceClient) GetAccessToken(ctx context.Context, req *connect_go.
 type AuthServiceHandler interface {
 	// ConfirmUser will confirm a new user
 	ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error)
+	// ConfirmForgotPassword takes the verification code from ForgotPassword and actually changes the password
+	ConfirmForgotPassword(context.Context, *connect_go.Request[v1beta1.ConfirmForgotPasswordRequest]) (*connect_go.Response[v1beta1.ConfirmForgotPasswordResponse], error)
 	// ForgotPassword starts a password reset flow for a user
 	ForgotPassword(context.Context, *connect_go.Request[v1beta1.ForgotPasswordRequest]) (*connect_go.Response[v1beta1.ForgotPasswordResponse], error)
 	// We will return required auth info in a cookie
@@ -202,6 +217,11 @@ func NewAuthServiceHandler(svc AuthServiceHandler, opts ...connect_go.HandlerOpt
 	mux.Handle("/lekko.bff.v1beta1.AuthService/ConfirmUser", connect_go.NewUnaryHandler(
 		"/lekko.bff.v1beta1.AuthService/ConfirmUser",
 		svc.ConfirmUser,
+		opts...,
+	))
+	mux.Handle("/lekko.bff.v1beta1.AuthService/ConfirmForgotPassword", connect_go.NewUnaryHandler(
+		"/lekko.bff.v1beta1.AuthService/ConfirmForgotPassword",
+		svc.ConfirmForgotPassword,
 		opts...,
 	))
 	mux.Handle("/lekko.bff.v1beta1.AuthService/ForgotPassword", connect_go.NewUnaryHandler(
@@ -247,6 +267,10 @@ type UnimplementedAuthServiceHandler struct{}
 
 func (UnimplementedAuthServiceHandler) ConfirmUser(context.Context, *connect_go.Request[v1beta1.ConfirmUserRequest]) (*connect_go.Response[v1beta1.ConfirmUserResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.ConfirmUser is not implemented"))
+}
+
+func (UnimplementedAuthServiceHandler) ConfirmForgotPassword(context.Context, *connect_go.Request[v1beta1.ConfirmForgotPasswordRequest]) (*connect_go.Response[v1beta1.ConfirmForgotPasswordResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("lekko.bff.v1beta1.AuthService.ConfirmForgotPassword is not implemented"))
 }
 
 func (UnimplementedAuthServiceHandler) ForgotPassword(context.Context, *connect_go.Request[v1beta1.ForgotPasswordRequest]) (*connect_go.Response[v1beta1.ForgotPasswordResponse], error) {
