@@ -17,7 +17,7 @@ package gh
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 
@@ -78,7 +78,7 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 		Private:     &private,
 	})
 	if err != nil {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
 	}
 	return repo.GetCloneURL(), nil
