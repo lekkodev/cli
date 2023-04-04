@@ -11,7 +11,7 @@ LICENSE_HEADER_IGNORES := \/testdata
 BUF_LINT_INPUT := .
 BUF_FORMAT_INPUT := .
 
-GO_PRIVATE := $(GOPRIVATE),github.com/lekkodev/*
+GO_PRIVATE := $(GOPRIVATE),github.com/lekkodev/*,buf.build/gen/go
 
 include make/go/bootstrap.mk
 include make/go/go.mk
@@ -31,6 +31,6 @@ bufgenerateclean:: bufgeneratecleango
 
 .PHONY: bufgeneratego
 bufgeneratego:
-	buf generate
+	@echo "Skipping buf generate"
 
 bufgeneratesteps:: bufgeneratego

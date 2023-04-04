@@ -22,10 +22,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bufbuild/connect-go"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	connect_go "github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
-	"github.com/lekkodev/cli/pkg/gen/proto/go-connect/lekko/bff/v1beta1/bffv1beta1connect"
-	bffv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -101,7 +101,7 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 }
 
 func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
-	resp, err := a.lekkoAuthClient.RegisterUser(ctx, connect.NewRequest(&bffv1beta1.RegisterUserRequest{
+	resp, err := a.lekkoAuthClient.RegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.RegisterUserRequest{
 		Username:        username,
 		Password:        password,
 		ConfirmPassword: confirmPassword,
@@ -116,7 +116,7 @@ func (a *OAuth) Register(ctx context.Context, username, password, confirmPasswor
 }
 
 func (a *OAuth) ConfirmUser(ctx context.Context, username, code string) error {
-	_, err := a.lekkoAuthClient.ConfirmUser(ctx, connect.NewRequest(&bffv1beta1.ConfirmUserRequest{
+	_, err := a.lekkoAuthClient.ConfirmUser(ctx, connect_go.NewRequest(&bffv1beta1.ConfirmUserRequest{
 		Username: username,
 		Code:     code,
 	}))
@@ -254,7 +254,7 @@ func (a *OAuth) loginGithub(ctx context.Context, ws secrets.WriteSecrets) error 
 }
 
 func (a *OAuth) checkLekkoAuth(ctx context.Context) (username string, err error) {
-	req := connect.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
+	req := connect_go.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
 	resp, err := a.lekkoBFFClient.GetUserLoggedInInfo(ctx, req)
 	if err != nil {
 		return "", errors.Wrap(err, "check lekko auth")

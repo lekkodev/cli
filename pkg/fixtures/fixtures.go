@@ -18,83 +18,11 @@ import (
 	"log"
 
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
-	featurev1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/feature/v1beta1"
-	rulesv1beta1 "github.com/lekkodev/cli/pkg/gen/proto/go/lekko/rules/v1beta1"
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/rules/pkg/parser"
 )
-
-func NewBasicFeatureOn() *rulesv1beta1.Feature {
-	return &rulesv1beta1.Feature{
-		Name:         "basic_feature_on",
-		Type:         rulesv1beta1.Type_TYPE_BOOL,
-		DefaultValue: structpb.NewBoolValue(true),
-		Constraints:  nil,
-	}
-}
-
-func NewBasicFeatureOff() *rulesv1beta1.Feature {
-	return &rulesv1beta1.Feature{
-		Name:         "basic_feature_off",
-		Type:         rulesv1beta1.Type_TYPE_BOOL,
-		DefaultValue: structpb.NewBoolValue(false),
-		Constraints:  nil,
-	}
-}
-
-func NewFeatureOnForUserID() *rulesv1beta1.Feature {
-	return &rulesv1beta1.Feature{
-		Name:         "feature_on_for_user_id",
-		Type:         rulesv1beta1.Type_TYPE_BOOL,
-		DefaultValue: structpb.NewBoolValue(false),
-		Constraints:  []*rulesv1beta1.Constraint{NewConstraintOnForUserID()},
-	}
-}
-
-func NewFeatureOnForUserIDs() *rulesv1beta1.Feature {
-	return &rulesv1beta1.Feature{
-		Name:         "feature_on_for_user_ids",
-		Type:         rulesv1beta1.Type_TYPE_BOOL,
-		DefaultValue: structpb.NewBoolValue(false),
-		Constraints:  []*rulesv1beta1.Constraint{NewConstraintOnForUserIDs()},
-	}
-}
-
-func NewConstraintOnForUserID() *rulesv1beta1.Constraint {
-	return &rulesv1beta1.Constraint{
-		Conditions:     []*rulesv1beta1.Condition{NewConditionEqualUserID()},
-		ResultingValue: structpb.NewBoolValue(true),
-	}
-}
-
-func NewConstraintOnForUserIDs() *rulesv1beta1.Constraint {
-	return &rulesv1beta1.Constraint{
-		Conditions:     []*rulesv1beta1.Condition{NewConditionContainsUserID()},
-		ResultingValue: structpb.NewBoolValue(true),
-	}
-}
-
-func NewConditionEqualUserID() *rulesv1beta1.Condition {
-	return &rulesv1beta1.Condition{
-		ContextKey:      "user_id",
-		ComparisonValue: structpb.NewNumberValue(float64(1)),
-		LogicalOperator: rulesv1beta1.LogicalOperator_LOGICAL_OPERATOR_EQUALS,
-	}
-}
-
-func NewConditionContainsUserID() *rulesv1beta1.Condition {
-	list, err := structpb.NewList([]interface{}{float64(1), float64(2)})
-	if err != nil {
-		panic(err)
-	}
-	return &rulesv1beta1.Condition{
-		ContextKey:      "user_id",
-		ComparisonValue: structpb.NewListValue(list),
-		LogicalOperator: rulesv1beta1.LogicalOperator_LOGICAL_OPERATOR_CONTAINED_WITHIN,
-	}
-}
 
 func NewBasicFeatureOnBeta2() *featurev1beta1.Feature {
 	return &featurev1beta1.Feature{
