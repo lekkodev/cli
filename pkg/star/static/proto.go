@@ -18,10 +18,33 @@ func ProtoToStatic(packageStr string, msg proto.Message) build.Expr {
 	res := &build.CallExpr{X: &build.Ident{Name: constructorName}}
 	// todo defaults
 	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: &build.Ident{Name: "True"}})
+		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: ReflectValueToExpr(&val)})
 		return true
 	})
 	return res
+}
+
+func ReflectValueToExpr(val *protoreflect.Value) build.Expr {
+	// There is a strict enum definition here:
+	/*
+		        ╔════════════╤═════════════════════════════════════╗
+			║ Go type    │ Protobuf kind                       ║
+			╠════════════╪═════════════════════════════════════╣
+			║ bool       │ BoolKind                            ║
+			║ int32      │ Int32Kind, Sint32Kind, Sfixed32Kind ║
+			║ int64      │ Int64Kind, Sint64Kind, Sfixed64Kind ║
+			║ uint32     │ Uint32Kind, Fixed32Kind             ║
+			║ uint64     │ Uint64Kind, Fixed64Kind             ║
+			║ float32    │ FloatKind                           ║
+			║ float64    │ DoubleKind                          ║
+			║ string     │ StringKind                          ║
+			║ []byte     │ BytesKind                           ║
+			║ EnumNumber │ EnumKind                            ║
+			║ Message    │ MessageKind, GroupKind              ║
+			╚════════════╧═════════════════════════════════════╝
+	*/
+	// We need to implement this all. For now, hardcode true value.
+	return &build.Ident{Name: "True"}
 }
 
 // Returns (nil, err) if the message is not protobuf.
