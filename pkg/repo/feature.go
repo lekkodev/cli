@@ -27,7 +27,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
-	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
@@ -126,12 +125,12 @@ type FeatureCompilationResult struct {
 	FormattingDiffExists  bool
 }
 
-func (fcr *FeatureCompilationResult) SummaryString() string {
+func (fcr *FeatureCompilationResult) SummaryString(r Logger) string {
 	stylizeStr := func(s string, pass bool) string {
 		if pass {
-			return logging.Green(fmt.Sprintf("%s %s", s, "✔"))
+			return r.Green(fmt.Sprintf("%s %s", s, "✔"))
 		}
-		return logging.Red(fmt.Sprintf("%s %s", s, "✖"))
+		return r.Red(fmt.Sprintf("%s %s", s, "✖"))
 	}
 	var subs []string
 	if fcr.CompilationError != nil || fcr.CompiledFeature == nil {
@@ -157,7 +156,7 @@ func (fcr *FeatureCompilationResult) SummaryString() string {
 			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
 		}
 	}
-	return fmt.Sprintf("%s %s", logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)), strings.Join(subs, " | "))
+	return fmt.Sprintf("%s %s", r.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)), strings.Join(subs, " | "))
 }
 
 func (fcr *FeatureCompilationResult) Err() error {
@@ -267,7 +266,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	})
 	// print summary
 	for _, fcr := range results {
-		r.Logf("%v\n", fcr.SummaryString())
+		r.Logf("%v\n", fcr.SummaryString(r))
 	}
 	if results.Err() != nil {
 		// print errors
@@ -276,21 +275,21 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			if fcr.Err() == nil {
 				continue
 			}
-			r.Logf(logging.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)))
+			r.Logf(r.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)))
 			if fcr.CompilationError != nil {
-				r.Logf(fmt.Sprintf("%s %v\n", logging.Bold("→"), fcr.CompilationError))
+				r.Logf(fmt.Sprintf("%s %v\n", r.Bold("→"), fcr.CompilationError))
 			}
 			if fcr.CompiledFeature == nil {
 				continue
 			}
 			for _, res := range fcr.CompiledFeature.ValidatorResults {
 				if !res.Passed() {
-					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
+					r.Logf(fmt.Sprintf("%s %s\n", r.Bold("→"), res.DebugString()))
 				}
 			}
 			for _, res := range fcr.CompiledFeature.TestResults {
 				if !res.Passed() {
-					r.Logf(fmt.Sprintf("%s %s\n", logging.Bold("→"), res.DebugString()))
+					r.Logf(fmt.Sprintf("%s %s\n", r.Bold("→"), res.DebugString()))
 				}
 			}
 		}
@@ -345,11 +344,11 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			oldNamespacesArr = append(oldNamespacesArr, oldNS)
 		}
 		sort.Strings(oldNamespacesArr)
-		r.Logf(logging.Yellow("Warning: The following namespaces need an upgrade:\n"))
+		r.Logf(r.Yellow("Warning: The following namespaces need an upgrade:\n"))
 		for _, oldNS := range oldNamespacesArr {
 			r.Logf(fmt.Sprintf("\t%s\n", oldNS))
 		}
-		r.Logf("Run '%s' to perform the upgrade.\n", logging.Bold("lekko compile --upgrade"))
+		r.Logf("Run '%s' to perform the upgrade.\n", r.Bold("lekko compile --upgrade"))
 	}
 
 	if req.Upgrade && len(oldNamespaces) == 0 {

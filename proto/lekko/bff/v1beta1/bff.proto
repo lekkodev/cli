@@ -627,6 +627,7 @@ message SaveStarlarkResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  bytes output = 4;
 }
 
 message ConvertRuleToStringRequest {

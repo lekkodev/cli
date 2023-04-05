@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -31,7 +32,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
 )
@@ -55,6 +55,8 @@ type ConfigurationRepository interface {
 	GitRepository
 	// Allows interacting with a git provider, e.g. GitHub
 	GitProvider
+	// Allows writing logs to configurable destinations
+	Logger
 	// Underlying filesystem interfaces
 	fs.Provider
 	fs.ConfigWriter
@@ -95,9 +97,11 @@ type repository struct {
 	repo *git.Repository
 	wt   *git.Worktree
 	fs   billy.Filesystem
+	// if empty, logging will be disabled.
+	log *LoggingConfiguration
 
-	loggingEnabled, bufEnabled bool
-	path                       string // path to the root of the repository
+	bufEnabled bool
+	path       string // path to the root of the repository
 
 	fs.Provider
 	fs.ConfigWriter
@@ -137,12 +141,14 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 	}
 
 	cr := &repository{
-		repo:           repo,
-		wt:             wt,
-		fs:             wt.Filesystem,
-		path:           path,
-		loggingEnabled: true,
-		bufEnabled:     true,
+		repo: repo,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
+		log: &LoggingConfiguration{
+			Writer: os.Stdout,
+		},
+		bufEnabled: true,
 	}
 
 	return cr, nil
@@ -166,12 +172,14 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 	cr := &repository{
-		repo:           repo,
-		wt:             wt,
-		fs:             wt.Filesystem,
-		path:           path,
-		loggingEnabled: true,
-		bufEnabled:     true,
+		repo: repo,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
+		log: &LoggingConfiguration{
+			Writer: os.Stdout,
+		},
+		bufEnabled: true,
 	}
 	return cr, nil
 }
@@ -492,7 +500,7 @@ func (r *repository) NewRemoteBranch(branchName string) error {
 	}); err != nil {
 		return errors.Wrap(err, "checkout")
 	}
-	r.Logf("Checked out local branch %s\n", logging.Bold(branchName))
+	r.Logf("Checked out local branch %s\n", r.Bold(branchName))
 	// set tracking config
 	if err := r.repo.CreateBranch(&config.Branch{
 		Name:   branchName,
