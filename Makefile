@@ -7,3 +7,6 @@ DOCKER_PROJECT := cli
 FILE_IGNORES := .vscode/
 
 include make/cli/all.mk
+
+release:
+	./release.sh
