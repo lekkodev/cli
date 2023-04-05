@@ -26,14 +26,7 @@ To install:
 brew install goreleaser
 ```
 
-In order to release a new version of `lekko`, first create a new tag.
-
-```bash
-git tag -a v0.1.0 -m "First release"
-git push origin v0.1.0
-```
-
-Then, export your Github access token to an environment variable. You can create a new GitHub token (here)[https://github.com/settings/tokens/new].
+To release, first export your Github access token to an environment variable. You can create a new GitHub token [here](https://github.com/settings/tokens/new).
 
 ```bash
 export GITHUB_TOKEN="YOUR_GH_TOKEN"
@@ -42,10 +35,10 @@ export GITHUB_TOKEN="YOUR_GH_TOKEN"
 Finally, create the release.
 
 ```bash
-goreleaser release
+make release
 ```
 
-That will cross-compile the binary for multiple platforms and architectures, using the latest tag found on github.
+This command will first prompt you for a new tag that it will push to GitHub. Then, it will cross-compile the binary for multiple platforms and architectures, using the latest tag on GitHub.
 
 After completion, navigate to https://github.com/lekkodev/cli/releases/ to see the latest releases under the tag you just created.
 

@@ -39,6 +39,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Updated at build time using ldflags
+var version = "development"
+
 func main() {
 	rootCmd := rootCmd()
 	rootCmd.AddCommand(compileCmd())
@@ -80,7 +83,7 @@ func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "lekko",
 		Short:         "lekko - dynamic configuration helper",
-		Version:       "v0.2.4", // TODO: autoupdate this when releasing a new tag
+		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
