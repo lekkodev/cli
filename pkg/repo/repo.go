@@ -32,7 +32,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
-	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
 )
@@ -500,7 +499,7 @@ func (r *repository) NewRemoteBranch(branchName string) error {
 	}); err != nil {
 		return errors.Wrap(err, "checkout")
 	}
-	r.Logf("Checked out local branch %s\n", logging.Bold(branchName))
+	r.Logf("Checked out local branch %s\n", r.Bold(branchName))
 	// set tracking config
 	if err := r.repo.CreateBranch(&config.Branch{
 		Name:   branchName,

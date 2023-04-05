@@ -115,7 +115,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
 	require.NoError(t, err)
 	var b bytes.Buffer
-	clear := r.ConfigureLogger(&LoggingConfiguration{Writer: &b})
+	clear := r.ConfigureLogger(&LoggingConfiguration{Writer: &b, ColorsDisabled: true})
 	defer clear()
 	result, err := r.Compile(ctx, &CompileRequest{
 		Registry:        registry,
