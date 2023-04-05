@@ -56,7 +56,7 @@ type ConfigurationRepository interface {
 	GitRepository
 	// Allows interacting with a git provider, e.g. GitHub
 	GitProvider
-	// Allows writing logs
+	// Allows writing logs to configurable destinations
 	Logger
 	// Underlying filesystem interfaces
 	fs.Provider
