@@ -97,7 +97,8 @@ type repository struct {
 	repo *git.Repository
 	wt   *git.Worktree
 	fs   billy.Filesystem
-	log  *LoggingConfiguration
+	// if empty, logging will be disabled.
+	log *LoggingConfiguration
 
 	bufEnabled bool
 	path       string // path to the root of the repository

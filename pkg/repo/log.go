@@ -19,9 +19,15 @@ import (
 	"io"
 )
 
+// Allows customizing how the we log print statements and where we log them to.
 type Logger interface {
 	Logf(format string, a ...any)
+	// Allows configuring the logger by temporarily overriding the 
+	// current logging configuration. Prior configuration is restored
+	// by calling clear(). 
 	ConfigureLogger(c *LoggingConfiguration) (clear func())
+	// If colors are supported (e.g. in Bash), the methods below will customize
+	// variables to be printed with the specified formatting applied.
 	Bold(v interface{}) string
 	Red(v interface{}) string
 	Green(v interface{}) string
