@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -55,6 +56,8 @@ type ConfigurationRepository interface {
 	GitRepository
 	// Allows interacting with a git provider, e.g. GitHub
 	GitProvider
+	// Allows writing logs
+	Logger
 	// Underlying filesystem interfaces
 	fs.Provider
 	fs.ConfigWriter
@@ -95,9 +98,10 @@ type repository struct {
 	repo *git.Repository
 	wt   *git.Worktree
 	fs   billy.Filesystem
+	log  *LoggingConfiguration
 
-	loggingEnabled, bufEnabled bool
-	path                       string // path to the root of the repository
+	bufEnabled bool
+	path       string // path to the root of the repository
 
 	fs.Provider
 	fs.ConfigWriter
@@ -137,12 +141,14 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 	}
 
 	cr := &repository{
-		repo:           repo,
-		wt:             wt,
-		fs:             wt.Filesystem,
-		path:           path,
-		loggingEnabled: true,
-		bufEnabled:     true,
+		repo: repo,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
+		log: &LoggingConfiguration{
+			Writer: os.Stdout,
+		},
+		bufEnabled: true,
 	}
 
 	return cr, nil
@@ -166,12 +172,14 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 	cr := &repository{
-		repo:           repo,
-		wt:             wt,
-		fs:             wt.Filesystem,
-		path:           path,
-		loggingEnabled: true,
-		bufEnabled:     true,
+		repo: repo,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
+		log: &LoggingConfiguration{
+			Writer: os.Stdout,
+		},
+		bufEnabled: true,
 	}
 	return cr, nil
 }

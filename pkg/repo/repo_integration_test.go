@@ -18,6 +18,7 @@
 package repo
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -113,6 +114,9 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	require.NoError(t, err)
 	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
 	require.NoError(t, err)
+	var b bytes.Buffer
+	clear := r.ConfigureLogger(&LoggingConfiguration{Writer: &b})
+	defer clear()
 	result, err := r.Compile(ctx, &CompileRequest{
 		Registry:        registry,
 		NamespaceFilter: namespace,
@@ -122,6 +126,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	require.NoError(t, err)
 	assert.Len(t, result, 1)
 	require.NoError(t, result[0].Err())
+	assert.NotEmpty(t, b.String())
 	// Review
 	url, err := r.Review(ctx, "Test PR", ghCli, ap)
 	require.NoError(t, err)

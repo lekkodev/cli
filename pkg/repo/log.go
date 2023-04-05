@@ -16,11 +16,27 @@ package repo
 
 import (
 	"fmt"
+	"io"
 )
 
+type Logger interface {
+	Logf(format string, a ...any)
+	ConfigureLogger(c *LoggingConfiguration) (clear func())
+}
+
+type LoggingConfiguration struct {
+	Writer io.Writer
+}
+
 func (r *repository) Logf(format string, a ...any) {
-	if !r.loggingEnabled {
+	if r.log == nil {
 		return
 	}
-	fmt.Printf(format, a...)
+	fmt.Fprintf(r.log.Writer, format, a...)
+}
+
+func (r *repository) ConfigureLogger(c *LoggingConfiguration) (clear func()) {
+	currentConfig := r.log
+	r.log = c
+	return func() { r.log = currentConfig }
 }
