@@ -84,6 +84,22 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 	return repo.GetCloneURL(), nil
 }
 
+// GetUserOrganizations uses an authenticated call to get the users private and public organizations
+func (gc *GithubClient) GetUserOrganizations(ctx context.Context) ([]string, error) {
+	// TODO: may need pagination if user is in more than 100 orgs
+	orgs, _, err := gc.Organizations.List(ctx, "", nil)
+	if err != nil {
+		return nil, err
+	}
+	var result = make([]string, 0, len(orgs))
+	for _, org := range orgs {
+		if org.Login != nil {
+			result = append(result, *org.Login)
+		}
+	}
+	return result, nil
+}
+
 func ParseOwnerRepo(githubURL string) (string, string, error) {
 	// TODO: make this exhaustive and check the git standard for remotes, or do it the URL way.
 	// ssh url
