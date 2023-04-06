@@ -15,8 +15,11 @@
 package gh
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/go-github/github"
+	"github.com/migueleliasweb/go-github-mock/src/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,4 +33,31 @@ func TestParseOwnerRepo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, o, "lekkodev")
 	require.Equal(t, r, "config-test")
+}
+
+func TestGetUserOrganizations(t *testing.T) {
+	mockedHTTPClient := mock.NewMockedHTTPClient(
+		mock.WithRequestMatch(
+			mock.GetUserOrgs,
+			[]github.Organization{
+				{
+					Login: github.String("lekkodev1"),
+				},
+				{
+					Login: github.String("lekkodev2"),
+				},
+				{
+					Login: github.String("lekkodev3"),
+				},
+			},
+		),
+	)
+	f := NewGithubClient(mockedHTTPClient)
+	result, err := f.GetUserOrganizations(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result, 3)
+	require.Equal(t, "lekkodev1", result[0])
+	require.Equal(t, "lekkodev2", result[1])
+	require.Equal(t, "lekkodev3", result[2])
 }
