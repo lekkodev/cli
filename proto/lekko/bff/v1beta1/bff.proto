@@ -267,6 +267,9 @@ message Repository {
   google.protobuf.Timestamp updated_at = 5;
   string description = 6;
   string url = 7;
+  // Whether or not the requesting user is authorized
+  // to access this repository on github
+  bool user_authorized = 8;
 }
 
 message ListRepositoriesResponse {
