@@ -62,6 +62,7 @@ enum ChallengeName {
 
 message LoginResponse {
   ChallengeName challenge_name = 1;
+  string session_id = 2;
 }
 
 message LogoutRequest {}
