@@ -32,6 +32,8 @@ service AuthService {
   rpc Login(LoginRequest) returns (LoginResponse) {}
   // Logout will expire the user's cookie.
   rpc Logout(LogoutRequest) returns (LogoutResponse) {}
+  // RespondToChallenge responds to a challenge (eg. MFA, NEW_PASSWORD) in order to authenticate
+  rpc RespondToChallenge(RespondToChallengeRequest) returns (RespondToChallengeResponse) {}
   // Returns a response indicating if the account already existed.
   rpc RegisterUser(RegisterUserRequest) returns (RegisterUserResponse) {}
   // ResendVerificationCode triggers a verification code request
@@ -53,11 +55,25 @@ message LoginRequest {
   string password = 2;
 }
 
-message LoginResponse {}
+enum CHALLENGE_NAME {
+  NONE = 0;
+  NEW_PASSWORD_REQUIRED = 1;
+}
+
+message LoginResponse {
+  CHALLENGE_NAME challenge_name = 1;
+}
 
 message LogoutRequest {}
 
 message LogoutResponse {}
+
+message RespondToChallengeRequest {
+  CHALLENGE_NAME name = 0;
+  map<string, string> challenge_responses = 1;
+}
+
+message RespondToChallengeResponse {}
 
 message RegisterUserRequest {
   string username = 1;
