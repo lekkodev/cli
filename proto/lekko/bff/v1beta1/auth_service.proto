@@ -71,6 +71,7 @@ message LogoutResponse {}
 message RespondToChallengeRequest {
   ChallengeName name = 1;
   map<string, string> challenge_responses = 2;
+  string session_id = 3;
 }
 
 message RespondToChallengeResponse {}
