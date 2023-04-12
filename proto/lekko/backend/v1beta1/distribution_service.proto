@@ -34,7 +34,7 @@ service DistributionService {
   rpc RegisterClient(RegisterClientRequest) returns (RegisterClientResponse) {}
   // Deregisters a client using a session key.
   rpc DeregisterClient(DeregisterClientRequest) returns (DeregisterClientResponse) {}
-  // Returns a github access token that provides access to the contents of 
+  // Returns a github access token that provides access to the contents of
   // some of Lekko's private repositories
   rpc GetDeveloperAccessToken(GetDeveloperAccessTokenRequest) returns (GetDeveloperAccessTokenResponse) {}
 }
