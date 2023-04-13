@@ -84,9 +84,10 @@ func (m *MemberRole) Type() string {
 }
 
 type TeamMembership struct {
-	TeamName string
-	User     string
-	Role     string
+	TeamName   string
+	User       string
+	Role       string
+	UserStatus string
 }
 
 func (t *Team) List(ctx context.Context) ([]*TeamMembership, error) {
@@ -106,9 +107,10 @@ func teamMembershipFromProto(m *bffv1beta1.Membership) *TeamMembership {
 		return nil
 	}
 	return &TeamMembership{
-		TeamName: m.GetTeamName(),
-		User:     m.GetUsername(),
-		Role:     roleFromProto(m.GetRole()),
+		TeamName:   m.GetTeamName(),
+		User:       m.GetUsername(),
+		Role:       roleFromProto(m.GetRole()),
+		UserStatus: strings.ToLower(strings.TrimPrefix(m.GetUserStatus().String(), "USER_STATUS_")),
 	}
 }
 

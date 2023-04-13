@@ -15,7 +15,9 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/mail"
 	"os"
 	"text/tabwriter"
@@ -35,12 +37,12 @@ func teamCmd() *cobra.Command {
 	}
 	cmd.AddCommand(
 		showCmd,
-		teamListCmd,
+		teamListCmd(),
 		teamSwitchCmd(),
 		createCmd(),
 		addMemberCmd(),
 		removeMemberCmd(),
-		teamListMembersCmd,
+		teamListMembersCmd(),
 	)
 	return cmd
 }
@@ -56,23 +58,28 @@ var showCmd = &cobra.Command{
 	},
 }
 
-var teamListCmd = &cobra.Command{
-	Use:   "list",
-	Short: "list the teams that the logged-in user is a member of",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
-		t := team.NewTeam(lekko.NewBFFClient(rs))
-		memberships, err := t.List(cmd.Context())
-		if err != nil {
-			return err
-		}
-		if len(memberships) == 0 {
-			fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
+func teamListCmd() *cobra.Command {
+	var flagOutput string
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "list the teams that the logged-in user is a member of",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
+			t := team.NewTeam(lekko.NewBFFClient(rs))
+			memberships, err := t.List(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if len(memberships) == 0 {
+				fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
+				return nil
+			}
+			printTeamMemberships(memberships, flagOutput)
 			return nil
-		}
-		printTeamMemberships(memberships)
-		return nil
-	},
+		},
+	}
+	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "Output format. ['json', 'table']")
+	return cmd
 }
 
 func teamSwitchCmd() *cobra.Command {
@@ -207,30 +214,47 @@ func removeMemberCmd() *cobra.Command {
 	return cmd
 }
 
-var teamListMembersCmd = &cobra.Command{
-	Use:   "list-members",
-	Short: "list the members of the currently active team",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-		t := team.NewTeam(lekko.NewBFFClient(rs))
-		memberships, err := t.ListMemberships(cmd.Context())
-		if err != nil {
-			return err
-		}
-		if len(memberships) == 0 {
-			fmt.Printf("Team '%s' has no memberhips\n", rs.GetLekkoTeam())
+func teamListMembersCmd() *cobra.Command {
+	var flagOutput string
+
+	cmd := &cobra.Command{
+		Use:   "list-members",
+		Short: "list the members of the currently active team",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			t := team.NewTeam(lekko.NewBFFClient(rs))
+			memberships, err := t.ListMemberships(cmd.Context())
+			if err != nil {
+				return err
+			}
+			if len(memberships) == 0 {
+				fmt.Printf("Team '%s' has no memberhips\n", rs.GetLekkoTeam())
+				return nil
+			}
+			printTeamMemberships(memberships, flagOutput)
 			return nil
-		}
-		printTeamMemberships(memberships)
-		return nil
-	},
+		},
+	}
+	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "Output format. ['json', 'table']")
+	return cmd
 }
 
-func printTeamMemberships(memberships []*team.TeamMembership) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintf(w, "Team Name\tEmail\tRole\n")
-	for _, m := range memberships {
-		fmt.Fprintf(w, "%s\t%s\t%s\n", m.TeamName, m.User, m.Role)
+func printTeamMemberships(memberships []*team.TeamMembership, output string) {
+	switch output {
+	case "table":
+		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+		fmt.Fprintf(w, "Team Name\tEmail\tRole\tStatus\n")
+		for _, m := range memberships {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.TeamName, m.User, m.Role, m.UserStatus)
+		}
+		w.Flush()
+	case "json":
+		b, err := json.MarshalIndent(memberships, "", "    ")
+		if err != nil {
+			log.Fatalf("unable to print team memberships: %v", err)
+		}
+		fmt.Println(string(b))
+	default:
+		fmt.Printf("unknown output format: %s", output)
 	}
-	w.Flush()
 }
