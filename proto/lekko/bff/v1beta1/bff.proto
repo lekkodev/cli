@@ -196,17 +196,17 @@ enum MembershipRole {
   MEMBERSHIP_ROLE_OWNER = 2;
 }
 
-enum MembershipStatus {
-  MEMBERSHIP_STATUS_UNSPECIFIED = 0;
-  MEMBERSHIP_STATUS_UNCONFIRMED = 1;
-  MEMBERSHIP_STATUS_CONFIRMED = 2;
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_UNCONFIRMED = 1;
+  USER_STATUS_CONFIRMED = 2;
 }
 
 message Membership {
   string team_name = 1;
   string username = 2;
   MembershipRole role = 3;
-  MembershipStatus status = 4;
+  UserStatus user_status = 4;
 }
 
 message ListTeamMembershipsRequest {}
