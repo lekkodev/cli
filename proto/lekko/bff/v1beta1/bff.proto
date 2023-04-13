@@ -178,17 +178,29 @@ message CreateTeamRequest {
   string name = 1;
 }
 
-message CreateTeamResponse {}
+message CreateTeamResponse {
+  string team = 1;
+  repeated Repository repositories = 2;
+}
 
 message DeleteTeamRequest {}
 
-message DeleteTeamResponse {}
+message DeleteTeamResponse {
+  // Response contains team information about
+  // the user's newly picked default team.
+  // If the user has no other teams, the response will be empty.
+  string team = 1;
+  repeated Repository repositories = 2;
+}
 
 message UseTeamRequest {
   string name = 1;
 }
 
-message UseTeamResponse {}
+message UseTeamResponse {
+  string team = 1;
+  repeated Repository repositories = 2;
+}
 
 enum MembershipRole {
   MEMBERSHIP_ROLE_UNSPECIFIED = 0;
