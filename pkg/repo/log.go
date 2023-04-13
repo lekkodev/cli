@@ -17,6 +17,8 @@ package repo
 import (
 	"fmt"
 	"io"
+
+	"github.com/lekkodev/cli/pkg/logging"
 )
 
 // Allows customizing how the we log print statements and where we log them to.
@@ -56,26 +58,26 @@ func (r *repository) Bold(v interface{}) string {
 	if r.log == nil || r.log.ColorsDisabled {
 		return fmt.Sprintf("%s", v)
 	}
-	return r.Bold(v)
+	return logging.Bold(v)
 }
 
 func (r *repository) Red(v interface{}) string {
 	if r.log == nil || r.log.ColorsDisabled {
 		return fmt.Sprintf("%s", v)
 	}
-	return r.Red(v)
+	return logging.Red(v)
 }
 
 func (r *repository) Green(v interface{}) string {
 	if r.log == nil || r.log.ColorsDisabled {
 		return fmt.Sprintf("%s", v)
 	}
-	return r.Green(v)
+	return logging.Green(v)
 }
 
 func (r *repository) Yellow(v interface{}) string {
 	if r.log == nil || r.log.ColorsDisabled {
 		return fmt.Sprintf("%s", v)
 	}
-	return r.Yellow(v)
+	return logging.Yellow(v)
 }
