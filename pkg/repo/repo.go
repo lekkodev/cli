@@ -322,8 +322,11 @@ func (r *repository) Push(ctx context.Context, ap AuthProvider, branchName strin
 	ref := plumbing.NewBranchReferenceName(branchName)
 	if err := r.repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: RemoteName,
-		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
-		Auth:       basicAuth(ap),
+		// We push only the branch provided. To understand how refspecs
+		// are constructed, see https://git-scm.com/book/en/v2/Git-Internals-The-Refspec
+		// and https://stackoverflow.com/a/48430450.
+		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
+		Auth:     basicAuth(ap),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to push")
 	}
