@@ -285,10 +285,7 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	if err != nil {
 		return "", errors.Wrap(err, "branch name")
 	}
-	if err := r.repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: RemoteName,
-		Auth:       basicAuth(ap),
-	}); err != nil {
+	if err := r.Push(ctx, ap, branchName); err != nil {
 		return "", errors.Wrap(err, "push")
 	}
 	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
@@ -317,6 +314,21 @@ func (r *repository) Pull(ap AuthProvider, branchName string) error {
 		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to pull")
+	}
+	return nil
+}
+
+func (r *repository) Push(ctx context.Context, ap AuthProvider, branchName string) error {
+	ref := plumbing.NewBranchReferenceName(branchName)
+	if err := r.repo.PushContext(ctx, &git.PushOptions{
+		RemoteName: RemoteName,
+		// We push only the branch provided. To understand how refspecs
+		// are constructed, see https://git-scm.com/book/en/v2/Git-Internals-The-Refspec
+		// and https://stackoverflow.com/a/48430450.
+		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
+		Auth:     basicAuth(ap),
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return errors.Wrap(err, "failed to push")
 	}
 	return nil
 }

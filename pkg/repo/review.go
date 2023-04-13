@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/google/go-github/v47/github"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -72,17 +71,14 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 			return "", errors.Wrap(err, "main add commit push")
 		}
 	} else {
-		if !clean {
+		if !clean { // commit local changes and push
 			if _, err := r.Commit(ctx, ap, title); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
-		}
-		// update remote if needed
-		if err := r.repo.PushContext(ctx, &git.PushOptions{
-			RemoteName: RemoteName,
-			Auth:       basicAuth(ap),
-		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-			return "", errors.Wrap(err, "push")
+		} else { // push (does nothing if there's nothing to push)
+			if err := r.Push(ctx, ap, branchName); err != nil {
+				return "", errors.Wrap(err, "push")
+			}
 		}
 	}
 	url, err := r.createPR(ctx, branchName, title, ghCli)
