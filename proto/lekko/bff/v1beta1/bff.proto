@@ -181,10 +181,7 @@ message CreateTeamRequest {
 
 message CreateTeamResponse {
   string team = 1;
-  oneof repository_response {
-    google.rpc.ErrorInfo error = 2;
-    Repositories repositories = 3;
-  }
+  RepositoriesResponse repositories = 2;
 }
 
 message DeleteTeamRequest {}
@@ -194,10 +191,7 @@ message DeleteTeamResponse {
   // the user's newly picked default team.
   // If the user has no other teams, the team will be empty.
   string team = 1;
-  oneof repository_response {
-    google.rpc.ErrorInfo error = 2;
-    Repositories repositories = 3;
-  }
+  RepositoriesResponse repositories = 2;
 }
 
 message UseTeamRequest {
@@ -206,10 +200,7 @@ message UseTeamRequest {
 
 message UseTeamResponse {
   string team = 1;
-  oneof repository_response {
-    google.rpc.ErrorInfo error = 2;
-    Repositories repositories = 3;
-  }
+  RepositoriesResponse repositories = 2;
 }
 
 enum MembershipRole {
@@ -301,8 +292,19 @@ message Repository {
   bool user_authorized = 8;
 }
 
-message Repositories {
-  repeated Repository repositories = 2;
+// RepositoriesResponse contains either a
+// list of repositories for the requested team,
+// or error details describing why the server
+// was unable to retrieve the list of repositories.
+message RepositoriesResponse {
+  message Repositories {
+    repeated Repository repositories = 1;
+  }
+
+  oneof repository_response {
+    google.rpc.ErrorInfo error = 1;
+    Repositories repositories = 2;
+  }
 }
 
 message ListRepositoriesResponse {
