@@ -18,6 +18,7 @@ package lekko.bff.v1beta1;
 
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/error_details.proto";
 import "lekko/backend/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
 import "lekko/rules/v1beta3/rules.proto";
@@ -180,7 +181,10 @@ message CreateTeamRequest {
 
 message CreateTeamResponse {
   string team = 1;
-  repeated Repository repositories = 2;
+  oneof repository_response {
+    google.rpc.ErrorInfo error = 2;
+    Repositories repositories = 3;
+  }
 }
 
 message DeleteTeamRequest {}
@@ -188,9 +192,12 @@ message DeleteTeamRequest {}
 message DeleteTeamResponse {
   // Response contains team information about
   // the user's newly picked default team.
-  // If the user has no other teams, the response will be empty.
+  // If the user has no other teams, the team will be empty.
   string team = 1;
-  repeated Repository repositories = 2;
+  oneof repository_response {
+    google.rpc.ErrorInfo error = 2;
+    Repositories repositories = 3;
+  }
 }
 
 message UseTeamRequest {
@@ -199,7 +206,10 @@ message UseTeamRequest {
 
 message UseTeamResponse {
   string team = 1;
-  repeated Repository repositories = 2;
+  oneof repository_response {
+    google.rpc.ErrorInfo error = 2;
+    Repositories repositories = 3;
+  }
 }
 
 enum MembershipRole {
@@ -289,6 +299,10 @@ message Repository {
   // Whether or not the requesting user is authorized
   // to access this repository on github
   bool user_authorized = 8;
+}
+
+message Repositories {
+  repeated Repository repositories = 2;
 }
 
 message ListRepositoriesResponse {
