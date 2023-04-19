@@ -66,6 +66,10 @@ type ConfigurationRepository interface {
 type GitRepository interface {
 	// Checks out the branch at origin/${branchName}. The remote branch must exist.
 	CheckoutRemoteBranch(branchName string) error
+	// Checks out the given sha. Sha must exist on the local
+	// git repository (i.e. we shouldn't have to consult the remote
+	// repo to check it out).
+	CheckoutLocalHash(sha string) error
 	// Returns the url of the remote that the local repository is set up to track.
 	GetRemoteURL() (string, error)
 	// Commit will take an optional commit message and push the changes in the
@@ -225,6 +229,15 @@ func (r *repository) CheckoutRemoteBranch(branchName string) error {
 		return errors.Wrap(err, "checkout")
 	}
 	return nil
+}
+
+// Checks out the given sha. Sha must exist on the local
+// git repository (i.e. we shouldn't have to consult the remote
+// repo to check it out).
+func (r *repository) CheckoutLocalHash(sha string) error {
+	return r.wt.Checkout(&git.CheckoutOptions{
+		Hash: plumbing.NewHash(sha),
+	})
 }
 
 func (r *repository) GetRemoteURL() (string, error) {
