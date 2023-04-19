@@ -2,3 +2,4 @@ version: v1
 name: buf.build/lekkodev/cli
 deps:
   - buf.build/googleapis/googleapis
+  - buf.build/lekkodev/sdk

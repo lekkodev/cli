@@ -19,7 +19,7 @@ package lekko.bff.v1beta1;
 import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/error_details.proto";
-import "lekko/backend/v1beta1/configuration_service.proto";
+import "lekko/client/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
 import "lekko/rules/v1beta3/rules.proto";
 
@@ -698,7 +698,7 @@ message EvalRequest {
   string namespace_name = 2;
   string feature_name = 3;
 
-  map<string, lekko.backend.v1beta1.Value> context = 4;
+  map<string, lekko.client.v1beta1.Value> context = 4;
   BranchKey key = 5;
 }
 
