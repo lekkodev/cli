@@ -16,7 +16,6 @@ syntax = "proto3";
 
 package lekko.backend.v1beta1;
 
-import "lekko/client/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
 
 // Initial implementation of a config distribution service. Clients should begin by
@@ -45,7 +44,7 @@ message RepositoryKey {
 }
 
 message GetRepositoryVersionRequest {
-  lekko.client.v1beta1.RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1;
   string session_key = 2;
 }
 
@@ -54,7 +53,7 @@ message GetRepositoryVersionResponse {
 }
 
 message GetRepositoryContentsRequest {
-  lekko.client.v1beta1.RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1;
   // optional namespace_name to filter responses by
   string namespace_name = 2;
   // optional feature_name to filter responses by
@@ -85,7 +84,7 @@ message ContextKey {
 }
 
 message FlagEvaluationEvent {
-  lekko.client.v1beta1.RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1;
   string commit_sha = 2;
   string feature_sha = 3;
   string namespace_name = 4;
@@ -104,7 +103,7 @@ message SendFlagEvaluationMetricsRequest {
 message SendFlagEvaluationMetricsResponse {}
 
 message RegisterClientRequest {
-  lekko.client.v1beta1.RepositoryKey repo_key = 1;
+  RepositoryKey repo_key = 1;
   // The namespaces to register within the repo. If empty,
   // all namespaces will be registered.
   repeated string namespace_list = 2;
