@@ -153,6 +153,9 @@ message APIKey {
   // Lekko username of the user who created the api key
   string created_by = 3;
   google.protobuf.Timestamp created_at = 4;
+  // The string representation of the api key, with the
+  // suffix masked.
+  string api_key_masked = 5;
 }
 
 message ListAPIKeysRequest {}
@@ -488,6 +491,8 @@ message GetUserOAuthRequest {}
 
 message GetUserOAuthResponse {
   bool authenticated = 1;
+  // The oauth token with the suffix masked.
+  string oauth_token_masked = 2;
 }
 
 message DeleteUserOAuthRequest {}
