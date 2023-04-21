@@ -133,6 +133,34 @@ func (a *OAuth) Tokens(ctx context.Context, rs secrets.ReadSecrets) []string {
 	}
 }
 
+func (a *OAuth) ForgotPassword(ctx context.Context, email string) error {
+	_, err := a.lekkoAuthClient.ForgotPassword(ctx, connect_go.NewRequest(
+		&bffv1beta1.ForgotPasswordRequest{Username: email}),
+	)
+	return err
+}
+
+func (a *OAuth) ConfirmForgotPassword(
+	ctx context.Context, email string, newPassword string, confirmNewPassword string, verificationCode string,
+) error {
+	_, err := a.lekkoAuthClient.ConfirmForgotPassword(ctx, connect_go.NewRequest(
+		&bffv1beta1.ConfirmForgotPasswordRequest{
+			Username:           email,
+			NewPassword:        newPassword,
+			ConfirmNewPassword: confirmNewPassword,
+			VerificationCode:   verificationCode,
+		}),
+	)
+	return err
+}
+
+func (a *OAuth) ResendVerification(ctx context.Context, email string) error {
+	_, err := a.lekkoAuthClient.ResendVerificationCode(ctx, connect_go.NewRequest(
+		&bffv1beta1.ResendVerificationCodeRequest{Username: email}),
+	)
+	return err
+}
+
 // Status reads existing credentials and prints them out in stdout.
 func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool, rs secrets.ReadSecrets) {
 	var lekkoAuthErr, ghAuthErr error

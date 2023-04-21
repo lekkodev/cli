@@ -17,11 +17,9 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/mail"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -29,7 +27,6 @@ import (
 	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
-	"github.com/lekkodev/cli/pkg/oauth"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star/static"
@@ -56,13 +53,7 @@ func main() {
 	rootCmd.AddCommand(namespaceCmd())
 	rootCmd.AddCommand(apikeyCmd())
 	// auth
-	authCmd.AddCommand(loginCmd())
-	authCmd.AddCommand(logoutCmd())
-	authCmd.AddCommand(statusCmd)
-	authCmd.AddCommand(registerCmd())
-	authCmd.AddCommand(confirmUserCmd())
-	authCmd.AddCommand(tokensCmd)
-	rootCmd.AddCommand(authCmd)
+	rootCmd.AddCommand(authCmd())
 	// exp
 	k8sCmd.AddCommand(applyCmd())
 	k8sCmd.AddCommand(listCmd())
@@ -381,24 +372,6 @@ func rolloutsURL(team, owner, repo string) string {
 	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/commits", team, owner, repo)
 }
 
-var authCmd = &cobra.Command{
-	Use:   "auth",
-	Short: "authenticates lekko cli",
-}
-
-func loginCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "login",
-		Short: "authenticate with lekko and github, if unauthenticated",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
-				return auth.Login(cmd.Context(), ws)
-			})
-		},
-	}
-}
-
 type provider string
 
 const (
@@ -422,119 +395,6 @@ func (p *provider) Set(v string) error {
 
 func (p *provider) Type() string {
 	return "provider"
-}
-
-func logoutCmd() *cobra.Command {
-	var p provider
-	cmd := &cobra.Command{
-		Use:   "logout",
-		Short: "log out of lekko or github",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(string(p)) == 0 {
-				return errors.Errorf("provider must be specified")
-			}
-			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
-				return auth.Logout(cmd.Context(), string(p), ws)
-			})
-		},
-	}
-	cmd.Flags().VarP(&p, "provider", "p", "provider to log out. allowed: 'lekko', 'github'.")
-	return cmd
-}
-
-func registerCmd() *cobra.Command {
-	var email, password, confirmPassword string
-	cmd := &cobra.Command{
-		Use:   "register",
-		Short: "register an account with lekko",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(email) == 0 {
-				if err := survey.AskOne(&survey.Input{
-					Message: "Email:",
-				}, &email); err != nil {
-					return errors.Wrap(err, "prompt email")
-				}
-			}
-			if _, err := mail.ParseAddress(email); err != nil {
-				return errors.New("invalid email address")
-			}
-			// prompt password
-			if err := survey.AskOne(&survey.Password{
-				Message: "Password:",
-			}, &password); err != nil {
-				return errors.Wrap(err, "prompt password")
-			}
-			if err := survey.AskOne(&survey.Password{
-				Message: "Confirm Password:",
-			}, &confirmPassword); err != nil {
-				return errors.Wrap(err, "prompt confirm password")
-			}
-
-			if password != confirmPassword {
-				return errors.New("passwords don't match")
-			}
-			auth := oauth.NewOAuth(lekko.NewBFFClient(secrets.NewSecretsOrFail()))
-			if err := auth.Register(cmd.Context(), email, password, confirmPassword); err != nil {
-				return err
-			}
-			fmt.Println("Run `lekko auth confirm` to confirm account.")
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
-	return cmd
-}
-
-func confirmUserCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "confirm",
-		Short: "confirm a new user account",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var email, code string
-			rs := secrets.NewSecretsOrFail()
-			if err := survey.AskOne(&survey.Input{
-				Message: "Email:",
-			}, &email); err != nil {
-				return errors.Wrap(err, "prompt email")
-			}
-
-			if err := survey.AskOne(&survey.Input{
-				Message: "Verification Code:",
-			}, &code); err != nil {
-				return errors.Wrap(err, "prompt code")
-			}
-			if err := oauth.NewOAuth(lekko.NewBFFClient(rs)).ConfirmUser(cmd.Context(), email, code); err != nil {
-				return err
-			}
-			fmt.Println("Account registered with lekko.")
-			fmt.Println("Run `lekko auth login` to complete oauth.")
-			return nil
-		},
-	}
-	return cmd
-}
-
-var tokensCmd = &cobra.Command{
-	Use:   "tokens",
-	Short: "display token(s) currently in use",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		rs := secrets.NewSecretsOrFail()
-		tokens := oauth.NewOAuth(lekko.NewBFFClient(rs)).Tokens(cmd.Context(), rs)
-		fmt.Println(strings.Join(tokens, "\n"))
-		return nil
-	},
-}
-
-var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "display lekko authentication status",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		rs := secrets.NewSecretsOrFail()
-		auth := oauth.NewOAuth(lekko.NewBFFClient(rs))
-		auth.Status(cmd.Context(), false, rs)
-		return nil
-	},
 }
 
 var k8sCmd = &cobra.Command{
