@@ -106,7 +106,7 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider) string {
 	// Add feature, so we have some changes in our working directory.
 	namespace, featureName := "default", "test"
-	path, err := r.AddFeature(ctx, namespace, featureName, feature.FeatureTypeBool)
+	path, err := r.AddFeature(ctx, namespace, featureName, feature.FeatureTypeBool, "")
 	require.NoError(t, err)
 	t.Logf("wrote feature to path %s\n", path)
 	// Compile
