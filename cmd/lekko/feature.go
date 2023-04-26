@@ -90,7 +90,7 @@ func featureList() *cobra.Command {
 }
 
 func featureAdd() *cobra.Command {
-	var ns, featureName, fType string
+	var ns, featureName, fType, protoMessage string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add feature",
@@ -134,7 +134,22 @@ func featureAdd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			if path, err := r.AddFeature(cmd.Context(), ns, featureName, feature.FeatureType(fType)); err != nil {
+
+			if fType == string(feature.FeatureTypeProto) {
+				protos, err := r.GetProtoMessages(cmd.Context())
+				if err != nil {
+					return errors.Wrap(err, "unable to get proto messages")
+				}
+				if err := survey.AskOne(&survey.Select{
+					Message: "Messages:",
+					Options: append([]string{"NEW"}, protos...),
+				}, &protoMessage); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+
+			ctx := cmd.Context()
+			if path, err := r.AddFeature(ctx, ns, featureName, feature.FeatureType(fType), protoMessage); err != nil {
 				return errors.Wrap(err, "add feature")
 			} else {
 				fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
