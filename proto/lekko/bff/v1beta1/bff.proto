@@ -90,19 +90,13 @@ service BFFService {
   // Helper for Rules AST -> String.
   rpc ConvertRuleToString(ConvertRuleToStringRequest) returns (ConvertRuleToStringResponse) {}
 
-  // Get info about multiple PRs in a repository
-  rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
-    // use GetPR to get info about a single PR.
-    // To get info about multiple PRs, first get their branch info
-    // with ListBranches.
-    option deprecated = true;
-  }
   // Get info about a single PR for the provided branch
   rpc GetPR(GetPRRequest) returns (GetPRResponse) {}
   // Deprecated, use Merge instead
   rpc MergePR(MergePRRequest) returns (MergePRResponse) {
     option deprecated = true;
   }
+  rpc ListPRs(ListPRsRequest) returns (ListPRsResponse) {}
 
   // Branch management
 
@@ -524,6 +518,13 @@ message CheckRun {
   google.protobuf.Timestamp completed_at = 6;
 }
 
+enum PullRequestState {
+  PULL_REQUEST_STATE_UNSPECIFIED = 0;
+  PULL_REQUEST_STATE_OPEN = 1;
+  PULL_REQUEST_STATE_CLOSED = 2;
+  PULL_REQUEST_STATE_ALL = 3;
+}
+
 message PullRequest {
   message Review {
     // user who performed the review
@@ -551,7 +552,7 @@ message PullRequest {
   string title = 1;
   string url = 2;
   int64 number = 3;
-  string state = 4;
+  string state = 4 [deprecated = true];
   bool approved = 5 [deprecated = true];
   ChecksState checks_state = 6 [deprecated = true];
   google.protobuf.Timestamp pushed_at = 7 [deprecated = true];
@@ -564,6 +565,7 @@ message PullRequest {
   string base_ref = 12;
   string base_sha = 13;
   Mergeable mergeable = 14;
+  PullRequestState pr_state = 15;
 }
 
 message GetPRInfoRequest {
@@ -589,6 +591,17 @@ message MergePRRequest {
 
 message MergePRResponse {}
 
+message ListPRsRequest {
+  RepositoryKey repo_key = 1;
+  PullRequestState state = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+message ListPRsResponse {
+  repeated PullRequest prs = 1;
+}
+
 // Branches are user-scoped git-branches
 message Branch {
   BranchKey key = 1;
@@ -601,6 +614,9 @@ message Branch {
   // The base sha is the sha that the branch
   // was pointing to when it was created.
   string base_sha = 7;
+  // Optional pull request. If no pull request
+  // has been created for this branch, returns empty
+  PullRequest pull_request = 8;
 }
 
 message BranchKey {
