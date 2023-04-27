@@ -477,7 +477,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 	}
 
 	var template []byte
-	if fType == feature.FeatureTypeProto && protoMessageName != "NEW" {
+	if fType == feature.FeatureTypeProto {
 		template, err = addFeatureFromProto(r, ctx, protoMessageName)
 		if err != nil {
 			return "", errors.Wrap(err, "add feature from proto")

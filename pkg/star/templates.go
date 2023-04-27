@@ -28,14 +28,6 @@ const starFmt = `result=feature(
 )
 `
 
-const protoStar = `pb = proto.package("google.protobuf")
-
-result=feature(
-	description="my feature description",
-	default=pb.BoolValue(value=False)
-)
-`
-
 const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
 {{$alias}} = proto.package("{{$name}}")
 {{- end}}
@@ -83,8 +75,6 @@ func GetTemplate(fType feature.FeatureType) ([]byte, error) {
 		return []byte(fmt.Sprintf(starFmt, "''")), nil
 	case feature.FeatureTypeJSON:
 		return []byte(fmt.Sprintf(starFmt, "{}")), nil
-	case feature.FeatureTypeProto:
-		return []byte(protoStar), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)
 	}
