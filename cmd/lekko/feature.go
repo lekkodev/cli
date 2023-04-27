@@ -90,7 +90,7 @@ func featureList() *cobra.Command {
 }
 
 func featureAdd() *cobra.Command {
-	var ns, featureName, fType string
+	var ns, featureName, fType, fProtoMessage string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add feature",
@@ -134,18 +134,35 @@ func featureAdd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			if path, err := r.AddFeature(cmd.Context(), ns, featureName, feature.FeatureType(fType)); err != nil {
+
+			if fType == string(feature.FeatureTypeProto) && len(fProtoMessage) == 0 {
+				protos, err := r.GetProtoMessages(cmd.Context())
+				if err != nil {
+					return errors.Wrap(err, "unable to get proto messages")
+				}
+				if err := survey.AskOne(&survey.Select{
+					Message: "Messages:",
+					Options: protos,
+				}, &fProtoMessage); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+
+			ctx := cmd.Context()
+			if path, err := r.AddFeature(ctx, ns, featureName, feature.FeatureType(fType), fProtoMessage); err != nil {
 				return errors.Wrap(err, "add feature")
 			} else {
 				fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
 				fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
 			}
-			return nil
+			_, err = r.Compile(ctx, &repo.CompileRequest{})
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add feature in")
 	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to add")
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of feature to create")
+	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of feature to create")
 	return cmd
 }
 

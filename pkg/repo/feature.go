@@ -31,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -42,7 +43,7 @@ type ConfigurationStore interface {
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	Format(ctx context.Context) error
-	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error)
+	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
@@ -54,6 +55,7 @@ type ConfigurationStore interface {
 	GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error)
 	GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error)
 	GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error)
+	GetProtoMessages(ctx context.Context) ([]string, error)
 	ParseMetadata(ctx context.Context) (*metadata.RootConfigRepoMetadata, map[string]*metadata.NamespaceConfigRepoMetadata, error)
 	RestoreWorkingDirectory(hash string) error
 }
@@ -460,7 +462,7 @@ func (r *repository) Format(ctx context.Context) error {
 // the namespace doesn't exist, or
 // a feature named featureName already exists
 // Returns the path to the feature file that was written to disk.
-func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType) (string, error) {
+func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error) {
 	if !isValidName(featureName) {
 		return "", errors.Wrap(ErrInvalidName, "feature")
 	}
@@ -474,15 +476,134 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 		}
 	}
 
-	featurePath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
-	template, err := star.GetTemplate(fType)
-	if err != nil {
-		return "", errors.Wrap(err, "get template")
+	var template []byte
+	if fType == feature.FeatureTypeProto {
+		template, err = addFeatureFromProto(r, ctx, protoMessageName)
+		if err != nil {
+			return "", errors.Wrap(err, "add feature from proto")
+		}
+	} else {
+		template, err = star.GetTemplate(fType)
+		if err != nil {
+			return "", errors.Wrap(err, "get template")
+		}
 	}
+
+	featurePath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
 	if err := r.WriteFile(featurePath, template, 0600); err != nil {
 		return "", fmt.Errorf("failed to add feature: %v", err)
 	}
 	return featurePath, nil
+}
+
+// addFeatureFromProto uses reflection to generate a Starlark feature template specific to the message descriptor
+func addFeatureFromProto(r ConfigurationRepository, ctx context.Context, messageName string) ([]byte, error) {
+	// Get the MessageType from the name, it involves loading the type registry again. This can probably be cached
+	// from the initial call when the type names were computed
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	types, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, err
+	}
+
+	mt, err := types.FindMessageByName(protoreflect.FullName(messageName))
+	if err != nil {
+		return nil, err
+	}
+	descriptor := mt.Descriptor()
+
+	// packageMap maps a '.' separated package name to an importable alias
+	packageMap := map[string]string{}
+	fieldDefaults := []string{}
+
+	descriptorPkgName := string(descriptor.ParentFile().Package())
+	descriptorPkgAlias := packageAlias(descriptorPkgName)
+	descriptorName := descriptorPkgAlias + "." + string(descriptor.Name())
+
+	packageMap[descriptorPkgName] = descriptorPkgAlias
+
+	// loop through the Fields to assign reasonable defaults for each field. If it's an imported type, we also need to include the package name.
+	for i := 0; i < descriptor.Fields().Len(); i++ {
+		field := descriptor.Fields().Get(i)
+		fieldDefault := ""
+		fieldDefault += string(field.Name()) + " = "
+		switch field.Kind() {
+		case protoreflect.MessageKind:
+			if field.IsMap() {
+				fieldDefault += "{}"
+			} else {
+				pkgName := string(field.Message().ParentFile().Package())
+				packageMap[pkgName] = packageAlias(pkgName)
+				fieldDefault += string(field.Message().FullName()) + "()"
+			}
+		case protoreflect.EnumKind:
+			pkgName := string(field.Enum().ParentFile().Package())
+			packageMap[pkgName] = packageAlias(pkgName)
+			fieldDefault += string(field.Enum().FullName()) + "." + string(field.Enum().Values().ByNumber(0).Name())
+		case protoreflect.BytesKind:
+			fieldDefault += "\"\""
+		default:
+			if field.IsList() {
+				fieldDefault += "[]"
+			} else {
+				primitiveVal := field.Default().String()
+				if primitiveVal == "" {
+					primitiveVal = "\"\""
+				}
+				if primitiveVal == "false" {
+					primitiveVal = "False"
+				}
+				fieldDefault += primitiveVal
+			}
+		}
+		fieldDefaults = append(fieldDefaults, fieldDefault)
+	}
+
+	// for each default value, replace the package names with the package alias.
+	// ideally, the package alias is resolved when generating the field defaults but
+	// it was a bit tricky with Nested Messages.
+	// eg. for a Message of: a.b.c.NestedMessage.FooBar, Name() only returns 'FooBar' and Package()
+	// only returns 'a.b.c'. It was not easy (afaik) to get the Nested Type. The Parent() method seemed promising.
+	// Note: this might generate the wrong package aliases if there are messages used in the same package hierarchy.
+	for i, res := range fieldDefaults {
+		for pkgName, alias := range packageMap {
+			res = strings.Replace(res, pkgName, alias, 1)
+		}
+		fieldDefaults[i] = res
+	}
+
+	return star.RenderExistingProtoTemplate(star.ProtoStarInputs{
+		Message:  descriptorName,
+		Packages: packageMap,
+		Fields:   fieldDefaults,
+	})
+}
+
+func packageAlias(pkgName string) string {
+	return strings.ReplaceAll(pkgName, ".", "_")
+}
+
+// GetProtoMessages returns a list of protobuf messages for a configuration repository
+func (r *repository) GetProtoMessages(ctx context.Context) ([]string, error) {
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	types, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, err
+	}
+	results := []string{}
+	f := func(r protoreflect.MessageType) bool {
+		results = append(results, string(r.Descriptor().FullName()))
+		return true
+	}
+	types.RangeMessages(f)
+	sort.Strings(results)
+	return results, nil
 }
 
 // Removes the given feature. If the namespace or feature doesn't exist, returns

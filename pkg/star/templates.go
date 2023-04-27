@@ -15,7 +15,9 @@
 package star
 
 import (
+	"bytes"
 	"fmt"
+	"text/template"
 
 	"github.com/lekkodev/cli/pkg/feature"
 )
@@ -26,13 +28,40 @@ const starFmt = `result=feature(
 )
 `
 
-const protoStar = `pb = proto.package("google.protobuf")
+const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
+{{$alias}} = proto.package("{{$name}}")
+{{- end}}
 
-result=feature(
-	description="my feature description",
-	default=pb.BoolValue(value=False)
+result = feature(
+    description = "my feature description",
+    default = {{.Message}}(
+        {{- range .Fields}}
+        {{. -}},
+        {{- end}}
+    ),
 )
 `
+
+type ProtoStarInputs struct {
+	Message  string
+	Packages map[string]string
+	Fields   []string
+}
+
+// RenderExistingProtoTemplate will render the parsed Proto message descriptor into a Starlark feature model
+func RenderExistingProtoTemplate(inputs ProtoStarInputs) ([]byte, error) {
+	var buf bytes.Buffer
+	templ := template.New("protobuf starlark")
+	templ, err := templ.Parse(protoFeatureTemplate)
+	if err != nil {
+		return nil, err
+	}
+	err = templ.Execute(&buf, inputs)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
 func GetTemplate(fType feature.FeatureType) ([]byte, error) {
 	switch fType {
@@ -46,8 +75,6 @@ func GetTemplate(fType feature.FeatureType) ([]byte, error) {
 		return []byte(fmt.Sprintf(starFmt, "''")), nil
 	case feature.FeatureTypeJSON:
 		return []byte(fmt.Sprintf(starFmt, "{}")), nil
-	case feature.FeatureTypeProto:
-		return []byte(protoStar), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)
 	}
