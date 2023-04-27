@@ -537,7 +537,11 @@ func addFeatureFromProto(r ConfigurationRepository, ctx context.Context, message
 			} else {
 				pkgName := string(field.Message().ParentFile().Package())
 				packageMap[pkgName] = packageAlias(pkgName)
-				fieldDefault += string(field.Message().FullName()) + "()"
+				instance := string(field.Message().FullName()) + "()"
+				if field.IsList() {
+					instance = fmt.Sprintf("[%s]", instance)
+				}
+				fieldDefault += instance
 			}
 		case protoreflect.EnumKind:
 			pkgName := string(field.Enum().ParentFile().Package())
