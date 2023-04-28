@@ -671,6 +671,9 @@ message SaveStarlarkResponse {
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
   bytes output = 4;
+  // This rpc will return output bytes even if compilation
+  // failed. In that case, success will be false.
+  bool success = 5;
 }
 
 message ConvertRuleToStringRequest {
