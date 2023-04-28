@@ -90,6 +90,12 @@ service BFFService {
   // Helper for Rules AST -> String.
   rpc ConvertRuleToString(ConvertRuleToStringRequest) returns (ConvertRuleToStringResponse) {}
 
+  rpc GetPRInfo(GetPRInfoRequest) returns (GetPRInfoResponse) {
+    // use GetPR to get info about a single PR.
+    // To get info about multiple PRs, first get their branch info
+    // with ListBranches.
+    option deprecated = true;
+  }
   // Get info about a single PR for the provided branch
   rpc GetPR(GetPRRequest) returns (GetPRResponse) {}
   // Deprecated, use Merge instead
