@@ -389,7 +389,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		r.Logf("Nothing to upgrade.\n")
 	}
 
-	return results, nil
+	return results, results.Err()
 }
 
 type versionedFeatureFile struct {
