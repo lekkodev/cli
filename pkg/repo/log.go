@@ -34,11 +34,16 @@ type Logger interface {
 	Red(v interface{}) string
 	Green(v interface{}) string
 	Yellow(v interface{}) string
+	Writer() io.Writer
 }
 
 type LoggingConfiguration struct {
 	Writer         io.Writer
 	ColorsDisabled bool
+}
+
+func (r *repository) Writer() io.Writer {
+	return r.log.Writer
 }
 
 func (r *repository) Logf(format string, a ...any) {
