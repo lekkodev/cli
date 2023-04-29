@@ -30,6 +30,7 @@ import (
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
+	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -125,40 +126,82 @@ type FeatureCompilationResult struct {
 	CompilationError      error
 	CompilationDiffExists bool
 	FormattingDiffExists  bool
+	PersistenceError      error
 }
 
-func (fcr *FeatureCompilationResult) SummaryString(r Logger) string {
-	stylizeStr := func(s string, pass bool) string {
-		if pass {
-			return r.Green(fmt.Sprintf("%s %s", s, "✔"))
-		}
-		return r.Red(fmt.Sprintf("%s %s", s, "✖"))
+func (fcr *FeatureCompilationResult) CompilationErrorString(r Logger) {
+	if fcr.Err() == nil {
+		return
 	}
-	var subs []string
-	if fcr.CompilationError != nil || fcr.CompiledFeature == nil {
-		subs = append(subs, stylizeStr("Compile", false))
-	} else {
-		subs = append(subs, stylizeStr(fmt.Sprintf("Compile (%s)", fcr.CompiledFeature.Feature.FeatureType), true))
-		if len(fcr.CompiledFeature.ValidatorResults) > 0 {
-			var numPassed int
-			for _, vr := range fcr.CompiledFeature.ValidatorResults {
-				if vr.Passed() {
-					numPassed++
-				}
-			}
-			subs = append(subs, stylizeStr(fmt.Sprintf("Validate %d/%d", numPassed, len(fcr.CompiledFeature.ValidatorResults)), numPassed == len(fcr.CompiledFeature.ValidatorResults)))
-		}
-		if len(fcr.CompiledFeature.TestResults) > 0 {
-			var numPassed int
-			for _, tr := range fcr.CompiledFeature.TestResults {
-				if tr.Passed() {
-					numPassed++
-				}
-			}
-			subs = append(subs, stylizeStr(fmt.Sprintf("Test %d/%d", numPassed, len(fcr.CompiledFeature.TestResults)), numPassed == len(fcr.CompiledFeature.TestResults)))
+	r.Logf(r.Bold(fmt.Sprintf("[%s/%s]\n", fcr.NamespaceName, fcr.FeatureName)))
+	if fcr.CompilationError != nil {
+		r.Logf(fmt.Sprintf("\t%s %v\n", r.Bold("→"), fcr.CompilationError))
+	}
+	if fcr.CompiledFeature == nil {
+		return
+	}
+	for _, res := range fcr.CompiledFeature.ValidatorResults {
+		if !res.Passed() {
+			r.Logf(fmt.Sprintf("\t%s %s\n", r.Bold("→"), res.DebugString()))
 		}
 	}
-	return fmt.Sprintf("%s %s", r.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)), strings.Join(subs, " | "))
+	for _, res := range fcr.CompiledFeature.TestResults {
+		if !res.Passed() {
+			r.Logf(fmt.Sprintf("\t%s %s\n", r.Bold("→"), res.DebugString()))
+		}
+	}
+	if fcr.PersistenceError != nil {
+		r.Logf(fmt.Sprintf("\t[persistence] %s %v\n", r.Bold("→"), fcr.PersistenceError))
+	}
+}
+
+func (fcr *FeatureCompilationResult) Summary(r Logger) []string {
+	featureType := "-"
+	compile := r.Red("✖")
+	test := "-"
+	validate := "-"
+	persisted := "-"
+	if fcr.CompilationError == nil {
+		compile = r.Green("✔")
+		if fcr.CompiledFeature != nil {
+			featureType = string(fcr.CompiledFeature.Feature.FeatureType)
+			if len(fcr.CompiledFeature.TestResults) > 0 {
+				var numPassed int
+				for _, tr := range fcr.CompiledFeature.TestResults {
+					if tr.Passed() {
+						numPassed++
+					}
+				}
+				test = fmt.Sprintf("%d/%d", numPassed, len(fcr.CompiledFeature.TestResults))
+				if numPassed == len(fcr.CompiledFeature.TestResults) {
+					test = r.Green(test)
+				} else {
+					test = r.Red(test)
+				}
+			}
+
+			if len(fcr.CompiledFeature.ValidatorResults) > 0 {
+				var numPassed int
+				for _, vr := range fcr.CompiledFeature.ValidatorResults {
+					if vr.Passed() {
+						numPassed++
+					}
+				}
+				validate = fmt.Sprintf("%d/%d", numPassed, len(fcr.CompiledFeature.ValidatorResults))
+				if numPassed == len(fcr.CompiledFeature.ValidatorResults) {
+					validate = r.Green(validate)
+				} else {
+					validate = r.Red(validate)
+				}
+			}
+			if fcr.PersistenceError == nil {
+				persisted = r.Green("✔")
+			} else {
+				persisted = r.Red("✖")
+			}
+		}
+	}
+	return []string{fcr.NamespaceName, fcr.FeatureName, compile, featureType, test, validate, persisted}
 }
 
 func (fcr *FeatureCompilationResult) Err() error {
@@ -178,10 +221,26 @@ func (fcr *FeatureCompilationResult) Err() error {
 			return r.Error
 		}
 	}
+	if fcr.PersistenceError != nil {
+		return fcr.PersistenceError
+	}
 	return nil
 }
 
 type FeatureCompilationResults []*FeatureCompilationResult
+
+func (fcrs FeatureCompilationResults) RenderSummary(r Logger) {
+	table := tablewriter.NewWriter(r.Writer())
+	table.SetHeader([]string{"Namespace", "Feature", "Compiled", "Type", "Tests", "Validators", "Persisted"})
+	for _, fcr := range fcrs {
+		table.Append(fcr.Summary(r))
+	}
+	table.Render()
+
+	for _, fcr := range fcrs {
+		fcr.CompilationErrorString(r)
+	}
+}
 
 func (fcrs FeatureCompilationResults) Err() error {
 	for _, fcr := range fcrs {
@@ -266,43 +325,13 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			return results[i].FeatureName < results[j].FeatureName
 		}
 	})
-	// print summary
-	for _, fcr := range results {
-		r.Logf("%v\n", fcr.SummaryString(r))
-	}
-	if results.Err() != nil {
-		// print errors
-		r.Logf("-------------------\n")
-		for _, fcr := range results {
-			if fcr.Err() == nil {
-				continue
-			}
-			r.Logf(r.Bold(fmt.Sprintf("[%s/%s]", fcr.NamespaceName, fcr.FeatureName)))
-			if fcr.CompilationError != nil {
-				r.Logf(fmt.Sprintf("%s %v\n", r.Bold("→"), fcr.CompilationError))
-			}
-			if fcr.CompiledFeature == nil {
-				continue
-			}
-			for _, res := range fcr.CompiledFeature.ValidatorResults {
-				if !res.Passed() {
-					r.Logf(fmt.Sprintf("%s %s\n", r.Bold("→"), res.DebugString()))
-				}
-			}
-			for _, res := range fcr.CompiledFeature.TestResults {
-				if !res.Passed() {
-					r.Logf(fmt.Sprintf("%s %s\n", r.Bold("→"), res.DebugString()))
-				}
-			}
-		}
-		// exit (don't persist with errors)
-		return results, results.Err()
-	}
 
 	// persisting
-	r.Logf("-------------------\n")
 	namespaces := make(map[string]struct{})
 	for _, fcr := range results {
+		if fcr.CompiledFeature == nil {
+			continue
+		}
 		namespaces[fcr.NamespaceName] = struct{}{}
 		err := fcr.NamespaceVersion.Supported()
 		if errors.Is(err, feature.ErrUnknownVersion) {
@@ -314,7 +343,8 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
 		compilePersisted, compileDiffExists, err := star.NewCompiler(registry, &ff, r).Persist(ctx, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility, req.DryRun)
 		if err != nil {
-			return nil, errors.Wrap(err, "persist")
+			fcr.PersistenceError = err
+			continue
 		}
 
 		fcr.CompilationDiffExists = compileDiffExists
@@ -327,6 +357,8 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			r.Logf("Generated diff for %s/%s\n", fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
 		}
 	}
+
+	results.RenderSummary(r)
 
 	if req.Upgrade && !req.DryRun {
 		for ns := range namespaces {
