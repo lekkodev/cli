@@ -614,6 +614,7 @@ message Branch {
   string description = 2;
   string sha = 3;
   // Note: pr_number is 0 if there is no PR.
+  // Deprecated in favor of the pull_request object below.
   int64 pr_number = 4;
   google.protobuf.Timestamp created_at = 5;
   google.protobuf.Timestamp updated_at = 6;
@@ -712,8 +713,10 @@ message ReviewRequest {
 }
 
 message ReviewResponse {
-  // url of the pull request that has just been created
+  // url of the pull request that has just been created.
+  // Deprecated - branch now includes the PR url
   string url = 1;
+  Branch branch = 2;
 }
 
 message MergeRequest {
@@ -721,7 +724,10 @@ message MergeRequest {
   BranchKey key = 2;
 }
 
-message MergeResponse {}
+message MergeResponse {
+  // we don't return branch information here because the branch
+  // is deleted upon successful merge.
+}
 
 message EvalRequest {
   reserved 1;
