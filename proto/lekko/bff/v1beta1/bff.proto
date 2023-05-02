@@ -725,7 +725,8 @@ message MergeRequest {
 }
 
 message MergeResponse {
-  Branch branch = 1;
+  // we don't return branch information here because the branch 
+  // is deleted upon successful merge.
 }
 
 message EvalRequest {
