@@ -35,17 +35,17 @@ type GitProvider interface {
 }
 
 // Review will open a pull request. It takes different actions depending on
-// whether or not we are currently on main, and whether or not the working
+// whether or not we are currently on default, and whether or not the working
 // directory is clean.
 func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error) {
 	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
-	var main, clean bool
+	var isDefault, clean bool
 	var err error
-	main, err = r.isMain()
+	isDefault, err = r.isDefaultBranch()
 	if err != nil {
-		return "", errors.Wrap(err, "is main")
+		return "", errors.Wrap(err, "is default")
 	}
 	clean, err = r.IsClean()
 	if err != nil {
@@ -55,11 +55,11 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 	if err != nil {
 		return "", err
 	}
-	if main {
+	if isDefault {
 		if clean {
-			return "", errors.Errorf("nothing to review on main with clean wd")
+			return "", errors.Errorf("nothing to review on default with clean wd")
 		}
-		// dirty working directory on main
+		// dirty working directory on default branch
 		branchName, err = GenBranchName(ap.GetUsername())
 		if err != nil {
 			return "", errors.Wrap(err, "gen branch name")
@@ -68,7 +68,7 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 			return "", errors.Wrapf(err, "new remote branch: %s", branchName)
 		}
 		if _, err := r.Commit(ctx, ap, title); err != nil {
-			return "", errors.Wrap(err, "main add commit push")
+			return "", errors.Wrap(err, "default add commit push")
 		}
 	} else {
 		if !clean { // commit local changes and push
@@ -159,7 +159,7 @@ func (r *repository) createPR(ctx context.Context, branchName, title string, ghC
 	pr, resp, err := ghCli.PullRequests.Create(ctx, owner, repo, &github.NewPullRequest{
 		Title: &title,
 		Head:  &branchName,
-		Base:  strPtr(MainBranchName),
+		Base:  strPtr(r.DefaultBranchName()),
 	})
 	if err != nil {
 		return "", fmt.Errorf("ghCli create pr status %v: %w", resp.Status, err)
