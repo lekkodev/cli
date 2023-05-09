@@ -37,8 +37,7 @@ import (
 )
 
 const (
-	MainBranchName = "main"
-	RemoteName     = "origin"
+	RemoteName = "origin"
 )
 
 var (
@@ -77,7 +76,7 @@ type GitRepository interface {
 	Commit(ctx context.Context, ap AuthProvider, message string) (string, error)
 	// Cleans up all resources and references associated with the given branch on
 	// local and remote, if they exist. If branchName is nil, uses the current
-	// (non-master) branch. Will switch the current branch back to main, and
+	// (non-master) branch. Will switch the current branch back to the default, and
 	// pull from remote to ensure we are on the latest commit.
 	Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error
 	// Pull the latest changes from the given branch name.
@@ -92,6 +91,7 @@ type GitRepository interface {
 	Read(path string) ([]byte, error)
 	Status() (git.Status, error)
 	HeadCommit() (*object.Commit, error)
+	DefaultBranchName() string
 }
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
@@ -104,8 +104,9 @@ type repository struct {
 	// if empty, logging will be disabled.
 	log *LoggingConfiguration
 
-	bufEnabled bool
-	path       string // path to the root of the repository
+	bufEnabled    bool
+	path          string // path to the root of the repository
+	defaultBranch string // name of the default branch, e.g. 'main', 'trunk'
 
 	fs.Provider
 	fs.ConfigWriter
@@ -144,11 +145,17 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 
+	defaultBranch, err := getDefaultBranchName(repo)
+	if err != nil {
+		return nil, errors.Wrap(err, "get default branch")
+	}
+
 	cr := &repository{
-		repo: repo,
-		wt:   wt,
-		fs:   wt.Filesystem,
-		path: path,
+		repo:          repo,
+		wt:            wt,
+		fs:            wt.Filesystem,
+		path:          path,
+		defaultBranch: defaultBranch,
 		log: &LoggingConfiguration{
 			Writer: os.Stdout,
 		},
@@ -161,22 +168,24 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 // Creates a local clone of a remote github config repository based on the
 // given url at the provided path.
 func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository, error) {
-	repo, err := git.PlainClone(path, false, &git.CloneOptions{
+	r, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
+		// Note: the default branch selection logic below relies on
+		// us cloning from the default branch here.
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "plain clone url '%s'", url)
 	}
-	wt, err := repo.Worktree()
+	wt, err := r.Worktree()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 	cr := &repository{
-		repo: repo,
+		repo: r,
 		wt:   wt,
 		fs:   wt.Filesystem,
 		path: path,
@@ -185,18 +194,26 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 		},
 		bufEnabled: true,
 	}
+	// the default branch is the current branch, since we cloned
+	// from the default branch.
+	defaultBranch, err := cr.BranchName()
+	if err != nil {
+		return nil, errors.Wrap(err, "branch name")
+	}
+	cr.defaultBranch = defaultBranch
 	return cr, nil
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
 func NewEphemeral(url string, auth AuthProvider, branchName string) (ConfigurationRepository, error) {
+	// clone from default, then check out the requested branch.
+	// this allows us to populate the repo's default branch name.
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
-		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
@@ -205,15 +222,29 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	if err != nil {
-		return nil, errors.Wrap(err, "git clone")
-	}
-	return &repository{
+	cr := &repository{
 		repo: r,
 		wt:   wt,
 		fs:   wt.Filesystem,
-	}, nil
+	}
+	defaultBranch, err := cr.BranchName()
+	if err != nil {
+		return nil, errors.Wrap(err, "branch name")
+	}
+	cr.defaultBranch = defaultBranch
+	return cr, cr.CheckoutRemoteBranch(branchName)
 }
+
+func getDefaultBranchName(r *git.Repository) (string, error) {
+	ref, err := r.Reference(plumbing.NewRemoteHEADReferenceName(RemoteName), true)
+	if err != nil {
+		return "", errors.Wrapf(err, "remote reference for remote '%s'", RemoteName)
+	}
+	parts := strings.Split(ref.Name().Short(), "/")
+	return parts[len(parts)-1], nil
+}
+
+func (r *repository) DefaultBranchName() string { return r.defaultBranch }
 
 // Checks out the remote branch
 func (r *repository) CheckoutRemoteBranch(branchName string) error {
@@ -261,12 +292,12 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
-	main, err := r.isMain()
+	defaultBranch, err := r.isDefaultBranch()
 	if err != nil {
-		return "", errors.Wrap(err, "is main")
+		return "", errors.Wrap(err, "is default branch")
 	}
-	if main {
-		return "", errors.New("cannot commit while on main branch")
+	if defaultBranch {
+		return "", errors.New("cannot commit while on default branch")
 	}
 	clean, err := r.IsClean()
 	if err != nil {
@@ -307,16 +338,16 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 
 // Cleans up all resources and references associated with the given branch on
 // local and remote, if they exist. If branchName is nil, uses the current
-// (non-master) branch. Will switch the current branch back to main, and
+// (non-master) branch. Will switch the current branch back to the default, and
 // pull from remote to ensure we are on the latest commit.
 func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error {
 	if err := r.cleanupBranch(ctx, branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
-	if err := r.ensureMainBranch(ap); err != nil {
-		return errors.Wrap(err, "pull main")
+	if err := r.ensureDefaultBranch(ap); err != nil {
+		return errors.Wrap(err, "ensure default branch")
 	}
-	r.Logf("Pulled from remote. Local branch %s is up to date.\n", MainBranchName)
+	r.Logf("Pulled from remote. Local branch %s is up to date.\n", r.DefaultBranchName())
 	return nil
 }
 
@@ -364,17 +395,17 @@ func (r *repository) cleanupBranch(ctx context.Context, branchName *string, ap A
 			return fmt.Errorf("cannot cleanup branch '%s' with local changes in the working directory", currentBranch)
 		}
 		if err := r.wt.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(MainBranchName),
+			Branch: plumbing.NewBranchReferenceName(r.DefaultBranchName()),
 		}); err != nil {
-			return fmt.Errorf("failed to checkout main branch '%s': %w", MainBranchName, err)
+			return fmt.Errorf("failed to checkout default branch '%s': %w", r.DefaultBranchName(), err)
 		}
-		r.Logf("Checked out local branch %s\n", MainBranchName)
+		r.Logf("Checked out local branch %s\n", r.DefaultBranchName())
 	}
-	if branchToCleanup == MainBranchName {
-		// no need to delete main branch
+	if branchToCleanup == r.DefaultBranchName() {
+		// no need to delete default branch
 		return nil
 	}
-	// now, we are on main and need to delete branchToCleanup. First, delete on remote.
+	// now, we are on default and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
 	if err := r.repo.Push(&git.PushOptions{
 		RemoteName: RemoteName,
@@ -420,7 +451,7 @@ func (r *repository) headHash() (*plumbing.Hash, error) {
 	return &hash, nil
 }
 
-func (r *repository) ensureMainBranch(ap AuthProvider) error {
+func (r *repository) ensureDefaultBranch(ap AuthProvider) error {
 	h, err := r.repo.Head()
 	if err != nil {
 		return errors.Wrap(err, "head")
@@ -428,25 +459,25 @@ func (r *repository) ensureMainBranch(ap AuthProvider) error {
 	if !h.Name().IsBranch() {
 		return fmt.Errorf("expecting branch, got %s", h.Name().String())
 	}
-	isMain, err := r.isMain()
+	isMain, err := r.isDefaultBranch()
 	if err != nil {
 		return err
 	}
 	if !isMain {
 		if err := r.wt.Checkout(&git.CheckoutOptions{
-			Branch: plumbing.NewBranchReferenceName(MainBranchName),
+			Branch: plumbing.NewBranchReferenceName(r.DefaultBranchName()),
 		}); err != nil {
-			return errors.Wrap(err, "checkout main")
+			return errors.Wrap(err, "checkout default")
 		}
 		return nil
 	}
-	if err := r.Pull(ap, MainBranchName); err != nil {
-		return errors.Wrap(err, "pull main")
+	if err := r.Pull(ap, r.DefaultBranchName()); err != nil {
+		return errors.Wrap(err, "pull default")
 	}
 	return nil
 }
 
-func (r *repository) isMain() (bool, error) {
+func (r *repository) isDefaultBranch() (bool, error) {
 	h, err := r.repo.Head()
 	if err != nil {
 		return false, errors.Wrap(err, "head")
@@ -454,7 +485,7 @@ func (r *repository) isMain() (bool, error) {
 	if !h.Name().IsBranch() {
 		return false, fmt.Errorf("expecting branch, got %s", h.Name().String())
 	}
-	return h.Name().Short() == MainBranchName, nil
+	return h.Name().Short() == r.DefaultBranchName(), nil
 }
 
 func (r *repository) BranchName() (string, error) {

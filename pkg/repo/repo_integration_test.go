@@ -90,7 +90,7 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 	require.True(t, ok)
 	branch, err := r.BranchName()
 	require.NoError(t, err)
-	require.Equal(t, MainBranchName, branch, "should be on main branch after construction")
+	require.Equal(t, r.DefaultBranchName(), branch, "should be on default branch after construction")
 	// ensure the remote is set up correctly
 	remote, err := r.repo.Remote(RemoteName)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 	require.NotNil(t, remoteCfg)
 	require.Len(t, remoteCfg.URLs, 1)
 	assert.Equal(t, remoteCfg.URLs[0], integrationTestURL)
-	assertUpToDate(t, r, MainBranchName)
+	assertUpToDate(t, r, r.DefaultBranchName())
 	return r
 }
 
@@ -135,7 +135,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	// check current branch
 	branchName, err := r.BranchName()
 	require.NoError(t, err)
-	require.NotEqual(t, MainBranchName, branchName)
+	require.NotEqual(t, r.DefaultBranchName(), branchName)
 	assertUpToDate(t, r, branchName)
 	return branchName
 }
@@ -159,7 +159,7 @@ func testCleanup(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Git
 	// check current branch
 	currentBranchName, err := r.BranchName()
 	require.NoError(t, err)
-	assert.Equal(t, MainBranchName, currentBranchName)
+	assert.Equal(t, r.DefaultBranchName(), currentBranchName)
 	localRef, err := r.repo.Reference(plumbing.NewBranchReferenceName(branchName), false)
 	assert.Error(t, err, "local ref should no longer exist")
 	assert.Nil(t, localRef)
