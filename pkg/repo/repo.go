@@ -174,8 +174,8 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
-		// Note: cloning a specific reference may break the default branch
-		// selection logic below.
+		// Note: the default branch selection logic below relies on
+		// us cloning from the default branch here.
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "plain clone url '%s'", url)
@@ -206,13 +206,14 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
 func NewEphemeral(url string, auth AuthProvider, branchName string) (ConfigurationRepository, error) {
+	// clone from default, then check out the requested branch.
+	// this allows us to populate the repo's default branch name.
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
-		ReferenceName: plumbing.NewBranchReferenceName(branchName),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
@@ -221,19 +222,28 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	defaultBranch, err := getDefaultBranchName(r)
-	if err != nil {
-		return nil, errors.Wrap(err, "get default branch")
+	cr := &repository{
+		repo: r,
+		wt:   wt,
+		fs:   wt.Filesystem,
 	}
-	return &repository{
-		repo:          r,
-		wt:            wt,
-		fs:            wt.Filesystem,
-		defaultBranch: defaultBranch,
-	}, nil
+	defaultBranch, err := cr.BranchName()
+	if err != nil {
+		return nil, errors.Wrap(err, "branch name")
+	}
+	cr.defaultBranch = defaultBranch
+	return cr, cr.CheckoutRemoteBranch(branchName)
 }
 
 func getDefaultBranchName(r *git.Repository) (string, error) {
+	it, err := r.References()
+	if err != nil {
+		return "", errors.Wrap(err, "referece iter")
+	}
+	it.ForEach(func(rref *plumbing.Reference) error {
+		fmt.Printf("rref.String(): %v, short: %v\n", rref.String(), rref.Name().Short())
+		return nil
+	})
 	ref, err := r.Reference(plumbing.NewRemoteHEADReferenceName(RemoteName), true)
 	if err != nil {
 		return "", errors.Wrapf(err, "remote reference for remote '%s'", RemoteName)
