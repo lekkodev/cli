@@ -168,35 +168,39 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 // Creates a local clone of a remote github config repository based on the
 // given url at the provided path.
 func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository, error) {
-	repo, err := git.PlainClone(path, false, &git.CloneOptions{
+	r, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL: url,
 		Auth: &http.BasicAuth{
 			Username: auth.GetUsername(),
 			Password: auth.GetToken(),
 		},
+		// Note: cloning a specific reference may break the default branch
+		// selection logic below.
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "plain clone url '%s'", url)
 	}
-	wt, err := repo.Worktree()
+	wt, err := r.Worktree()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
-	defaultBranch, err := getDefaultBranchName(repo)
-	if err != nil {
-		return nil, errors.Wrap(err, "get default branch")
-	}
 	cr := &repository{
-		repo:          repo,
-		wt:            wt,
-		fs:            wt.Filesystem,
-		path:          path,
-		defaultBranch: defaultBranch,
+		repo: r,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
 		log: &LoggingConfiguration{
 			Writer: os.Stdout,
 		},
 		bufEnabled: true,
 	}
+	// the default branch is the current branch, since we cloned
+	// from the default branch.
+	defaultBranch, err := cr.BranchName()
+	if err != nil {
+		return nil, errors.Wrap(err, "branch name")
+	}
+	cr.defaultBranch = defaultBranch
 	return cr, nil
 }
 
