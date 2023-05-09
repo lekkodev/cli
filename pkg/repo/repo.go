@@ -236,14 +236,6 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 }
 
 func getDefaultBranchName(r *git.Repository) (string, error) {
-	it, err := r.References()
-	if err != nil {
-		return "", errors.Wrap(err, "referece iter")
-	}
-	it.ForEach(func(rref *plumbing.Reference) error {
-		fmt.Printf("rref.String(): %v, short: %v\n", rref.String(), rref.Name().Short())
-		return nil
-	})
 	ref, err := r.Reference(plumbing.NewRemoteHEADReferenceName(RemoteName), true)
 	if err != nil {
 		return "", errors.Wrapf(err, "remote reference for remote '%s'", RemoteName)
