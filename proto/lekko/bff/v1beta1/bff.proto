@@ -624,6 +624,9 @@ message Branch {
   // Optional pull request. If no pull request
   // has been created for this branch, returns empty
   PullRequest pull_request = 8;
+  // Indicates whether or not this branch is the default
+  // branch for the repository.
+  bool default = 9;
 }
 
 message BranchKey {
@@ -655,7 +658,7 @@ message ListBranchesRequest {
 }
 
 message ListBranchesResponse {
-  // Will always include the main branch and its sha info in the response.
+  // Will always include the default branch and its sha info in the response.
   repeated Branch branches = 1;
 }
 

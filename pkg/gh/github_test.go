@@ -18,7 +18,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/go-github/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/migueleliasweb/go-github-mock/src/mock"
 	"github.com/stretchr/testify/require"
 )
