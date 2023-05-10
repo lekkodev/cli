@@ -394,6 +394,18 @@ message GetRepositoryContentsResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  FeatureResponse feature_response = 4;
+}
+
+// A response meant for aggregated rpcs that return
+// feature information along with other information.
+// If the feature doesn't exist, we can still return 
+// other information.
+message FeatureResponse {
+  oneof feature_or_error {
+    Feature feature = 1;
+    google.rpc.ErrorInfo error = 2;
+  }
 }
 
 message GetFeatureRequest {
@@ -465,6 +477,7 @@ message AddFeatureResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  FeatureResponse feature_response = 4;
 }
 
 message RemoveFeatureRequest {
@@ -682,6 +695,7 @@ message SaveResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  FeatureResponse feature_response = 4;
 }
 
 message SaveStarlarkRequest {
@@ -700,6 +714,7 @@ message SaveStarlarkResponse {
   // This rpc will return output bytes even if compilation
   // failed. In that case, success will be false.
   bool success = 5;
+  FeatureResponse feature_response = 6;
 }
 
 message ConvertRuleToStringRequest {
