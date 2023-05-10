@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5/config"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/pkg/errors"
 )

@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/google/go-github/v47/github"
+	"github.com/google/go-github/v52/github"
 	"github.com/pkg/errors"
 	"golang.org/x/oauth2"
 )
