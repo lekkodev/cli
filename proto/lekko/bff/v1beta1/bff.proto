@@ -658,7 +658,7 @@ message ListBranchesRequest {
 }
 
 message ListBranchesResponse {
-  // Will always include the main branch and its sha info in the response.
+  // Will always include the default branch and its sha info in the response.
   repeated Branch branches = 1;
 }
 
