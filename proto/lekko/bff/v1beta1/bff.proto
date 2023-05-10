@@ -624,6 +624,9 @@ message Branch {
   // Optional pull request. If no pull request
   // has been created for this branch, returns empty
   PullRequest pull_request = 8;
+  // Indicates whether or not this branch is the default
+  // branch for the repository.
+  bool default = 9;
 }
 
 message BranchKey {
