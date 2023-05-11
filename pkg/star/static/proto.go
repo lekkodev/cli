@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/bazelbuild/buildtools/build"
+	"github.com/pkg/errors"
 	"github.com/stripe/skycfg"
 	"github.com/stripe/skycfg/go/protomodule"
 	"go.starlark.net/starlark"
@@ -12,22 +13,27 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-func ProtoToStatic(packageStr string, msg proto.Message) build.Expr {
+func ProtoToStatic(packageStr string, msg proto.Message) (build.Expr, error) {
 	msgDesc := msg.ProtoReflect()
 	constructorName := fmt.Sprintf("%s.%s", packageStr, msgDesc.Descriptor().Name())
 	res := &build.CallExpr{X: &build.Ident{Name: constructorName}}
-	// todo defaults
+	var retErr error
 	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: ReflectValueToExpr(&val)})
+		starExpr, err := ReflectValueToExpr(&val)
+		if err != nil {
+			retErr = err
+			return false
+		}
+		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr})
 		return true
 	})
-	return res
+	return res, retErr
 }
 
-func ReflectValueToExpr(val *protoreflect.Value) build.Expr {
+func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 	// There is a strict enum definition here:
 	/*
-		        ╔════════════╤═════════════════════════════════════╗
+		    ╔════════════╤═════════════════════════════════════╗
 			║ Go type    │ Protobuf kind                       ║
 			╠════════════╪═════════════════════════════════════╣
 			║ bool       │ BoolKind                            ║
@@ -43,8 +49,17 @@ func ReflectValueToExpr(val *protoreflect.Value) build.Expr {
 			║ Message    │ MessageKind, GroupKind              ║
 			╚════════════╧═════════════════════════════════════╝
 	*/
-	// We need to implement this all. For now, hardcode true value.
-	return &build.Ident{Name: "True"}
+	// We need to implement this all.
+	goValInterface := val.Interface()
+	switch goVal := goValInterface.(type) {
+	case bool:
+		if goVal {
+			return &build.Ident{Name: "True"}, nil
+		}
+		return &build.Ident{Name: "False"}, nil
+	default:
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
+	}
 }
 
 // Returns (nil, err) if the message is not protobuf.

@@ -22,8 +22,10 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var (
@@ -357,4 +359,30 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
 	assert.Contains(t, string(bytes), "foobar")
+}
+
+func TestWalkerBuildProtoDefault(t *testing.T) {
+	for i, tc := range []struct{
+		starVal string
+		expected proto.Message
+	}{
+		{
+			starVal: "pb.BoolValue(value = False)",
+		},
+	}
+	star := []byte(`
+	pb = proto.package("google.protobuf")
+	result = feature(
+		description = "proto feature",
+		default = pb.BoolValue(value = False),
+	)
+	`)
+	b := testWalker(star)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	boolVal, ok := f.Value.(*wrapperspb.BoolValue)
+	require.True(t, ok)
+	require.NotNil(t, boolVal)
+	assert.False(t, boolVal.Value)
 }

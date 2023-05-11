@@ -167,6 +167,7 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 		}
 		return keyVals, feature.FeatureTypeJSON, nil
 	case *build.CallExpr:
+		// try to statically parse the protobuf
 		proto, err := CallExprToProto(t)
 		if err != nil {
 			return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %v %e", v, err)
@@ -292,9 +293,6 @@ func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
 /** Methods helpful for mutating the underlying AST. **/
 
 func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
-	if protoM, ok := goVal.(proto.Message); ok {
-		return ProtoToStatic("pb", protoM), nil
-	}
 	switch goValType := goVal.(type) {
 	case bool:
 		identExpr := &build.Ident{}
@@ -353,6 +351,8 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 			return w.genValue(int64(goValType.NumberValue))
 		}
 		return w.genValue(goValType.NumberValue)
+	case proto.Message: // statically mutating protobuf
+		return ProtoToStatic("pb", goValType)
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "go val type %T", goVal)
 	}
