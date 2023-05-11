@@ -48,7 +48,7 @@ type ConfigurationStore interface {
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
-	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error)
+	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error)
 	Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
@@ -718,31 +718,31 @@ func (r *repository) RemoveNamespace(ctx context.Context, ns string) error {
 	return nil
 }
 
-func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, error) {
+func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "parse metadata")
+		return nil, "", nil, errors.Wrap(err, "parse metadata")
 	}
 	nsMD, ok := nsMDs[ns]
 	if !ok {
-		return nil, "", fmt.Errorf("invalid namespace: %s", ns)
+		return nil, "", nil, fmt.Errorf("invalid namespace: %s", ns)
 	}
 
 	ff, err := r.GetFeatureFile(ctx, ns, featureName)
 	if err != nil {
-		return nil, "", errors.Wrap(err, "get feature file")
+		return nil, "", nil, errors.Wrap(err, "get feature file")
 	}
 
 	if err := feature.ComplianceCheck(*ff, nsMD); err != nil {
-		return nil, "", errors.Wrap(err, "compliance check")
+		return nil, "", nil, errors.Wrap(err, "compliance check")
 	}
 
 	evalF, err := encoding.ParseFeature(ctx, "", *ff, nsMD, r)
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
-	ret, _, err := evalF.Evaluate(iCtx)
-	return ret, evalF.Type(), err
+	ret, path, err := evalF.Evaluate(iCtx)
+	return ret, evalF.Type(), path, err
 }
 
 func (r *repository) Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error) {

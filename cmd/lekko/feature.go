@@ -205,6 +205,7 @@ func featureRemove() *cobra.Command {
 
 func featureEval() *cobra.Command {
 	var ns, featureName, jsonContext string
+	var verbose bool
 	cmd := &cobra.Command{
 		Use:   "eval",
 		Short: "evaluate feature",
@@ -240,7 +241,7 @@ func featureEval() *cobra.Command {
 			}
 			fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
 			fmt.Printf("-------------------\n")
-			anyVal, fType, err := r.Eval(ctx, ns, featureName, ctxMap)
+			anyVal, fType, path, err := r.Eval(ctx, ns, featureName, ctxMap)
 			if err != nil {
 				return err
 			}
@@ -275,6 +276,9 @@ func featureEval() *cobra.Command {
 			}
 
 			fmt.Printf("[%s] %s\n", fType, logging.Bold(res))
+			if verbose {
+				fmt.Printf("[path] %v\n", path)
+			}
 
 			return nil
 		},
@@ -282,6 +286,7 @@ func featureEval() *cobra.Command {
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
 	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
 	cmd.Flags().StringVarP(&jsonContext, "context", "c", "", "context to evaluate with in json format")
+	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
 	return cmd
 }
 
