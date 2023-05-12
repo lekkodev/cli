@@ -28,6 +28,7 @@ import (
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -50,12 +51,14 @@ type Walker interface {
 type walker struct {
 	filename  string
 	starBytes []byte
+	registry  *protoregistry.Types
 }
 
-func NewWalker(filename string, starBytes []byte) *walker {
+func NewWalker(filename string, starBytes []byte, registry *protoregistry.Types) *walker {
 	return &walker{
 		filename:  filename,
 		starBytes: starBytes,
+		registry:  registry,
 	}
 }
 
@@ -168,9 +171,10 @@ func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureTyp
 		return keyVals, feature.FeatureTypeJSON, nil
 	case *build.CallExpr:
 		// try to statically parse the protobuf
-		proto, err := CallExprToProto(t)
+		proto, err := CallExprToProto(t, w.registry)
 		if err != nil {
-			return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %v %e", v, err)
+			return nil, "", err
+			// return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
 		}
 		return proto, feature.FeatureTypeProto, nil
 	}

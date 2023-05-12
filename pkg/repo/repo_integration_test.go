@@ -180,7 +180,7 @@ func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvid
 	require.NoError(t, r.RestoreWorkingDirectory(restoreCommitHash))
 	fc, err := r.GetFeatureContents(ctx, "default", "example")
 	require.NoError(t, err)
-	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star).Build()
+	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star, nil).Build()
 	require.NoError(t, err)
 	assert.Equal(t, restoreFeatureDescription, f.Description)
 }

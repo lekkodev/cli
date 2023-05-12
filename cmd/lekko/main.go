@@ -249,10 +249,10 @@ func parseCmd() *cobra.Command {
 				nsfs = append(nsfs, nsf)
 			}
 			for _, nsf := range nsfs {
-				f, err := r.Parse(ctx, nsf.namespace(), nsf.feature())
+				f, err := r.Parse(ctx, nsf.namespace(), nsf.feature(), registry)
 				fmt.Print(logging.Bold(fmt.Sprintf("[%s]", nsf.String())))
 				if errors.Is(err, static.ErrUnsupportedStaticParsing) {
-					fmt.Printf(" Unsupported static parsing\n")
+					fmt.Printf(" Unsupported static parsing: %v\n", err.Error())
 				} else if err != nil {
 					fmt.Printf(" %v\n", err)
 				} else {

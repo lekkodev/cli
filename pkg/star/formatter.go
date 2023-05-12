@@ -77,7 +77,7 @@ func (f *formatter) format(data []byte) ([]byte, error) {
 	// reordered.
 	if f.fType.IsPrimitive() {
 		// first try static walking
-		ndata, err := static.NewWalker(f.filePath, data).Format()
+		ndata, err := static.NewWalker(f.filePath, data, nil).Format()
 		if err != nil && !errors.Is(err, static.ErrUnsupportedStaticParsing) {
 			return nil, errors.Wrap(err, "static parser format")
 		} else if err == nil {

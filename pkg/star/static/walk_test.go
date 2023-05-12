@@ -20,6 +20,8 @@ import (
 
 	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/cli/pkg/star/prototypes"
+	testdatav1beta1 "github.com/lekkodev/cli/pkg/star/static/testdata/gen/testproto/v1beta1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -77,16 +79,20 @@ func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
 `, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
 }
 
-func testWalker(testStar []byte) *walker {
+func testWalker(t *testing.T, testStar []byte) *walker {
+	registry, err := prototypes.RegisterDynamicTypes(nil)
+	require.NoError(t, err)
+	require.NoError(t, prototypes.RegisterTypes(registry, testdatav1beta1.File_testproto_v1beta1_test_proto, true))
 	return &walker{
 		filename:  "test.star",
 		starBytes: testStar,
+		registry:  registry,
 	}
 }
 
 func TestWalkerBuild(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -96,7 +102,7 @@ func TestWalkerBuild(t *testing.T) {
 
 func TestWalkerBuildJSON(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -108,7 +114,7 @@ func TestWalkerMutateNoop(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {
 			_, _, starBytes := testStar(t, fType)
-			b := testWalker(starBytes)
+			b := testWalker(t, starBytes)
 			f, err := b.Build()
 			require.NoError(t, err)
 			require.NotNil(t, f)
@@ -128,7 +134,7 @@ func TestWalkerMutateNoop(t *testing.T) {
 
 func TestWalkerMutateDefault(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -144,7 +150,7 @@ func TestWalkerMutateDefault(t *testing.T) {
 
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -159,7 +165,7 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 
 func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -174,7 +180,7 @@ func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
 
 func TestWalkerMutateAddRule(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -205,7 +211,7 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
     default = %s,
 	)
 	`, val.starRepr))
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -231,7 +237,7 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
 
 func TestWalkerMutateRemoveRule(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -253,7 +259,7 @@ func TestWalkerMutateRemoveOnlyRule(t *testing.T) {
 	],
 )
 	`, val.starRepr, ruleVal.starRepr))
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -269,7 +275,7 @@ func TestWalkerMutateDescription(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {
 			_, _, starBytes := testStar(t, fType)
-			b := testWalker(starBytes)
+			b := testWalker(t, starBytes)
 			f, err := b.Build()
 			require.NoError(t, err)
 			require.NotNil(t, f)
@@ -285,7 +291,7 @@ func TestWalkerMutateDescription(t *testing.T) {
 
 func TestWalkerMutateTypeMismatch(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeFloat)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -297,7 +303,7 @@ func TestWalkerMutateTypeMismatch(t *testing.T) {
 
 func TestWalkerMutateDefaultFloat(t *testing.T) {
 	val, _, starBytes := testStar(t, feature.FeatureTypeFloat)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -313,7 +319,7 @@ func TestWalkerMutateDefaultFloat(t *testing.T) {
 
 func TestWalkerMutateDefaultInt(t *testing.T) {
 	val, _, starBytes := testStar(t, feature.FeatureTypeInt)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -329,7 +335,7 @@ func TestWalkerMutateDefaultInt(t *testing.T) {
 
 func TestWalkerMutateDefaultString(t *testing.T) {
 	val, _, starBytes := testStar(t, feature.FeatureTypeString)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -346,7 +352,7 @@ func TestWalkerMutateDefaultString(t *testing.T) {
 
 func TestWalkerMutateDefaultJSON(t *testing.T) {
 	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
-	b := testWalker(starBytes)
+	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
@@ -362,27 +368,84 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 }
 
 func TestWalkerBuildProtoDefault(t *testing.T) {
-	for i, tc := range []struct{
-		starVal string
+	for i, tc := range []struct {
+		starVal  string
 		expected proto.Message
+		suppress bool // if true, this test is not enforced.
 	}{
 		{
-			starVal: "pb.BoolValue(value = False)",
+			starVal:  "pb.BoolValue(value = False)",
+			expected: &wrapperspb.BoolValue{Value: false},
+			suppress: true,
 		},
+		{
+			starVal:  "pb.BoolValue(value = True)",
+			expected: &wrapperspb.BoolValue{Value: true},
+		},
+		{
+			starVal:  "pb.StringValue(value = \"foo\")",
+			expected: &wrapperspb.StringValue{Value: "foo"},
+		},
+		{
+			starVal:  "pb.StringValue(value = \"\")",
+			expected: &wrapperspb.StringValue{Value: ""},
+			suppress: true,
+		},
+		{
+			starVal:  "pb.Int32Value(value = 42)",
+			expected: &wrapperspb.Int32Value{Value: 42},
+		},
+		{
+			starVal:  "pb.UInt32Value(value = 42)",
+			expected: &wrapperspb.UInt32Value{Value: 42},
+		},
+		{
+			starVal:  "pb.Int64Value(value = 42)",
+			expected: &wrapperspb.Int64Value{Value: 42},
+		},
+		{
+			starVal:  "pb.UInt64Value(value = 42)",
+			expected: &wrapperspb.UInt64Value{Value: 42},
+		},
+		{
+			starVal:  "pb.FloatValue(value = 42.42)",
+			expected: &wrapperspb.FloatValue{Value: 42.42},
+		},
+		{
+			starVal:  "pb.DoubleValue(value = 42.42)",
+			expected: &wrapperspb.DoubleValue{Value: 42.42},
+		},
+		{
+			starVal:  "pb.BytesValue(value = \"foo\")",
+			expected: &wrapperspb.BytesValue{Value: []byte(`foo`)},
+		},
+		{
+			starVal:  "tpb.TestMessage(val = \"foo\")",
+			expected: &testdatav1beta1.TestMessage{Val: "foo"},
+		},
+	} {
+		t.Run(fmt.Sprintf("%d|%s", i, tc.starVal), func(t *testing.T) {
+			star := []byte(fmt.Sprintf(`
+			pb = proto.package("google.protobuf")
+			result = feature(
+				description = "proto feature",
+				default = %s,
+			)
+			`, tc.starVal))
+			b := testWalker(t, star)
+			f, err := b.Build()
+			require.NoError(t, err)
+			require.NotNil(t, f)
+			protoMessage, ok := f.Value.(proto.Message)
+			require.True(t, ok)
+			require.NotNil(t, protoMessage)
+			require.True(t, proto.Equal(protoMessage, tc.expected), "expected %v %T, got %v %T", tc.expected, tc.expected, protoMessage, protoMessage)
+			// Now that static parsing is done, try a no-op static mutation.
+			result, err := b.Mutate(f)
+			require.NoError(t, err)
+			if !tc.suppress { // suppress some test cases because defaults are not supported yet.
+				assert.Contains(t, string(result), tc.starVal)
+			}
+		})
 	}
-	star := []byte(`
-	pb = proto.package("google.protobuf")
-	result = feature(
-		description = "proto feature",
-		default = pb.BoolValue(value = False),
-	)
-	`)
-	b := testWalker(star)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	boolVal, ok := f.Value.(*wrapperspb.BoolValue)
-	require.True(t, ok)
-	require.NotNil(t, boolVal)
-	assert.False(t, boolVal.Value)
 }

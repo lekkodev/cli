@@ -1,3 +1,17 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package static
 
 import (
@@ -18,6 +32,7 @@ func ProtoToStatic(packageStr string, msg proto.Message) (build.Expr, error) {
 	constructorName := fmt.Sprintf("%s.%s", packageStr, msgDesc.Descriptor().Name())
 	res := &build.CallExpr{X: &build.Ident{Name: constructorName}}
 	var retErr error
+	// todo: handle default values not being set
 	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 		starExpr, err := ReflectValueToExpr(&val)
 		if err != nil {
@@ -57,20 +72,49 @@ func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 			return &build.Ident{Name: "True"}, nil
 		}
 		return &build.Ident{Name: "False"}, nil
+	case string:
+		return &build.StringExpr{Value: goVal}, nil
+	case int32:
+		return &build.LiteralExpr{
+			Token: starlark.MakeInt(int(goVal)).String(),
+		}, nil
+	case int64:
+		return &build.LiteralExpr{
+			Token: starlark.MakeInt64(goVal).String(),
+		}, nil
+	case uint32:
+		return &build.LiteralExpr{
+			Token: starlark.MakeUint(uint(goVal)).String(),
+		}, nil
+	case uint64:
+		return &build.LiteralExpr{
+			Token: starlark.MakeUint64(goVal).String(),
+		}, nil
+	case float32:
+		return &build.LiteralExpr{
+			Token: fmt.Sprintf("%v", goVal),
+		}, nil
+	case float64:
+		return &build.LiteralExpr{
+			Token: fmt.Sprintf("%v", goVal),
+		}, nil
+	case []byte:
+		return &build.StringExpr{Value: string(goVal)}, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
 	}
 }
 
 // Returns (nil, err) if the message is not protobuf.
-func CallExprToProto(ce *build.CallExpr) (proto.Message, error) {
+func CallExprToProto(ce *build.CallExpr, registry *protoregistry.Types) (proto.Message, error) {
 	thread := &starlark.Thread{
 		Name: "compile",
 	}
 	// TODO: pipe in user defined protos
-	protoModule := protomodule.NewModule(protoregistry.GlobalTypes)
+	protoModule := protomodule.NewModule(registry)
 	// TODO figure out what the user's imported proto modules are more elegantly
-	globals, err := starlark.ExecFile(thread, "", fmt.Sprintf("pb = proto.package(\"google.protobuf\")\nres =%s", build.FormatString(ce)), starlark.StringDict{
+	miniStar := []byte(fmt.Sprintf("pb = proto.package(\"google.protobuf\")\ntpb = proto.package(\"testproto.v1beta1\")\nres = %s", build.FormatString(ce)))
+	globals, err := starlark.ExecFile(thread, "", miniStar, starlark.StringDict{
 		"proto": protoModule,
 	})
 	if err != nil {
