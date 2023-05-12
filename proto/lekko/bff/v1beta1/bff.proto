@@ -572,6 +572,9 @@ message PullRequest {
   string base_sha = 13;
   Mergeable mergeable = 14;
   PullRequestState pr_state = 15;
+  // github user that created the PR
+  string github_user = 16;
+  google.protobuf.Timestamp created_at = 17;
 }
 
 message GetPRInfoRequest {
