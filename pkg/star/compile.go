@@ -70,8 +70,9 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 		return nil, errors.Wrap(err, "new assert module")
 	}
 	globals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
-		"proto":   protoModule,
 		"assert":  assertModule,
+		"proto":   protoModule,
+		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 	})
 	if err != nil {
