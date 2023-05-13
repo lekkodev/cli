@@ -401,7 +401,7 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 
 		expectedVal := tuple.Index(1)
 		if vr := fb.validate(feature.ValidatorResultTypeTest, i, expectedVal); vr != nil && vr.Error != nil {
-			return errors.Wrap(err, "test value validate")
+			return errors.Wrap(vr.Error, "test value validate")
 		}
 		switch f.FeatureType {
 		case feature.FeatureTypeProto:
