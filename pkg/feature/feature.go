@@ -23,6 +23,9 @@ import (
 	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/pkg/errors"
+	"github.com/stripe/skycfg"
+	"go.starlark.net/starlark"
+	"go.starlark.net/starlarktest"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -117,7 +120,13 @@ type Rule struct {
 	Value          interface{}
 }
 
-type UnitTest struct {
+type UnitTest interface {
+	// Run runs the unit test
+	Run(idx int, eval EvaluableFeature) *TestResult
+}
+
+// ValueUnitTest is a unit test that does an equality check
+type ValueUnitTest struct {
 	Context       map[string]interface{}
 	ExpectedValue interface{}
 	// The starlark textual representation of the context and expected value.
@@ -125,8 +134,8 @@ type UnitTest struct {
 	ContextStar, ExpectedValueStar string
 }
 
-func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starVal string) *UnitTest {
-	return &UnitTest{
+func NewValueUnitTest(context map[string]interface{}, val interface{}, starCtx, starVal string) *ValueUnitTest {
+	return &ValueUnitTest{
 		Context:           context,
 		ExpectedValue:     val,
 		ContextStar:       starCtx,
@@ -134,12 +143,82 @@ func NewUnitTest(context map[string]interface{}, val interface{}, starCtx, starV
 	}
 }
 
-func (ut UnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+// CallableUnitTest is a unit test that calls a function on the value of the evaluated feature
+type CallableUnitTest struct {
+	Context     map[string]interface{}
+	Registry    *protoregistry.Types
+	TestFunc    starlark.Callable
+	ContextStar string
+}
+
+func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string) *CallableUnitTest {
+	return &CallableUnitTest{
+		Context:     ctx,
+		Registry:    r,
+		TestFunc:    testFn,
+		ContextStar: ctxStar,
+	}
+}
+
+func (c *CallableUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+	tr := NewTestResult(c.ContextStar, idx)
+	a, _, err := eval.Evaluate(c.Context)
+	if err != nil {
+		return tr.WithError(err)
+	}
+	if c.TestFunc != nil {
+		message, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
+			Resolver: c.Registry,
+		})
+		if err != nil {
+			return tr.WithError(errors.Wrap(err, "unable to resolve message from any pb"))
+		}
+		starMessage, err := skycfg.NewProtoMessage(message)
+		if err != nil {
+			return tr.WithError(errors.Wrap(err, "unable to to get starlark value from protobuf"))
+		}
+		args := starlark.Tuple([]starlark.Value{starMessage})
+		thread := &starlark.Thread{Name: "test"}
+		reporter := &testReporter{}
+		starlarktest.SetReporter(thread, reporter)
+		_, err = starlark.Call(thread, c.TestFunc, args, nil)
+		if err != nil {
+			return tr.WithError(err)
+		}
+		return tr.WithError(reporter.toErr())
+	}
+	return tr
+}
+
+// todo: refactor to use the validation report as this is an exact copy
+type testReporter struct {
+	args   []interface{}
+	failed bool
+}
+
+func (vr *testReporter) Error(args ...interface{}) {
+	vr.args = append(vr.args, args...)
+	vr.failed = true
+}
+
+func (vr *testReporter) hasError() bool {
+	return vr.failed
+}
+
+func (vr *testReporter) toErr() error {
+	if !vr.hasError() {
+		return nil
+	}
+	return fmt.Errorf("%v", vr.args...)
+}
+
+func (ut ValueUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	tr := NewTestResult(ut.ContextStar, idx)
 	a, _, err := eval.Evaluate(ut.Context)
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "evaluate feature"))
 	}
+
 	val, err := ValToAny(ut.ExpectedValue, eval.Type())
 	if err != nil {
 		return tr.WithError(errors.Wrap(err, "invalid test value"))
@@ -162,7 +241,7 @@ type Feature struct {
 	FeatureType      FeatureType
 
 	Rules     []*Rule
-	UnitTests []*UnitTest
+	UnitTests []UnitTest
 }
 
 func NewBoolFeature(value bool) *Feature {
@@ -392,7 +471,7 @@ func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.
 	if f.FeatureType != FeatureTypeJSON {
 		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
 	}
-	f.UnitTests = append(f.UnitTests, NewUnitTest(context, val, starCtx, starVal))
+	f.UnitTests = append(f.UnitTests, NewValueUnitTest(context, val, starCtx, starVal))
 	return nil
 }
 
