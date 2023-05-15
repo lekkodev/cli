@@ -34,10 +34,12 @@ const (
 func defaultNoop(v *build.Expr) error           { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
 func rulesNoop(rules *rulesWrapper) error       { return nil }
+func importsNoop(imports *importsWrapper) error { return nil }
 
 type defaultFn func(v *build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
 type rulesFn func(rules *rulesWrapper) error
+type importsFn func(imports *importsWrapper) error
 
 // Traverses a lekko starlark file, running methods on various
 // components of the file. Methods can be provided to read the
@@ -45,17 +47,19 @@ type rulesFn func(rules *rulesWrapper) error
 type traverser struct {
 	f *build.File
 
-	defaultFn     defaultFn
-	descriptionFn descriptionFn
-	rulesFn       rulesFn
+	defaultFn      defaultFn
+	descriptionFn  descriptionFn
+	rulesFn        rulesFn
+	protoImportsFn importsFn
 }
 
 func newTraverser(f *build.File) *traverser {
 	return &traverser{
-		f:             f,
-		defaultFn:     defaultNoop,
-		descriptionFn: descriptionNoop,
-		rulesFn:       rulesNoop,
+		f:              f,
+		defaultFn:      defaultNoop,
+		descriptionFn:  descriptionNoop,
+		rulesFn:        rulesNoop,
+		protoImportsFn: importsNoop,
 	}
 }
 
@@ -74,7 +78,16 @@ func (t *traverser) withRulesFn(fn rulesFn) *traverser {
 	return t
 }
 
+func (t *traverser) withProtoImportsFn(fn importsFn) *traverser {
+	t.protoImportsFn = fn
+	return t
+}
+
 func (t *traverser) traverse() error {
+	imports := t.getProtoImports()
+	if err := t.protoImportsFn(imports); err != nil {
+		return errors.Wrap(err, "imports fn")
+	}
 	ast, err := t.getFeatureAST()
 	if err != nil {
 		return err
@@ -206,10 +219,34 @@ func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 						return &starFeatureAST{rhs}, nil
 					}
 				}
+			} else {
+				fmt.Printf("separate expression: %v\n", build.FormatString(t))
 			}
 		}
 	}
 	return nil, fmt.Errorf("no feature found in star file")
+}
+
+func (t *traverser) getProtoImports() *importsWrapper {
+	ret := &importsWrapper{}
+	for _, expr := range t.f.Stmt {
+		switch t := expr.(type) {
+		case *build.AssignExpr:
+			rhs, ok := t.RHS.(*build.CallExpr)
+			if ok {
+				dotExpr, ok := rhs.X.(*build.DotExpr)
+				if ok {
+					x, ok := dotExpr.X.(*build.Ident)
+					if ok && x.Name == "proto" && dotExpr.Name == "package" {
+						ret.imports = append(ret.imports, importVal{
+							assignExpr: t,
+						})
+					}
+				}
+			}
+		}
+	}
+	return ret
 }
 
 func (t *traverser) format() []byte {
@@ -223,6 +260,14 @@ type rulesWrapper struct {
 type rule struct {
 	conditionV *build.StringExpr
 	v          build.Expr
+}
+
+type importsWrapper struct {
+	imports []importVal
+}
+
+type importVal struct {
+	assignExpr *build.AssignExpr
 }
 
 func newRule(li build.Expr) (*rule, error) {

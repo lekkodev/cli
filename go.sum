@@ -1,7 +1,9 @@
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.6.0-20230413010910-532fd8184ad4.1 h1:dLR2hlAAB55sgJ/wu4y1V6wfQAuzZ3Ct8CpYIUMDvlk=
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.6.0-20230413010910-532fd8184ad4.1/go.mod h1:PhFH7Y2SqmNFM1s6Aj3F6vgxCcf/HvRuAyBtmTMOdPo=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230413010910-532fd8184ad4.1 h1:5lr4nJRFm32bwLGJLCZhiZUhK1IlBKcFy5IrI5nASxs=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230413010910-532fd8184ad4.1/go.mod h1:k8LDgZDmmXoT8LRJBCFFt5AAu98aZh9IYZgtFPTNsAI=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.7.0-20230515185649-0a7c51c5d3e5.1 h1:zs+0JyGl3rxv7uLbpCirqHSb75q4Se9FEjtQeN+Oy5Y=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.7.0-20230515185649-0a7c51c5d3e5.1/go.mod h1:TdnC4jmiXeVCw3FIvduNNfmq66vw0HHubHThHtNWlGg=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230515185649-0a7c51c5d3e5.1 h1:HUMvW4gfHjNeufhnBQxB6JwDSxIRGcIbB4ZA9djwnGs=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230515185649-0a7c51c5d3e5.1/go.mod h1:qijTOXmCa9QRYY5jUPpXBh0TqOathvHp/Fap3CdjA8U=
+buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.30.0-20230419180142-0694c10ef23c.1 h1:pNIAXt2M6w6hLbe5esGcfAJVa/y228PYtywXuiMpGe4=
+buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.30.0-20230419180142-0694c10ef23c.1/go.mod h1:Abc3XPzGO1gMBxFO7cEr6oy5AhahszvenAckrydG2qE=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/AlecAivazis/survey/v2 v2.3.6 h1:NvTuVHISgTHEHeBFqt6BHOe4Ny/NwGZr7w+F8S9ziyw=
 github.com/AlecAivazis/survey/v2 v2.3.6/go.mod h1:4AuI9b7RjAR+G7v9+C4YSlX/YL3K3cWNXgWXOhllqvI=
@@ -28,8 +30,8 @@ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPd
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91 h1:7xSt0nPZ74liqR8jjBYmjentrQVrdQEhoW4/+4BrmoM=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91/go.mod h1:689QdV3hBP7Vo9dJMmzhoYIyo/9iMhEmHkJcnaPRCbo=
-github.com/bufbuild/connect-go v1.6.0 h1:OCEB8JuEuvcY5lEKZCQE95CUscqkDtLnQceNhDgi92k=
-github.com/bufbuild/connect-go v1.6.0/go.mod h1:GmMJYR6orFqD0Y6ZgX8pwQ8j9baizDrIQMm1/a6LnHk=
+github.com/bufbuild/connect-go v1.7.0 h1:MGp82v7SCza+3RhsVhV7aMikwxvI3ZfD72YiGt8FYJo=
+github.com/bufbuild/connect-go v1.7.0/go.mod h1:GmMJYR6orFqD0Y6ZgX8pwQ8j9baizDrIQMm1/a6LnHk=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/bwesterb/go-ristretto v1.2.0/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
 github.com/cenkalti/backoff/v4 v4.2.0 h1:HN5dHm3WBOgndBH6E8V0q2jIYIR3s9yglV8k/+MN3u4=
@@ -314,6 +316,7 @@ google.golang.org/appengine v1.6.7/go.mod h1:8WjMMxjGQR8xUklV/ARdw2HLXBOI7O7uCID
 google.golang.org/genproto v0.0.0-20180817151627-c66870c02cf8/go.mod h1:JiN7NxoALGmiZfu7CAH4rXhgtRTLTxftemlI0sWmxmc=
 google.golang.org/genproto v0.0.0-20190819201941-24fa4b261c55/go.mod h1:DMBHOl98Agz4BDEuKkezgsaosCRResVns1a3J2ZsMNc=
 google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013/go.mod h1:NbSheEEYHJ7i3ixzK3sjbqSGDJWnxyFXZblF3eUsNvo=
+google.golang.org/genproto v0.0.0-20201019141844-1ed22bb0c154 h1:bFFRpT+e8JJVY7lMMfvezL1ZIwqiwmPl2bsE2yx4HqM=
 google.golang.org/genproto v0.0.0-20201019141844-1ed22bb0c154/go.mod h1:FWY/as6DDZQgahTzZj3fqbO1CbirC29ZNUFHwi0/+no=
 google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 google.golang.org/grpc v1.23.0/go.mod h1:Y5yQAOtifL1yxbo5wqy6BxZv8vAUGQwXBOALyacEbxg=

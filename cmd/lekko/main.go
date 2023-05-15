@@ -256,9 +256,9 @@ func parseCmd() *cobra.Command {
 				} else if err != nil {
 					fmt.Printf(" %v\n", err)
 				} else {
-					fmt.Printf("[%s] Parsed\n", f.FeatureType)
+					fmt.Printf("[%s] Parsed\n", f.Type)
 					if printFeature {
-						f.PrintJSON(registry)
+						fmt.Printf("%v\n", f.String())
 					}
 				}
 			}

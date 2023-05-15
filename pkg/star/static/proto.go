@@ -17,6 +17,7 @@ package static
 import (
 	"fmt"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/bazelbuild/buildtools/build"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg"
@@ -27,12 +28,19 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-func ProtoToStatic(packageStr string, msg proto.Message) (build.Expr, error) {
+// Given a proto message and the import statement that the type of the message is provided by,
+// constructs a starlark expression defining the proto message.
+func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message) (build.Expr, error) {
 	msgDesc := msg.ProtoReflect()
-	constructorName := fmt.Sprintf("%s.%s", packageStr, msgDesc.Descriptor().Name())
-	res := &build.CallExpr{X: &build.Ident{Name: constructorName}}
+	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: importStmt.GetLhs().Token}, Name: string(msgDesc.Descriptor().Name())}}
 	var retErr error
-	// todo: handle default values not being set
+	// Note: Default values are not set in the proto spec.
+	// Thus, the following Range doesn't iterate over them.
+	// This can lead to behavior where, after a round trip
+	// of static parsing,
+	// 		pb.BoolValue(value = False)
+	// will be overwritten as
+	// 		pb.BoolValue()
 	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 		starExpr, err := ReflectValueToExpr(&val)
 		if err != nil {

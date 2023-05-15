@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -50,7 +51,7 @@ type ConfigurationStore interface {
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
 	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error)
-	Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*feature.Feature, error)
+	Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
 	GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error)
@@ -746,7 +747,7 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[
 	return ret, evalF.Type(), path, err
 }
 
-func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*feature.Feature, error) {
+func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error) {
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature contents")
@@ -762,6 +763,7 @@ func (r *repository) Parse(ctx context.Context, ns, featureName string, registry
 		return nil, errors.Wrap(err, "build")
 	}
 	f.Key = fc.File.Name
+	f.Feature.Key = fc.File.Name
 
 	// Rewrite the bytes to the starfile path, based on the parse AST.
 	// This is just an illustration, but in the future we could modify

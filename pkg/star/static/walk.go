@@ -16,20 +16,20 @@ package static
 
 import (
 	"fmt"
-	"math"
-	"reflect"
 	"strconv"
 	"strings"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
-	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var (
@@ -39,11 +39,11 @@ var (
 // Walker provides methods to statically read and manipulate .star files
 // that hold lekko features.
 type Walker interface {
-	Build() (*feature.Feature, error)
+	Build() (*featurev1beta1.StaticFeature, error)
 	// Note: this method will perform mutations based on the V3 ruleslang
 	// AST if it exists. If not, it will fall back to the ruleString
 	// provided in the feature.
-	Mutate(f *feature.Feature) ([]byte, error)
+	Mutate(f *featurev1beta1.StaticFeature) ([]byte, error)
 	// Returns the formatted bytes.
 	Format() ([]byte, error)
 }
@@ -62,16 +62,21 @@ func NewWalker(filename string, starBytes []byte, registry *protoregistry.Types)
 	}
 }
 
-func (w *walker) Build() (*feature.Feature, error) {
+func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 	ast, err := w.genAST()
 	if err != nil {
 		return nil, errors.Wrap(err, "gen ast")
 	}
-	ret := &feature.Feature{}
+	ret := &featurev1beta1.StaticFeature{
+		Feature: &featurev1beta1.Feature{
+			Tree: &featurev1beta1.Tree{},
+		},
+	}
 	t := newTraverser(ast).
 		withDefaultFn(w.buildDefaultFn(ret)).
 		withDescriptionFn(w.buildDescriptionFn(ret)).
-		withRulesFn(w.buildRulesFn(ret))
+		withRulesFn(w.buildRulesFn(ret)).
+		withProtoImportsFn(w.buildProtoImportsFn(ret))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -79,7 +84,7 @@ func (w *walker) Build() (*feature.Feature, error) {
 	return ret, nil
 }
 
-func (w *walker) Mutate(f *feature.Feature) ([]byte, error) {
+func (w *walker) Mutate(f *featurev1beta1.StaticFeature) ([]byte, error) {
 	ast, err := w.genAST()
 	if err != nil {
 		return nil, errors.Wrap(err, "gen ast")
@@ -113,82 +118,113 @@ func (w *walker) genAST() (*build.File, error) {
 	return file, nil
 }
 
-/** Methods helpful for building a go-native representation of a feature **/
+/** Methods helpful for building a proto-native representation of a feature **/
 
-func (w *walker) extractValue(vPtr *build.Expr) (interface{}, feature.FeatureType, error) {
+func (w *walker) extractValue(vPtr *build.Expr) (proto.Message, featurev1beta1.FeatureType, error) {
 	if vPtr == nil {
-		return nil, "", fmt.Errorf("received nil value")
+		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, fmt.Errorf("received nil value")
 	}
 	v := *vPtr
 	switch t := v.(type) {
 	case *build.Ident:
 		switch t.Name {
 		case "True":
-			return true, feature.FeatureTypeBool, nil
+			return wrapperspb.Bool(true), featurev1beta1.FeatureType_FEATURE_TYPE_BOOL, nil
 		case "False":
-			return false, feature.FeatureTypeBool, nil
+			return wrapperspb.Bool(false), featurev1beta1.FeatureType_FEATURE_TYPE_BOOL, nil
 		default:
-			return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown identifier %s", t.Name)
+			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown identifier %s", t.Name)
 		}
 	case *build.LiteralExpr:
 		if strings.Contains(t.Token, ".") {
 			if f, err := strconv.ParseFloat(t.Token, 64); err == nil {
-				return f, feature.FeatureTypeFloat, nil
+				return wrapperspb.Double(f), featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT, nil
 			}
 		} else {
 			if i, err := strconv.ParseInt(t.Token, 10, 64); err == nil {
-				return i, feature.FeatureTypeInt, nil
+				return wrapperspb.Int64(i), featurev1beta1.FeatureType_FEATURE_TYPE_INT, nil
 			}
 		}
 	case *build.StringExpr:
-		return t.Value, feature.FeatureTypeString, nil
-	case *build.ListExpr:
-		var elemVals []interface{}
-		for _, expr := range t.List {
-			expr := expr
-			elemVal, _, err := w.extractValue(&expr)
-			if err != nil {
-				return nil, "", errors.Wrap(err, "extract list elem value")
-			}
-			elemVals = append(elemVals, elemVal)
-		}
-		return elemVals, feature.FeatureTypeJSON, nil
-	case *build.DictExpr:
-		keyVals := make(map[string]interface{})
-		for _, kvExpr := range t.List {
-			kvExpr := kvExpr
-			keyExpr, ok := kvExpr.Key.(*build.StringExpr)
-			if !ok {
-				return nil, "", errors.Errorf("json structs must have keys of type string, not %T", kvExpr.Key)
-			}
-			key := keyExpr.Value
-			vVar, _, err := w.extractValue(&kvExpr.Value)
-			if err != nil {
-				return nil, "", errors.Wrap(err, "extract struct elem value")
-			}
-			keyVals[key] = vVar
-		}
-		return keyVals, feature.FeatureTypeJSON, nil
+		return wrapperspb.String(t.Value), featurev1beta1.FeatureType_FEATURE_TYPE_STRING, nil
+	case *build.ListExpr: // json
+		ret, err := w.extractJSONValue(v)
+		return ret, featurev1beta1.FeatureType_FEATURE_TYPE_JSON, err
+	case *build.DictExpr: // json
+		ret, err := w.extractJSONValue(v)
+		return ret, featurev1beta1.FeatureType_FEATURE_TYPE_JSON, err
 	case *build.CallExpr:
 		// try to statically parse the protobuf
 		proto, err := CallExprToProto(t, w.registry)
 		if err != nil {
-			return nil, "", err
-			// return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
+			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
 		}
-		return proto, feature.FeatureTypeProto, nil
+		return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
 	}
-	return nil, "", errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+	return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
 }
 
-func (w *walker) buildDescriptionFn(f *feature.Feature) descriptionFn {
+func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
+	switch t := v.(type) {
+	case *build.Ident:
+		switch t.Name {
+		case "True":
+			return structpb.NewBoolValue(true), nil
+		case "False":
+			return structpb.NewBoolValue(false), nil
+		case "None":
+			return structpb.NewNullValue(), nil
+		default:
+			return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown identifier %s", t.Name)
+		}
+	case *build.LiteralExpr:
+		if f, err := strconv.ParseFloat(t.Token, 64); err == nil {
+			return structpb.NewNumberValue(f), nil
+		}
+	case *build.StringExpr:
+		return structpb.NewStringValue(t.Value), nil
+	case *build.ListExpr:
+		listVal := &structpb.ListValue{}
+		for _, expr := range t.List {
+			expr := expr
+			elemVal, err := w.extractJSONValue(expr)
+			if err != nil {
+				return nil, errors.Wrap(err, "extract list elem value")
+			}
+			listVal.Values = append(listVal.Values, elemVal)
+		}
+		return structpb.NewListValue(listVal), nil
+	case *build.DictExpr:
+		structVal := structpb.Struct{
+			Fields: map[string]*structpb.Value{},
+		}
+		for _, kvExpr := range t.List {
+			kvExpr := kvExpr
+			keyExpr, ok := kvExpr.Key.(*build.StringExpr)
+			if !ok {
+				return nil, errors.Errorf("json structs must have keys of type string, not %T", kvExpr.Key)
+			}
+			key := keyExpr.Value
+			vVar, err := w.extractJSONValue(kvExpr.Value)
+			if err != nil {
+				return nil, errors.Wrap(err, "extract struct elem value")
+			}
+			structVal.Fields[key] = vVar
+		}
+		return structpb.NewStructValue(&structVal), nil
+	}
+	return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+}
+
+func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
 		f.Description = v.Value
+		f.Feature.Description = v.Value
 		return nil
 	}
 }
 
-func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
+func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 	return func(rulesW *rulesWrapper) error {
 		for i, r := range rulesW.rules {
 			rulesLang := r.conditionV.Value
@@ -200,131 +236,170 @@ func (w *walker) buildRulesFn(f *feature.Feature) rulesFn {
 			if err != nil {
 				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
 			}
-			rule := &feature.Rule{
-				Condition:      rulesLang,
-				ConditionAST:   ast,
-				ConditionASTV3: astNew,
+			rule := &featurev1beta1.Constraint{
+				Rule:       rulesLang,
+				RuleAst:    ast,
+				RuleAstNew: astNew,
 			}
-			goVal, featureType, err := w.extractValue(&r.v)
+			protoVal, featureType, err := w.extractValue(&r.v)
 			if err != nil {
 				return fmt.Errorf("rule #%d: extract value: %w", i, err)
 			}
-			switch featureType {
-			case feature.FeatureTypeBool:
-				rule.Value = goVal
-			case feature.FeatureTypeFloat:
-				rule.Value = goVal
-			case feature.FeatureTypeInt:
-				rule.Value = goVal
-			case feature.FeatureTypeString:
-				rule.Value = goVal
-			case feature.FeatureTypeProto:
-				rule.Value = goVal
-			case feature.FeatureTypeJSON:
-				structVal, err := structpb.NewValue(goVal)
-				if err != nil {
-					return errors.Wrapf(err, "rule #%d: structpb new value with type %T", i, goVal)
-				}
-				rule.Value = structVal
-			default:
-				return errors.Wrapf(ErrUnsupportedStaticParsing, "rule #%d: feature type %s", i, featureType)
+			ruleVal, err := w.toAny(protoVal)
+			if err != nil {
+				return errors.Wrapf(err, "extracted proto val to any for feature type %v", featureType)
 			}
-			f.Rules = append(f.Rules, rule)
+			rule.Value = ruleVal
+			f.Feature.Tree.Constraints = append(f.Feature.Tree.Constraints, rule)
 		}
 		return nil
 	}
 }
 
-func (w *walker) buildDefaultFn(f *feature.Feature) defaultFn {
+func (w *walker) buildProtoImportsFn(f *featurev1beta1.StaticFeature) importsFn {
+	return func(imports *importsWrapper) error {
+		if imports == nil {
+			return nil
+		}
+		typeError := func(expected, actual build.Expr) error {
+			return errors.Errorf("expecting %T, found %T. expr: %s", expected, actual, build.FormatString(actual))
+		}
+		for _, starImport := range imports.imports {
+			lhs, ok := starImport.assignExpr.LHS.(*build.Ident)
+			if !ok {
+				return typeError(&build.Ident{}, starImport.assignExpr.LHS)
+			}
+			rhs, ok := starImport.assignExpr.RHS.(*build.CallExpr)
+			if !ok {
+				return typeError(&build.CallExpr{}, starImport.assignExpr.RHS)
+			}
+			dotExpr, ok := rhs.X.(*build.DotExpr)
+			if !ok {
+				return typeError(&build.Ident{}, rhs.X)
+			}
+			dotX, ok := dotExpr.X.(*build.Ident)
+			if !ok {
+				return typeError(&build.Ident{}, dotExpr.X)
+			}
+			if dotX.Name != "proto" || dotExpr.Name != "package" {
+				return errors.Errorf("found badly formed proto import: %s", build.FormatString(dotExpr))
+			}
+			var args []string
+			for _, arg := range rhs.List {
+				stringExpr, ok := arg.(*build.StringExpr)
+				if !ok {
+					return errors.Errorf("expecting string expr, found %T. expr: %s", arg, build.FormatString(arg))
+				}
+				args = append(args, stringExpr.Value)
+			}
+			f.Imports = append(f.Imports, &featurev1beta1.ImportStatement{
+				Comments: commentBlockToProto(&starImport.assignExpr.Comments),
+				Lhs: &featurev1beta1.IdentExpr{
+					Comments: commentBlockToProto(&lhs.Comments),
+					Token:    lhs.Name,
+				},
+				Operator:  starImport.assignExpr.Op,
+				LineBreak: starImport.assignExpr.LineBreak,
+				Rhs: &featurev1beta1.ImportExpr{
+					Comments: commentBlockToProto(&rhs.Comments),
+					Dot: &featurev1beta1.DotExpr{
+						Comments: commentBlockToProto(&dotExpr.Comments),
+						X:        dotX.Name,
+						Name:     dotExpr.Name,
+					},
+					Args: args,
+				},
+			})
+		}
+		return nil
+	}
+}
+
+func (w *walker) buildDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 	return func(v *build.Expr) error {
-		goVal, featureType, err := w.extractValue(v)
+		protoVal, fType, err := w.extractValue(v)
 		if err != nil {
 			return err
 		}
-		switch featureType {
-		case feature.FeatureTypeBool:
-			boolVal, ok := goVal.(bool)
-			if !ok {
-				return fmt.Errorf("expected bool, got %T", goVal)
-			}
-			boolFeature := feature.NewBoolFeature(boolVal)
-			*f = *boolFeature
-		case feature.FeatureTypeFloat:
-			floatVal, ok := goVal.(float64)
-			if !ok {
-				return fmt.Errorf("expected float64, got %T", goVal)
-			}
-			floatFeature := feature.NewFloatFeature(floatVal)
-			*f = *floatFeature
-		case feature.FeatureTypeInt:
-			intVal, ok := goVal.(int64)
-			if !ok {
-				return fmt.Errorf("expected int64, got %T", goVal)
-			}
-			intFeature := feature.NewIntFeature(intVal)
-			*f = *intFeature
-		case feature.FeatureTypeString:
-			stringVal, ok := goVal.(string)
-			if !ok {
-				return fmt.Errorf("expected string, got %T", goVal)
-			}
-			stringFeature := feature.NewStringFeature(stringVal)
-			*f = *stringFeature
-		case feature.FeatureTypeJSON:
-			structVal, err := structpb.NewValue(goVal)
-			if err != nil {
-				return errors.Wrap(err, "structpb new value")
-			}
-			jsonFeature := feature.NewJSONFeature(structVal)
-			if err != nil {
-				return errors.Wrap(err, "new json feature")
-			}
-			*f = *jsonFeature
-		case feature.FeatureTypeProto:
-			proto, ok := goVal.(proto.Message)
-			if !ok {
-				return fmt.Errorf("expected proto, got %T", goVal)
-			}
-			protoFeature := feature.NewProtoFeature(proto)
-			*f = *protoFeature
-		default:
-			return errors.Wrapf(ErrUnsupportedStaticParsing, "feature type %s", featureType)
+		anyVal, err := w.toAny(protoVal)
+		if err != nil {
+			return err
 		}
+		f.Feature.Tree.Default = anyVal
+		f.Feature.Type = fType
+		f.Type = fType
 		return nil
 	}
 }
 
 /** Methods helpful for mutating the underlying AST. **/
-
-func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
-	switch goValType := goVal.(type) {
-	case bool:
-		identExpr := &build.Ident{}
-		identExpr.Name = "False"
-		if goValType {
-			identExpr.Name = "True"
+// TODO: this method should take a feature type and switch on the feature type.
+// And then cast the proto val to that wrapper type.
+func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature) (build.Expr, error) {
+	switch sf.Feature.Type {
+	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
+		bv := &wrapperspb.BoolValue{}
+		if err := a.UnmarshalTo(bv); err != nil {
+			return nil, err
 		}
-		return identExpr, nil
-	case float64:
-		return &build.LiteralExpr{
-			Token: starlark.Float(goValType).String(),
+		return starBool(bv.Value), nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+		iv := &wrapperspb.Int64Value{}
+		if err := a.UnmarshalTo(iv); err != nil {
+			return nil, err
+		}
+		return starInt(iv.Value), nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+		dv := &wrapperspb.DoubleValue{}
+		if err := a.UnmarshalTo(dv); err != nil {
+			return nil, err
+		}
+		return starFloat(dv.Value), nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
+		sv := &wrapperspb.StringValue{}
+		if err := a.UnmarshalTo(sv); err != nil {
+			return nil, err
+		}
+		return starString(sv.Value), nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
+		sv := &structpb.Value{}
+		if err := a.UnmarshalTo(sv); err != nil {
+			return nil, err
+		}
+		return w.genJSONValue(sv)
+	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
+		protoVal, err := w.fromAnyDynamic(a)
+		if err != nil {
+			return nil, err
+		}
+		imp, err := findImport(sf.Imports, protoVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to find import that proto msg belongs to")
+		}
+		return ProtoToStatic(imp, protoVal)
+	default:
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "proto val type %v", a.TypeUrl)
+	}
+}
+
+func (w *walker) genJSONValue(val *structpb.Value) (build.Expr, error) {
+	switch k := val.Kind.(type) {
+	case *structpb.Value_NullValue:
+		return &build.Ident{
+			Name: "None",
 		}, nil
-	case int64:
-		return &build.LiteralExpr{
-			Token: strconv.FormatInt(goValType, 10),
-		}, nil
-	case string:
-		return &build.StringExpr{
-			Value: goValType,
-		}, nil
-	case *structpb.Value:
-		return w.genValue(goValType.GetKind())
+	case *structpb.Value_BoolValue:
+		return starBool(k.BoolValue), nil
+	case *structpb.Value_StringValue:
+		return starString(k.StringValue), nil
+	case *structpb.Value_NumberValue:
+		return starFloat(k.NumberValue), nil
 	case *structpb.Value_ListValue:
 		listExpr := &build.ListExpr{
 			ForceMultiLine: true,
 		}
-		for _, listElem := range goValType.ListValue.GetValues() {
-			expr, err := w.genValue(listElem)
+		for _, listElem := range k.ListValue.GetValues() {
+			expr, err := w.genJSONValue(listElem)
 			if err != nil {
 				return nil, errors.Wrap(err, "gen value list elem")
 			}
@@ -335,83 +410,58 @@ func (w *walker) genValue(goVal interface{}) (build.Expr, error) {
 		dictExpr := &build.DictExpr{
 			ForceMultiLine: true,
 		}
-		for key, value := range goValType.StructValue.Fields {
-			valExpr, err := w.genValue(value)
+		for key, value := range k.StructValue.Fields {
+			valExpr, err := w.genJSONValue(value)
 			if err != nil {
 				return nil, errors.Wrap(err, "gen value dict elem")
 			}
 			dictExpr.List = append(dictExpr.List, &build.KeyValueExpr{
-				Key:   &build.StringExpr{Value: key},
+				Key:   starString(key),
 				Value: valExpr,
 			})
 		}
 		return dictExpr, nil
-	case *structpb.Value_BoolValue:
-		return w.genValue(goValType.BoolValue)
-	case *structpb.Value_StringValue:
-		return w.genValue(goValType.StringValue)
-	case *structpb.Value_NumberValue:
-		if goValType.NumberValue == math.Trunc(goValType.NumberValue) {
-			return w.genValue(int64(goValType.NumberValue))
-		}
-		return w.genValue(goValType.NumberValue)
-	case proto.Message: // statically mutating protobuf
-		return ProtoToStatic("pb", goValType)
 	default:
-		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "go val type %T", goVal)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "structpb val type %T", k)
 	}
 }
 
-func (w *walker) mutateValue(v *build.Expr, goVal interface{}) error {
-	gen, err := w.genValue(goVal)
-	if err != nil {
-		return errors.Wrap(err, "gen value")
-	}
-	*v = gen
-	return nil
-}
-
-func (w *walker) mutateDefaultFn(f *feature.Feature) defaultFn {
+func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 	return func(v *build.Expr) error {
-		goVal, featureType, err := w.extractValue(v)
+		_, featureType, err := w.extractValue(v)
 		if err != nil {
 			return errors.Wrap(err, "extract default value")
 		}
-		if featureType != f.FeatureType {
-			return errors.Wrapf(err, "cannot mutate star type %T with feature type %v", goVal, featureType)
+		if featureType != f.Type {
+			return errors.Wrapf(err, "cannot mutate star feature type %v with arg feature type %v", featureType, f.Type)
 		}
-		if featureType != feature.FeatureTypeJSON {
-			starValType := reflect.TypeOf(goVal)
-			featureValType := reflect.TypeOf(f.Value)
-			if starValType.Name() != featureValType.Name() {
-				return errors.Errorf("cannot mutate go star type %T with feature type %T", goVal, f.Value)
-			}
+		gen, err := w.genValue(f.Feature.Tree.Default, f)
+		if err != nil {
+			return errors.Wrap(err, "gen value")
 		}
-		if err := w.mutateValue(v, f.Value); err != nil {
-			return errors.Wrap(err, "mutate default feature value")
-		}
+		*v = gen
 		return nil
 	}
 }
 
-func (w *walker) mutateDescriptionFn(f *feature.Feature) descriptionFn {
+func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
-		v.Value = f.Description
+		v.Value = f.Feature.Description
 		return nil
 	}
 }
 
-func (w *walker) mutateRulesFn(f *feature.Feature) rulesFn {
+func (w *walker) mutateRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 	return func(rulesW *rulesWrapper) error {
 		var newRules []rule
-		for i, r := range f.Rules {
-			gen, err := w.genValue(r.Value)
+		for i, r := range f.Feature.Tree.GetConstraints() {
+			gen, err := w.genValue(r.Value, f)
 			if err != nil {
 				return errors.Wrapf(err, "rule %d: gen value", i)
 			}
-			newRuleString := r.Condition
-			if r.ConditionASTV3 != nil {
-				newRuleString, err = parser.RuleToString(r.ConditionASTV3)
+			newRuleString := r.Rule
+			if r.RuleAstNew != nil {
+				newRuleString, err = parser.RuleToString(r.RuleAstNew)
 				if err != nil {
 					return errors.Wrap(err, "error attempting to parse v3 rule ast to string")
 				}
@@ -427,4 +477,91 @@ func (w *walker) mutateRulesFn(f *feature.Feature) rulesFn {
 		rulesW.rules = newRules
 		return nil
 	}
+}
+
+// returns a dynamic proto message. Use when the contained type is
+// not known at compile time. For known types, use a.UnmarshalTo(dest).
+func (w *walker) fromAnyDynamic(a *anypb.Any) (proto.Message, error) {
+	protoVal, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
+		Resolver: w.registry,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "any unmarshal")
+	}
+	return protoVal, nil
+}
+
+func (w *walker) toAny(pm proto.Message) (*anypb.Any, error) {
+	ret := new(anypb.Any)
+	if err := anypb.MarshalFrom(ret, pm, proto.MarshalOptions{Deterministic: true}); err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+func starBool(b bool) build.Expr {
+	identExpr := &build.Ident{}
+	identExpr.Name = "False"
+	if b {
+		identExpr.Name = "True"
+	}
+	return identExpr
+}
+
+func starInt(i int64) build.Expr {
+	return &build.LiteralExpr{
+		Token: strconv.FormatInt(i, 10),
+	}
+}
+
+func starFloat(f float64) build.Expr {
+	return &build.LiteralExpr{
+		Token: starlark.Float(f).String(),
+	}
+}
+
+func starString(s string) build.Expr {
+	return &build.StringExpr{
+		Value: s,
+	}
+}
+
+func commentBlockToProto(comments *build.Comments) *featurev1beta1.Comments {
+	return &featurev1beta1.Comments{
+		Before: commentsToProto(comments.Before),
+		Suffix: commentsToProto(comments.Suffix),
+		After:  commentsToProto(comments.After),
+	}
+}
+
+func commentsToProto(comments []build.Comment) []*featurev1beta1.Comment {
+	var ret []*featurev1beta1.Comment
+	for _, c := range comments {
+		ret = append(ret, commentToProto(c))
+	}
+	return ret
+}
+
+func commentToProto(comment build.Comment) *featurev1beta1.Comment {
+	return &featurev1beta1.Comment{
+		Token: comment.Token,
+	}
+}
+
+// Given the list of proto imports that were defined by the starlark,
+// find the specific import that declared the protobuf package that
+// contains the schema for the provided message. Note: the message may be
+// dynamic.
+func findImport(imports []*featurev1beta1.ImportStatement, msg proto.Message) (*featurev1beta1.ImportStatement, error) {
+	msgFullName := string(msg.ProtoReflect().Descriptor().FullName())
+	for _, imp := range imports {
+		if len(imp.Rhs.Args) == 0 {
+			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
+		}
+		packagePrefix := imp.Rhs.Args[0]
+		if strings.HasPrefix(msgFullName, packagePrefix) {
+			return imp, nil
+		}
+	}
+	return nil, errors.New("no proto import statements found")
 }
