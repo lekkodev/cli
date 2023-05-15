@@ -5,8 +5,8 @@ package testproto.v1beta1;
 option go_package = "github.com/lekkodev/cli/pkg/star/static/testdata/gen/v1beta1;testdatav1beta1";
 
 message TestMessage {
-    // TestEnum test_enum = 1;
     string val = 1;
+    TestEnum test_enum = 2;
 }
 
 enum TestEnum {
