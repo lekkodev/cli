@@ -219,8 +219,6 @@ func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 						return &starFeatureAST{rhs}, nil
 					}
 				}
-			} else {
-				fmt.Printf("separate expression: %v\n", build.FormatString(t))
 			}
 		}
 	}

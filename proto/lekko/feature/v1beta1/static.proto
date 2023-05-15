@@ -18,20 +18,47 @@ package lekko.feature.v1beta1;
 
 import "lekko/feature/v1beta1/feature.proto";
 
+// Represents a statically parsed feature.
+// This model is meant to contain all sorts of data that is available
+// to us via inspecting the starlark file, but may not be available
+// post-compilation. E.g. what import statements were defined, and what
+// comments were written surrounding certain expressions.
+// The goal is to add to this model any information we wish to surface
+// to the UI or that is needed for static mutation of a feature.
 message StaticFeature {
   string key = 1;
+  lekko.feature.v1beta1.FeatureType type = 2;
+
+  repeated ImportStatement imports = 3;
+
+  FeatureStruct feature = 4;
+
+  // For backwards compatibility. Eventually, the materialized
+  // model will be deprecated in favor of a statically parsed model
+  lekko.feature.v1beta1.Feature feature_old = 5;
+}
+
+message FeatureStruct {
+  StarMeta meta = 1;
   string description = 2;
-  lekko.feature.v1beta1.FeatureType type = 3;
+  StarExpr default = 3;
+  Rules rules = 4;
+}
 
-  repeated ImportStatement imports = 4;
+message Rules {
+  StarMeta meta = 1;
+  repeated Rule rules = 2;
+}
 
-  // For backwards compatibility
-  lekko.feature.v1beta1.Feature feature = 5;
+message Rule {
+  StarMeta meta = 1;
+  string condition = 2;
+  StarExpr value = 3;
 }
 
 // An assignment expression in starlark, e.g. `x = 1`.
 message ImportStatement {
-  Comments comments = 1;
+  StarMeta meta = 1;
   // the variable that the import is assigned to
   IdentExpr lhs = 2;
   string operator = 3; // e.g. `=`
@@ -41,28 +68,34 @@ message ImportStatement {
 
 // an import expression, e.g. `proto.package("google.protobuf")`
 message ImportExpr {
-  Comments comments = 1;
+  StarMeta meta = 1;
   DotExpr dot = 2;
   repeated string args = 3;
 }
 
 // a dot expression, e.g. `proto.package`
 message DotExpr {
-  Comments comments = 1;
+  StarMeta meta = 1;
   string x = 2;
   string name = 3;
 }
 
 // A single starlark expression. May not be fully decomposed.
-// Stores the string representation of the expression.
+// Stores the string representation of the expression in the metadata.
 message StarExpr {
-  Comments comments = 1;
+  StarMeta meta = 1;
   string expression = 2;
 }
 
 message IdentExpr {
-  Comments comments = 1;
+  StarMeta meta = 1;
   string token = 2;
+}
+
+// Metadata commonly associated with any starlark expression
+message StarMeta {
+  Comments comments = 1;
+  bool multiline = 2;
 }
 
 message Comments {

@@ -763,7 +763,7 @@ func (r *repository) Parse(ctx context.Context, ns, featureName string, registry
 		return nil, errors.Wrap(err, "build")
 	}
 	f.Key = fc.File.Name
-	f.Feature.Key = fc.File.Name
+	f.FeatureOld.Key = fc.File.Name
 
 	// Rewrite the bytes to the starfile path, based on the parse AST.
 	// This is just an illustration, but in the future we could modify

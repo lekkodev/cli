@@ -16,6 +16,8 @@ package static
 
 import (
 	"fmt"
+	"os"
+	"strings"
 	"testing"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -136,10 +138,10 @@ func TestWalkerMutateDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	bv := &wrapperspb.BoolValue{}
-	require.NoError(t, f.Feature.Tree.Default.UnmarshalTo(bv))
+	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(bv))
 	require.True(t, bv.Value)
 
-	f.Feature.Tree.Default, err = b.toAny(wrapperspb.Bool(false))
+	f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Bool(false))
 	require.NoError(t, err)
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -153,8 +155,8 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	f.Feature.Tree.Constraints[0].RuleAstNew = nil // set to nil so that mutation favors the raw string
-	f.Feature.Tree.Constraints[0].Rule = "age == 12"
+	f.FeatureOld.Tree.Constraints[0].RuleAstNew = nil // set to nil so that mutation favors the raw string
+	f.FeatureOld.Tree.Constraints[0].Rule = "age == 12"
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -169,7 +171,7 @@ func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
 	require.NotNil(t, f)
 
 	// the AST takes precedence over the condition string
-	f.Feature.Tree.Constraints[0].RuleAstNew.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
+	f.FeatureOld.Tree.Constraints[0].RuleAstNew.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -186,7 +188,7 @@ func TestWalkerMutateAddRule(t *testing.T) {
 	falseAny, err := b.toAny(wrapperspb.Bool(false))
 	require.NoError(t, err)
 
-	f.Feature.Tree.Constraints = append(f.Feature.Tree.Constraints, &featurev1beta1.Constraint{
+	f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
 		Rule: "age == 12",
 		RuleAst: &rulesv1beta2.Rule{
 			Rule: &rulesv1beta2.Rule_Atom{
@@ -220,7 +222,7 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
 	falseAny, err := b.toAny(wrapperspb.Bool(false))
 	require.NoError(t, err)
 
-	f.Feature.Tree.Constraints = append(f.Feature.Tree.Constraints, &featurev1beta1.Constraint{
+	f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
 		Rule: "age == 12",
 		RuleAst: &rulesv1beta2.Rule{
 			Rule: &rulesv1beta2.Rule_Atom{
@@ -246,7 +248,7 @@ func TestWalkerMutateRemoveRule(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	f.Feature.Tree.Constraints = f.Feature.Tree.Constraints[1:]
+	f.FeatureOld.Tree.Constraints = f.FeatureOld.Tree.Constraints[1:]
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -268,7 +270,7 @@ func TestWalkerMutateRemoveOnlyRule(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	f.Feature.Tree.Constraints = nil
+	f.FeatureOld.Tree.Constraints = nil
 
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -284,7 +286,7 @@ func TestWalkerMutateDescription(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, f)
 
-			f.Feature.Description = "a NEW way to describe this feature."
+			f.FeatureOld.Description = "a NEW way to describe this feature."
 
 			bytes, err := b.Mutate(f)
 			require.NoError(t, err)
@@ -301,7 +303,7 @@ func TestWalkerMutateTypeMismatch(t *testing.T) {
 	require.NotNil(t, f)
 
 	// change from float to int
-	f.Feature.Tree.Default, err = b.toAny(wrapperspb.Int64(29))
+	f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Int64(29))
 	require.NoError(t, err)
 	_, err = b.Mutate(f)
 	require.Error(t, err)
@@ -314,12 +316,12 @@ func TestWalkerMutateDefaultFloat(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	dv := &wrapperspb.DoubleValue{}
-	require.NoError(t, f.Feature.Tree.Default.UnmarshalTo(dv))
+	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(dv))
 	require.EqualValues(t, dv.Value, val.goVal)
 
 	newFloatAny, err := b.toAny(wrapperspb.Double(99.99))
 	require.NoError(t, err)
-	f.Feature.Tree.Default = newFloatAny
+	f.FeatureOld.Tree.Default = newFloatAny
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
@@ -332,12 +334,12 @@ func TestWalkerMutateDefaultInt(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	iv := &wrapperspb.Int64Value{}
-	require.NoError(t, f.Feature.Tree.Default.UnmarshalTo(iv))
+	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(iv))
 	require.EqualValues(t, iv.Value, val.goVal)
 
 	newIntAny, err := b.toAny(wrapperspb.Int64(99))
 	require.NoError(t, err)
-	f.Feature.Tree.Default = newIntAny
+	f.FeatureOld.Tree.Default = newIntAny
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
@@ -350,12 +352,12 @@ func TestWalkerMutateDefaultString(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	sv := &wrapperspb.StringValue{}
-	require.NoError(t, f.Feature.Tree.Default.UnmarshalTo(sv))
+	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
 	require.EqualValues(t, sv.Value, val.goVal)
 
 	newStringAny, err := b.toAny(wrapperspb.String("hello"))
 	require.NoError(t, err)
-	f.Feature.Tree.Default = newStringAny
+	f.FeatureOld.Tree.Default = newStringAny
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
 	assert.NotEqualValues(t, starBytes, bytes)
@@ -369,11 +371,11 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	sv := &structpb.Value{}
-	require.NoError(t, f.Feature.Tree.Default.UnmarshalTo(sv))
+	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
 	require.NotEmpty(t, sv.GetListValue().Values)
 
 	sv.GetListValue().Values = append(sv.GetListValue().Values, structpb.NewStringValue("foobar"))
-	f.Feature.Tree.Default, err = b.toAny(sv)
+	f.FeatureOld.Tree.Default, err = b.toAny(sv)
 	require.NoError(t, err)
 	bytes, err := b.Mutate(f)
 	require.NoError(t, err)
@@ -381,13 +383,7 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	assert.Contains(t, string(bytes), "foobar")
 }
 
-func TestWalkerBuildProtoDefault(t *testing.T) {
-	checkEqual := func(b *walker, a *anypb.Any, expected proto.Message) {
-		protoMessage, err := b.fromAnyDynamic(a)
-		require.NoError(t, err)
-		require.NotNil(t, protoMessage)
-		require.True(t, proto.Equal(protoMessage, expected), "expected %v %T, got %v %T", expected, expected, protoMessage, protoMessage)
-	}
+func TestWalkerBuildProto(t *testing.T) {
 	for i, tc := range []struct {
 		starVal  string
 		expected proto.Message
@@ -459,8 +455,8 @@ func TestWalkerBuildProtoDefault(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, f)
 			require.Len(t, f.Imports, 2)
-			checkEqual(b, f.Feature.Tree.Default, tc.expected)
-			checkEqual(b, f.Feature.Tree.Constraints[0].Value, tc.expected)
+			checkEqualProtos(t, b, f.FeatureOld.Tree.Default, tc.expected)
+			checkEqualProtos(t, b, f.FeatureOld.Tree.Constraints[0].Value, tc.expected)
 
 			// Now that static parsing is done, try a no-op static mutation.
 			result, err := b.Mutate(f)
@@ -471,4 +467,48 @@ func TestWalkerBuildProtoDefault(t *testing.T) {
 			}
 		})
 	}
+}
+
+func checkEqualProtos(t *testing.T, b *walker, a *anypb.Any, expected proto.Message) {
+	protoMessage, err := b.fromAnyDynamic(a)
+	require.NoError(t, err)
+	require.NotNil(t, protoMessage)
+	require.True(t, proto.Equal(protoMessage, expected), "expected %v %T, got %v %T", expected, expected, protoMessage, protoMessage)
+}
+
+func TestWalkerBuildProtoMultiline(t *testing.T) {
+	starVal := "pb.BoolValue(\n\tvalue = True,\n)"
+	expected := &wrapperspb.BoolValue{Value: true}
+	star := []byte(fmt.Sprintf(`
+		pb = proto.package("google.protobuf")
+		result = feature(
+			description = "proto feature",
+			default = %s,
+			rules = [("age > 1", %s)]
+		)
+		`, starVal, starVal))
+	b := testWalker(t, star)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	require.Len(t, f.Imports, 1)
+	checkEqualProtos(t, b, f.FeatureOld.Tree.Default, expected)
+	checkEqualProtos(t, b, f.FeatureOld.Tree.Constraints[0].Value, expected)
+
+	// Now that static parsing is done, try a no-op static mutation.
+	result, err := b.Mutate(f)
+	require.NoError(t, err)
+	// formatted value should have comma and newline
+	require.Equal(t, 2, strings.Count(string(result), "value = True,\n"))
+}
+
+func TestWalkerReal(t *testing.T) {
+	star, err := os.ReadFile("testdata/device.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	f, err := w.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	assert.True(t, f.GetFeature().GetDefault().GetMeta().GetMultiline())
 }

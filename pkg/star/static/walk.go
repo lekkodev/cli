@@ -68,7 +68,10 @@ func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 		return nil, errors.Wrap(err, "gen ast")
 	}
 	ret := &featurev1beta1.StaticFeature{
-		Feature: &featurev1beta1.Feature{
+		Feature: &featurev1beta1.FeatureStruct{
+			Rules: &featurev1beta1.Rules{},
+		},
+		FeatureOld: &featurev1beta1.Feature{
 			Tree: &featurev1beta1.Tree{},
 		},
 	}
@@ -120,7 +123,7 @@ func (w *walker) genAST() (*build.File, error) {
 
 /** Methods helpful for building a proto-native representation of a feature **/
 
-func (w *walker) extractValue(vPtr *build.Expr) (proto.Message, featurev1beta1.FeatureType, error) {
+func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
 	if vPtr == nil {
 		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, fmt.Errorf("received nil value")
 	}
@@ -155,7 +158,7 @@ func (w *walker) extractValue(vPtr *build.Expr) (proto.Message, featurev1beta1.F
 		return ret, featurev1beta1.FeatureType_FEATURE_TYPE_JSON, err
 	case *build.CallExpr:
 		// try to statically parse the protobuf
-		proto, err := CallExprToProto(t, w.registry)
+		proto, err := CallExprToProto(t, f, w.registry)
 		if err != nil {
 			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
 		}
@@ -218,8 +221,8 @@ func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
 
 func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
-		f.Description = v.Value
 		f.Feature.Description = v.Value
+		f.FeatureOld.Description = v.Value
 		return nil
 	}
 }
@@ -241,7 +244,7 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 				RuleAst:    ast,
 				RuleAstNew: astNew,
 			}
-			protoVal, featureType, err := w.extractValue(&r.v)
+			protoVal, featureType, err := w.extractValue(&r.v, f)
 			if err != nil {
 				return fmt.Errorf("rule #%d: extract value: %w", i, err)
 			}
@@ -250,7 +253,14 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 				return errors.Wrapf(err, "extracted proto val to any for feature type %v", featureType)
 			}
 			rule.Value = ruleVal
-			f.Feature.Tree.Constraints = append(f.Feature.Tree.Constraints, rule)
+			f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, rule)
+			f.Feature.Rules.Rules = append(f.Feature.Rules.Rules, &featurev1beta1.Rule{
+				Condition: rulesLang,
+				Value: &featurev1beta1.StarExpr{
+					Meta:       buildMeta(r.v),
+					Expression: build.FormatString(r.v),
+				},
+			})
 		}
 		return nil
 	}
@@ -293,19 +303,19 @@ func (w *walker) buildProtoImportsFn(f *featurev1beta1.StaticFeature) importsFn 
 				args = append(args, stringExpr.Value)
 			}
 			f.Imports = append(f.Imports, &featurev1beta1.ImportStatement{
-				Comments: commentBlockToProto(&starImport.assignExpr.Comments),
+				Meta: buildMeta(starImport.assignExpr),
 				Lhs: &featurev1beta1.IdentExpr{
-					Comments: commentBlockToProto(&lhs.Comments),
-					Token:    lhs.Name,
+					Meta:  buildMeta(lhs),
+					Token: lhs.Name,
 				},
 				Operator:  starImport.assignExpr.Op,
 				LineBreak: starImport.assignExpr.LineBreak,
 				Rhs: &featurev1beta1.ImportExpr{
-					Comments: commentBlockToProto(&rhs.Comments),
+					Meta: buildMeta(rhs),
 					Dot: &featurev1beta1.DotExpr{
-						Comments: commentBlockToProto(&dotExpr.Comments),
-						X:        dotX.Name,
-						Name:     dotExpr.Name,
+						Meta: buildMeta(dotExpr),
+						X:    dotX.Name,
+						Name: dotExpr.Name,
 					},
 					Args: args,
 				},
@@ -317,7 +327,7 @@ func (w *walker) buildProtoImportsFn(f *featurev1beta1.StaticFeature) importsFn 
 
 func (w *walker) buildDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 	return func(v *build.Expr) error {
-		protoVal, fType, err := w.extractValue(v)
+		protoVal, fType, err := w.extractValue(v, f)
 		if err != nil {
 			return err
 		}
@@ -325,9 +335,13 @@ func (w *walker) buildDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 		if err != nil {
 			return err
 		}
-		f.Feature.Tree.Default = anyVal
-		f.Feature.Type = fType
+		f.FeatureOld.Tree.Default = anyVal
+		f.FeatureOld.Type = fType
 		f.Type = fType
+		f.Feature.Default = &featurev1beta1.StarExpr{
+			Meta:       buildMeta(*v),
+			Expression: build.FormatString(*v),
+		}
 		return nil
 	}
 }
@@ -335,8 +349,8 @@ func (w *walker) buildDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 /** Methods helpful for mutating the underlying AST. **/
 // TODO: this method should take a feature type and switch on the feature type.
 // And then cast the proto val to that wrapper type.
-func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature) (build.Expr, error) {
-	switch sf.Feature.Type {
+func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *featurev1beta1.StarMeta) (build.Expr, error) {
+	switch sf.FeatureOld.Type {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		bv := &wrapperspb.BoolValue{}
 		if err := a.UnmarshalTo(bv); err != nil {
@@ -366,7 +380,7 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature) (build
 		if err := a.UnmarshalTo(sv); err != nil {
 			return nil, err
 		}
-		return w.genJSONValue(sv)
+		return w.genJSONValue(sv, meta)
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		protoVal, err := w.fromAnyDynamic(a)
 		if err != nil {
@@ -376,13 +390,19 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature) (build
 		if err != nil {
 			return nil, errors.Wrap(err, "failed to find import that proto msg belongs to")
 		}
-		return ProtoToStatic(imp, protoVal)
+		callExpr, err := ProtoToStatic(imp, protoVal)
+		if err != nil {
+			return nil, err
+		}
+		// todo: round trip comments
+		callExpr.ForceMultiLine = meta.GetMultiline()
+		return callExpr, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "proto val type %v", a.TypeUrl)
 	}
 }
 
-func (w *walker) genJSONValue(val *structpb.Value) (build.Expr, error) {
+func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta) (build.Expr, error) {
 	switch k := val.Kind.(type) {
 	case *structpb.Value_NullValue:
 		return &build.Ident{
@@ -396,10 +416,10 @@ func (w *walker) genJSONValue(val *structpb.Value) (build.Expr, error) {
 		return starFloat(k.NumberValue), nil
 	case *structpb.Value_ListValue:
 		listExpr := &build.ListExpr{
-			ForceMultiLine: true,
+			ForceMultiLine: meta.GetMultiline(),
 		}
 		for _, listElem := range k.ListValue.GetValues() {
-			expr, err := w.genJSONValue(listElem)
+			expr, err := w.genJSONValue(listElem, meta)
 			if err != nil {
 				return nil, errors.Wrap(err, "gen value list elem")
 			}
@@ -411,7 +431,7 @@ func (w *walker) genJSONValue(val *structpb.Value) (build.Expr, error) {
 			ForceMultiLine: true,
 		}
 		for key, value := range k.StructValue.Fields {
-			valExpr, err := w.genJSONValue(value)
+			valExpr, err := w.genJSONValue(value, meta)
 			if err != nil {
 				return nil, errors.Wrap(err, "gen value dict elem")
 			}
@@ -428,14 +448,14 @@ func (w *walker) genJSONValue(val *structpb.Value) (build.Expr, error) {
 
 func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 	return func(v *build.Expr) error {
-		_, featureType, err := w.extractValue(v)
+		_, featureType, err := w.extractValue(v, f)
 		if err != nil {
 			return errors.Wrap(err, "extract default value")
 		}
 		if featureType != f.Type {
 			return errors.Wrapf(err, "cannot mutate star feature type %v with arg feature type %v", featureType, f.Type)
 		}
-		gen, err := w.genValue(f.Feature.Tree.Default, f)
+		gen, err := w.genValue(f.FeatureOld.Tree.Default, f, f.GetFeature().GetDefault().GetMeta())
 		if err != nil {
 			return errors.Wrap(err, "gen value")
 		}
@@ -446,7 +466,7 @@ func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 
 func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
-		v.Value = f.Feature.Description
+		v.Value = f.FeatureOld.Description
 		return nil
 	}
 }
@@ -454,8 +474,13 @@ func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptio
 func (w *walker) mutateRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 	return func(rulesW *rulesWrapper) error {
 		var newRules []rule
-		for i, r := range f.Feature.Tree.GetConstraints() {
-			gen, err := w.genValue(r.Value, f)
+		for i, r := range f.FeatureOld.Tree.GetConstraints() {
+			var meta *featurev1beta1.StarMeta
+			rules := f.GetFeature().GetRules().GetRules()
+			if len(rules) > i {
+				meta = rules[i].GetValue().GetMeta()
+			}
+			gen, err := w.genValue(r.Value, f, meta)
 			if err != nil {
 				return errors.Wrapf(err, "rule %d: gen value", i)
 			}
@@ -524,6 +549,21 @@ func starString(s string) build.Expr {
 	return &build.StringExpr{
 		Value: s,
 	}
+}
+
+func buildMeta(expr build.Expr) *featurev1beta1.StarMeta {
+	ret := &featurev1beta1.StarMeta{
+		Comments: commentBlockToProto(expr.Comment()),
+	}
+	switch t := expr.(type) {
+	case *build.CallExpr:
+		ret.Multiline = t.ForceMultiLine || t.ListStart.Line < t.End.Pos.Line
+	case *build.ListExpr:
+		ret.Multiline = t.ForceMultiLine
+	case *build.DictExpr:
+		ret.Multiline = t.ForceMultiLine
+	}
+	return ret
 }
 
 func commentBlockToProto(comments *build.Comments) *featurev1beta1.Comments {

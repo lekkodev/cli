@@ -16,6 +16,7 @@ package static
 
 import (
 	"fmt"
+	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/bazelbuild/buildtools/build"
@@ -30,7 +31,7 @@ import (
 
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
-func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message) (build.Expr, error) {
+func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message) (*build.CallExpr, error) {
 	msgDesc := msg.ProtoReflect()
 	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: importStmt.GetLhs().Token}, Name: string(msgDesc.Descriptor().Name())}}
 	var retErr error
@@ -114,15 +115,12 @@ func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 }
 
 // Returns (nil, err) if the message is not protobuf.
-func CallExprToProto(ce *build.CallExpr, registry *protoregistry.Types) (proto.Message, error) {
+func CallExprToProto(ce *build.CallExpr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
 	thread := &starlark.Thread{
 		Name: "compile",
 	}
-	// TODO: pipe in user defined protos
 	protoModule := protomodule.NewModule(registry)
-	// TODO figure out what the user's imported proto modules are more elegantly
-	miniStar := []byte(fmt.Sprintf("pb = proto.package(\"google.protobuf\")\ntpb = proto.package(\"testproto.v1beta1\")\nres = %s", build.FormatString(ce)))
-	globals, err := starlark.ExecFile(thread, "", miniStar, starlark.StringDict{
+	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, ce), starlark.StringDict{
 		"proto": protoModule,
 	})
 	if err != nil {
@@ -133,4 +131,17 @@ func CallExprToProto(ce *build.CallExpr, registry *protoregistry.Types) (proto.M
 		return nil, fmt.Errorf("no proto message found %T %v", globals["res"], globals["res"])
 	}
 	return proto, nil
+}
+
+func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (ret []byte) {
+	var imports []string
+	for _, imp := range imps {
+		var args []string
+		for _, arg := range imp.Rhs.Args {
+			args = append(args, fmt.Sprintf("\"%s\"", arg))
+		}
+		rhs := fmt.Sprintf("%s.%s(%s)", imp.Rhs.Dot.X, imp.Rhs.Dot.Name, strings.Join(args, ","))
+		imports = append(imports, fmt.Sprintf("%s %s %s", imp.Lhs.Token, imp.Operator, rhs))
+	}
+	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(ce)))
 }
