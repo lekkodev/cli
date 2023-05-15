@@ -402,13 +402,13 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			return errors.Wrap(err, "error translating starlark context for unit test")
 		}
 
-		expectedVal := tuple.Index(1)
 		testFunc, ok := tuple.Index(1).(starlark.Callable)
 		if ok {
 			f.UnitTests = append(f.UnitTests, feature.NewCallableUnitTest(goCtx, fb.registry, testFunc, starCtx.String()))
 			i++
 			continue
 		}
+		expectedVal := tuple.Index(1)
 		if vr := fb.validate(feature.ValidatorResultTypeTest, i, expectedVal); vr != nil && vr.Error != nil {
 			return errors.Wrap(vr.Error, "test value validate")
 		}
