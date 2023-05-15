@@ -32,6 +32,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/spf13/cobra"
 )
@@ -258,7 +259,10 @@ func parseCmd() *cobra.Command {
 				} else {
 					fmt.Printf("[%s] Parsed\n", f.Type)
 					if printFeature {
-						fmt.Printf("%v\n", f.String())
+						fmt.Println(protojson.MarshalOptions{
+							Resolver:  registry,
+							Multiline: true,
+						}.Format(f))
 					}
 				}
 			}

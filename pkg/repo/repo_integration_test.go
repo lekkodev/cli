@@ -182,5 +182,5 @@ func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvid
 	require.NoError(t, err)
 	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star, nil).Build()
 	require.NoError(t, err)
-	assert.Equal(t, restoreFeatureDescription, f.Description)
+	assert.Equal(t, restoreFeatureDescription, f.FeatureOld.Description)
 }
