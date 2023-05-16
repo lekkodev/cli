@@ -32,6 +32,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/spf13/cobra"
 )
@@ -249,16 +250,19 @@ func parseCmd() *cobra.Command {
 				nsfs = append(nsfs, nsf)
 			}
 			for _, nsf := range nsfs {
-				f, err := r.Parse(ctx, nsf.namespace(), nsf.feature())
+				f, err := r.Parse(ctx, nsf.namespace(), nsf.feature(), registry)
 				fmt.Print(logging.Bold(fmt.Sprintf("[%s]", nsf.String())))
 				if errors.Is(err, static.ErrUnsupportedStaticParsing) {
-					fmt.Printf(" Unsupported static parsing\n")
+					fmt.Printf(" Unsupported static parsing: %v\n", err.Error())
 				} else if err != nil {
 					fmt.Printf(" %v\n", err)
 				} else {
-					fmt.Printf("[%s] Parsed\n", f.FeatureType)
+					fmt.Printf("[%s] Parsed\n", f.Type)
 					if printFeature {
-						f.PrintJSON(registry)
+						fmt.Println(protojson.MarshalOptions{
+							Resolver:  registry,
+							Multiline: true,
+						}.Format(f))
 					}
 				}
 			}

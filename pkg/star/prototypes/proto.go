@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package star
+package prototypes
 
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -47,17 +46,7 @@ func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.
 	if err != nil {
 		return nil, errors.Wrap(err, "read buf image")
 	}
-	fds := &descriptorpb.FileDescriptorSet{}
-
-	if err := proto.Unmarshal(image, fds); err != nil {
-		return nil, errors.Wrap(err, "proto unmarshal")
-	}
-	files, err := protodesc.NewFiles(fds)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "protodesc.NewFiles")
-	}
-	return filesToTypes(files)
+	return BuildDynamicTypeRegistryFromBufImage(image)
 }
 
 // Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
@@ -76,46 +65,62 @@ func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.Conf
 	return BuildDynamicTypeRegistry(ctx, protoDir, cw)
 }
 
+func BuildDynamicTypeRegistryFromBufImage(image []byte) (*protoregistry.Types, error) {
+	fds := &descriptorpb.FileDescriptorSet{}
+
+	if err := proto.Unmarshal(image, fds); err != nil {
+		return nil, errors.Wrap(err, "proto unmarshal")
+	}
+	files, err := protodesc.NewFiles(fds)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "protodesc.NewFiles")
+	}
+	return RegisterDynamicTypes(files)
+}
+
 func bufImageFilepath(protoDir string) string {
 	return filepath.Join(protoDir, "image.bin")
 }
 
-func filesToTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
+func RegisterDynamicTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
 	// Start from an empty type registry. All user-defined types
 	// should be explicitly imported in their .proto files, which will end up
 	// getting included since we're including imports in our file descriptor set.
 	ret := &protoregistry.Types{}
-	ret.RangeMessages(func(mt protoreflect.MessageType) bool {
-		log.Printf("existing global message type: %v\n", mt.Descriptor().FullName())
-		return true
-	})
-	var rangeErr error
-	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		if err := registerTypes(ret, fd, false); err != nil {
-			rangeErr = errors.Wrap(err, "registering user-defined types")
-			return false
+	if files != nil {
+		var rangeErr error
+		files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+			if err := RegisterTypes(ret, fd, false); err != nil {
+				rangeErr = errors.Wrap(err, "registering user-defined types")
+				return false
+			}
+			return true
+		})
+		if rangeErr != nil {
+			return nil, rangeErr
 		}
-		return true
-	})
-	if rangeErr != nil {
-		return nil, rangeErr
 	}
+	return ret, addRequiredTypes(ret)
+}
+
+func addRequiredTypes(t *protoregistry.Types) error {
 	// Since we're internally converting starlark primitive types to google.protobuf.*Value,
 	// we need to ensure that the wrapperspb types exist in the type registry in order for
 	// json marshaling to work. However, we also need to ensure that type registration does
 	// not panic in the event that the user also imported wrappers.proto
-	if err := registerTypes(ret, wrapperspb.File_google_protobuf_wrappers_proto, true); err != nil {
-		return nil, errors.Wrap(err, "registering wrapperspb")
+	if err := RegisterTypes(t, wrapperspb.File_google_protobuf_wrappers_proto, true); err != nil {
+		return errors.Wrap(err, "registering wrapperspb")
 	}
 	// In the case of json feature flags, we will internally represent the json object as a structpb
 	// proto object.
-	if err := registerTypes(ret, structpb.File_google_protobuf_struct_proto, true); err != nil {
-		return nil, errors.Wrap(err, "registering structpb")
+	if err := RegisterTypes(t, structpb.File_google_protobuf_struct_proto, true); err != nil {
+		return errors.Wrap(err, "registering structpb")
 	}
-	return ret, nil
+	return nil
 }
 
-func registerTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, checkNotExists bool) error {
+func RegisterTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, checkNotExists bool) error {
 	existingTypes := make(map[string]struct{})
 	if checkNotExists {
 		t.RangeEnums(func(et protoreflect.EnumType) bool {

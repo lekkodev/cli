@@ -24,11 +24,13 @@ import (
 	"strings"
 	"sync"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/encoding"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/star/prototypes"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/olekukonko/tablewriter"
 	"github.com/pkg/errors"
@@ -49,7 +51,7 @@ type ConfigurationStore interface {
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
 	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error)
-	Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error)
+	Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
 	GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error)
@@ -451,7 +453,7 @@ func (r *repository) registry(ctx context.Context, registry *protoregistry.Types
 }
 
 func (r *repository) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
-	return star.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	return prototypes.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
 // Actually regenerates the buf image, and writes it to the file system.
@@ -462,7 +464,7 @@ func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPat
 	if !r.bufEnabled {
 		return nil, errors.New("buf cmd line not enabled")
 	}
-	return star.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	return prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
 }
 
 func (r *repository) Format(ctx context.Context) error {
@@ -745,18 +747,23 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[
 	return ret, evalF.Type(), path, err
 }
 
-func (r *repository) Parse(ctx context.Context, ns, featureName string) (*feature.Feature, error) {
+func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error) {
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get feature contents")
 	}
+	registry, err = r.registry(ctx, registry)
+	if err != nil {
+		return nil, err
+	}
 	filename := fc.File.RootPath(fc.File.StarlarkFileName)
-	w := static.NewWalker(filename, fc.Star)
+	w := static.NewWalker(filename, fc.Star, registry)
 	f, err := w.Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}
 	f.Key = fc.File.Name
+	f.FeatureOld.Key = fc.File.Name
 
 	// Rewrite the bytes to the starfile path, based on the parse AST.
 	// This is just an illustration, but in the future we could modify

@@ -10,3 +10,9 @@ include make/cli/all.mk
 
 release:
 	./release.sh
+
+testdeps:
+	@echo Linting...
+	buf lint pkg/star/static/testdata
+	@echo Generating...
+	buf generate --template pkg/star/static/testdata/buf.gen.yaml pkg/star/static/testdata

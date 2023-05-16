@@ -1,0 +1,114 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package lekko.feature.v1beta1;
+
+import "lekko/feature/v1beta1/feature.proto";
+
+// Represents a statically parsed feature.
+// This model is meant to contain all sorts of data that is available
+// to us via inspecting the starlark file, but may not be available
+// post-compilation. E.g. what import statements were defined, and what
+// comments were written surrounding certain expressions.
+// The goal is to add to this model any information we wish to surface
+// to the UI or that is needed for static mutation of a feature.
+message StaticFeature {
+  string key = 1;
+  lekko.feature.v1beta1.FeatureType type = 2;
+
+  repeated ImportStatement imports = 3;
+
+  FeatureStruct feature = 4;
+
+  // For backwards compatibility. Eventually, the materialized
+  // model will be deprecated in favor of a statically parsed model
+  lekko.feature.v1beta1.Feature feature_old = 5;
+}
+
+// Represents everything stored in the feature struct in starlark.
+// i.e. `feature(...)`
+message FeatureStruct {
+  StarMeta meta = 1;
+  string description = 2;
+  StarExpr default = 3;
+  Rules rules = 4;
+}
+
+message Rules {
+  StarMeta meta = 1;
+  repeated Rule rules = 2;
+}
+
+message Rule {
+  StarMeta meta = 1;
+  string condition = 2;
+  StarExpr value = 3;
+}
+
+// An assignment expression in starlark, e.g. `x = 1`.
+message ImportStatement {
+  StarMeta meta = 1;
+  // the variable that the import is assigned to
+  IdentExpr lhs = 2;
+  string operator = 3; // e.g. `=`
+  bool line_break = 4; // Line break between operator and RHS
+  ImportExpr rhs = 5;
+}
+
+// an import expression, e.g. `proto.package("google.protobuf")`
+message ImportExpr {
+  StarMeta meta = 1;
+  DotExpr dot = 2;
+  repeated string args = 3;
+}
+
+// a dot expression, e.g. `proto.package`
+message DotExpr {
+  StarMeta meta = 1;
+  // The token that appears before the dot in the dot expression, e.g. `proto`
+  string x = 2;
+  // The token that appears after the dot in the dot expression, e.g. `package`
+  string name = 3;
+}
+
+// A single starlark expression. May not be fully decomposed.
+// Stores the string representation of the expression in the metadata.
+message StarExpr {
+  StarMeta meta = 1;
+  string expression = 2;
+}
+
+// A single token in starlark. E.g. True, False, or a variable name.
+message IdentExpr {
+  StarMeta meta = 1;
+  string token = 2;
+}
+
+// Metadata commonly associated with any starlark expression
+message StarMeta {
+  Comments comments = 1;
+  bool multiline = 2;
+}
+
+message Comments {
+  repeated Comment before = 1;
+  repeated Comment suffix = 2;
+  repeated Comment after = 3;
+}
+
+message Comment {
+  string token = 1;
+}

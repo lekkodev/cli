@@ -1,0 +1,5 @@
+version: v1
+plugins:
+  - name: go
+    out: pkg/star/static/testdata/gen
+    opt: paths=source_relative

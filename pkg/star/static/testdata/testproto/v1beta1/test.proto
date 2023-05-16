@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package testproto.v1beta1;
+
+option go_package = "github.com/lekkodev/cli/pkg/star/static/testdata/gen/v1beta1;testdatav1beta1";
+
+message TestMessage {
+    string val = 1;
+    TestEnum test_enum = 2;
+}
+
+enum TestEnum {
+    TEST_ENUM_UNSPECIFIED = 0;
+    TEST_ENUM_A = 1;
+    TEST_ENUM_B = 2;
+}
+
+message OAuthDeviceConfig {
+    string verification_uri = 1;
+    int64 polling_interval_seconds = 2;
+}
