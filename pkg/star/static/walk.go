@@ -386,11 +386,7 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *
 		if err != nil {
 			return nil, err
 		}
-		imp, err := findImport(sf.Imports, protoVal)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to find import that proto msg belongs to")
-		}
-		callExpr, err := ProtoToStatic(imp, protoVal)
+		callExpr, err := ProtoToStatic(sf.GetImports(), protoVal.ProtoReflect())
 		if err != nil {
 			return nil, err
 		}
@@ -586,22 +582,4 @@ func commentToProto(comment build.Comment) *featurev1beta1.Comment {
 	return &featurev1beta1.Comment{
 		Token: comment.Token,
 	}
-}
-
-// Given the list of proto imports that were defined by the starlark,
-// find the specific import that declared the protobuf package that
-// contains the schema for the provided message. Note: the message may be
-// dynamic.
-func findImport(imports []*featurev1beta1.ImportStatement, msg proto.Message) (*featurev1beta1.ImportStatement, error) {
-	msgFullName := string(msg.ProtoReflect().Descriptor().FullName())
-	for _, imp := range imports {
-		if len(imp.Rhs.Args) == 0 {
-			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
-		}
-		packagePrefix := imp.Rhs.Args[0]
-		if strings.HasPrefix(msgFullName, packagePrefix) {
-			return imp, nil
-		}
-	}
-	return nil, errors.New("no proto import statements found")
 }

@@ -31,9 +31,13 @@ import (
 
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
-func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message) (*build.CallExpr, error) {
-	msgDesc := msg.ProtoReflect()
-	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: importStmt.GetLhs().Token}, Name: string(msgDesc.Descriptor().Name())}}
+func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message) (*build.CallExpr, error) {
+	imp, err := findImport(imports, msg)
+	if err != nil {
+		return nil, err
+	}
+	suffix := strings.TrimPrefix(strings.TrimPrefix(string(msg.Descriptor().FullName()), imp.Rhs.GetArgs()[0]), ".")
+	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: imp.GetLhs().Token}, Name: suffix}}
 	var retErr error
 	// Note: Default values are not set in the proto spec.
 	// Thus, the following Range doesn't iterate over them.
@@ -42,8 +46,8 @@ func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message
 	// 		pb.BoolValue(value = False)
 	// will be overwritten as
 	// 		pb.BoolValue()
-	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		starExpr, err := ReflectValueToExpr(&val)
+	msg.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		starExpr, err := ReflectValueToExpr(imports, fieldDesc, &val)
 		if err != nil {
 			retErr = err
 			return false
@@ -54,7 +58,7 @@ func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message
 	return res, retErr
 }
 
-func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
+func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc protoreflect.FieldDescriptor, val *protoreflect.Value) (build.Expr, error) {
 	// There is a strict enum definition here:
 	/*
 		    ╔════════════╤═════════════════════════════════════╗
@@ -109,6 +113,13 @@ func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 		}, nil
 	case []byte:
 		return &build.StringExpr{Value: string(goVal)}, nil
+	case protoreflect.EnumNumber:
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
+	case protoreflect.Message:
+		return ProtoToStatic(imports, goVal) // recurse
+		// goVal.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+
+		// })
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
 	}
@@ -144,4 +155,22 @@ func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (re
 		imports = append(imports, fmt.Sprintf("%s %s %s", imp.Lhs.Token, imp.Operator, rhs))
 	}
 	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(ce)))
+}
+
+// Given the list of proto imports that were defined by the starlark,
+// find the specific import that declared the protobuf package that
+// contains the schema for the provided message. Note: the message may be
+// dynamic.
+func findImport(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message) (*featurev1beta1.ImportStatement, error) {
+	msgFullName := string(msg.Descriptor().FullName())
+	for _, imp := range imports {
+		if len(imp.Rhs.Args) == 0 {
+			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
+		}
+		packagePrefix := imp.Rhs.Args[0]
+		if strings.HasPrefix(msgFullName, packagePrefix) {
+			return imp, nil
+		}
+	}
+	return nil, errors.New("no proto import statements found")
 }
