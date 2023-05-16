@@ -38,6 +38,8 @@ message StaticFeature {
   lekko.feature.v1beta1.Feature feature_old = 5;
 }
 
+// Represents everything stored in the feature struct in starlark.
+// i.e. `feature(...)`
 message FeatureStruct {
   StarMeta meta = 1;
   string description = 2;
@@ -76,7 +78,9 @@ message ImportExpr {
 // a dot expression, e.g. `proto.package`
 message DotExpr {
   StarMeta meta = 1;
+  // The token that appears before the dot in the dot expression, e.g. `proto`
   string x = 2;
+  // The token that appears after the dot in the dot expression, e.g. `package`
   string name = 3;
 }
 
@@ -87,6 +91,7 @@ message StarExpr {
   string expression = 2;
 }
 
+// A single token in starlark. E.g. True, False, or a variable name.
 message IdentExpr {
   StarMeta meta = 1;
   string token = 2;
