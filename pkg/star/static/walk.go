@@ -158,13 +158,20 @@ func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature)
 		return ret, featurev1beta1.FeatureType_FEATURE_TYPE_JSON, err
 	case *build.CallExpr:
 		// try to statically parse the protobuf
-		proto, err := CallExprToProto(t, f, w.registry)
-		if err != nil {
-			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
-		}
-		return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
+		return w.extractProtoValue(t, f)
+	case *build.DotExpr:
+		// could be a proto enum
+		return w.extractProtoValue(t, f)
 	}
 	return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+}
+
+func (w *walker) extractProtoValue(v build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
+	proto, err := ExprToProto(v, f, w.registry)
+	if err != nil {
+		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
+	}
+	return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
 }
 
 func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
@@ -386,12 +393,11 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *
 		if err != nil {
 			return nil, err
 		}
-		callExpr, err := ProtoToStatic(sf.GetImports(), protoVal.ProtoReflect())
+		// TODO: force sub multiline as well
+		callExpr, err := ProtoToStatic(sf.GetImports(), protoVal.ProtoReflect(), meta)
 		if err != nil {
 			return nil, err
 		}
-		// todo: round trip comments
-		callExpr.ForceMultiLine = meta.GetMultiline()
 		return callExpr, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "proto val type %v", a.TypeUrl)

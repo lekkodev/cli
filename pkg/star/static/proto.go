@@ -32,13 +32,19 @@ import (
 
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
-func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message) (*build.CallExpr, error) {
+func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message, meta *featurev1beta1.StarMeta) (*build.CallExpr, error) {
 	imp, err := findImport(imports, msg.Descriptor().FullName())
 	if err != nil {
 		return nil, err
 	}
 	suffix := strings.TrimPrefix(strings.TrimPrefix(string(msg.Descriptor().FullName()), imp.Rhs.GetArgs()[0]), ".")
-	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: imp.GetLhs().Token}, Name: suffix}}
+	res := &build.CallExpr{
+		X: &build.DotExpr{
+			X:    &build.Ident{Name: imp.GetLhs().Token},
+			Name: suffix,
+		},
+		ForceMultiLine: meta.GetMultiline(),
+	}
 	var retErr error
 	// Note: Default values are not set in the proto spec.
 	// Thus, the following Range doesn't iterate over them.
@@ -48,7 +54,7 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	// will be overwritten as
 	// 		pb.BoolValue()
 	msg.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		starExpr, err := ReflectValueToExpr(imports, fieldDesc, &val)
+		starExpr, err := ReflectValueToExpr(imports, fieldDesc, &val, meta)
 		if err != nil {
 			retErr = err
 			return false
@@ -64,7 +70,7 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	return res, retErr
 }
 
-func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc protoreflect.FieldDescriptor, val *protoreflect.Value) (build.Expr, error) {
+func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc protoreflect.FieldDescriptor, val *protoreflect.Value, meta *featurev1beta1.StarMeta) (build.Expr, error) {
 	// There is a strict enum definition here:
 	/*
 		    ╔════════════╤═════════════════════════════════════╗
@@ -83,7 +89,6 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 			║ Message    │ MessageKind, GroupKind              ║
 			╚════════════╧═════════════════════════════════════╝
 	*/
-	// We need to implement this all.
 	goValInterface := val.Interface()
 	switch goVal := goValInterface.(type) {
 	case bool:
@@ -131,19 +136,17 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 			Name: fmt.Sprintf("%s.%s", suffix, enumDesc.Values().ByNumber(goVal).Name()),
 		}, nil
 	case protoreflect.Message:
-		return ProtoToStatic(imports, goVal) // recurse
+		return ProtoToStatic(imports, goVal, meta) // recurse
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
 	}
 }
 
 // Returns (nil, err) if the message is not protobuf.
-func CallExprToProto(ce *build.CallExpr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
-	thread := &starlark.Thread{
-		Name: "compile",
-	}
+func ExprToProto(expr build.Expr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
+	thread := &starlark.Thread{Name: "parse_proto"}
 	protoModule := protomodule.NewModule(registry)
-	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, ce), starlark.StringDict{
+	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, expr), starlark.StringDict{
 		"proto": protoModule,
 	})
 	if err != nil {
@@ -156,7 +159,7 @@ func CallExprToProto(ce *build.CallExpr, f *featurev1beta1.StaticFeature, regist
 	return proto, nil
 }
 
-func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (ret []byte) {
+func genMiniStar(imps []*featurev1beta1.ImportStatement, expr build.Expr) (ret []byte) {
 	var imports []string
 	for _, imp := range imps {
 		var args []string
@@ -166,7 +169,7 @@ func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (re
 		rhs := fmt.Sprintf("%s.%s(%s)", imp.Rhs.Dot.X, imp.Rhs.Dot.Name, strings.Join(args, ","))
 		imports = append(imports, fmt.Sprintf("%s %s %s", imp.Lhs.Token, imp.Operator, rhs))
 	}
-	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(ce)))
+	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(expr)))
 }
 
 // Given the list of proto imports that were defined by the starlark,

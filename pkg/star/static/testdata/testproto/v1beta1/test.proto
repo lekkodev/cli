@@ -9,6 +9,11 @@ import "google/protobuf/wrappers.proto";
 message TestMessage {
     string val = 1;
     TestEnum test_enum = 2;
+    float est = 3;
+    oneof either {
+        int64 number = 4;
+        google.protobuf.BoolValue off = 5;
+    }
 }
 
 enum TestEnum {

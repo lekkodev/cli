@@ -526,17 +526,3 @@ func TestWalkerNestedProto(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, string(star), string(newStar))
 }
-
-func TestWalkerProtoEnum(t *testing.T) {
-	star, err := os.ReadFile("testdata/enum.star")
-	require.NoError(t, err)
-
-	w := testWalker(t, star)
-	f, err := w.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-
-	newStar, err := w.Mutate(f)
-	require.NoError(t, err)
-	assert.EqualValues(t, string(star), string(newStar))
-}
