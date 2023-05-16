@@ -16,6 +16,7 @@ package static
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -32,7 +33,7 @@ import (
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
 func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message) (*build.CallExpr, error) {
-	imp, err := findImport(imports, msg)
+	imp, err := findImport(imports, msg.Descriptor().FullName())
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +55,11 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 		}
 		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr})
 		return true
+	})
+	// Since Range operates in undefined order, we need to introduce order to the output
+	// so that the round-trip is stable.
+	sort.Slice(res.List, func(i, j int) bool {
+		return build.FormatString(res.List[i]) < build.FormatString(res.List[j])
 	})
 	return res, retErr
 }
@@ -114,12 +120,18 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 	case []byte:
 		return &build.StringExpr{Value: string(goVal)}, nil
 	case protoreflect.EnumNumber:
-		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
+		enumDesc := fieldDesc.Enum()
+		imp, err := findImport(imports, enumDesc.FullName())
+		if err != nil {
+			return nil, err
+		}
+		suffix := strings.TrimPrefix(strings.TrimPrefix(string(enumDesc.FullName()), imp.Rhs.GetArgs()[0]), ".")
+		return &build.DotExpr{
+			X:    &build.Ident{Name: imp.Lhs.GetToken()},
+			Name: fmt.Sprintf("%s.%s", suffix, enumDesc.Values().ByNumber(goVal).Name()),
+		}, nil
 	case protoreflect.Message:
 		return ProtoToStatic(imports, goVal) // recurse
-		// goVal.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-
-		// })
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
 	}
@@ -161,14 +173,13 @@ func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (re
 // find the specific import that declared the protobuf package that
 // contains the schema for the provided message. Note: the message may be
 // dynamic.
-func findImport(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message) (*featurev1beta1.ImportStatement, error) {
-	msgFullName := string(msg.Descriptor().FullName())
+func findImport(imports []*featurev1beta1.ImportStatement, fullName protoreflect.FullName) (*featurev1beta1.ImportStatement, error) {
 	for _, imp := range imports {
 		if len(imp.Rhs.Args) == 0 {
 			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
 		}
 		packagePrefix := imp.Rhs.Args[0]
-		if strings.HasPrefix(msgFullName, packagePrefix) {
+		if strings.HasPrefix(string(fullName), packagePrefix) {
 			return imp, nil
 		}
 	}
