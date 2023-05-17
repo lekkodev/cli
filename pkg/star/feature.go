@@ -28,6 +28,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -67,13 +68,15 @@ type featureBuilder struct {
 	globals     starlark.StringDict
 	validator   starlark.Callable
 	nv          feature.NamespaceVersion
+	registry    *protoregistry.Types
 }
 
-func newFeatureBuilder(featureName string, globals starlark.StringDict, nv feature.NamespaceVersion) Builder {
+func newFeatureBuilder(featureName string, globals starlark.StringDict, nv feature.NamespaceVersion, registry *protoregistry.Types) Builder {
 	return &featureBuilder{
 		featureName: featureName,
 		globals:     globals,
 		nv:          nv,
+		registry:    registry,
 	}
 }
 
@@ -399,6 +402,12 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			return errors.Wrap(err, "error translating starlark context for unit test")
 		}
 
+		testFunc, ok := tuple.Index(1).(starlark.Callable)
+		if ok {
+			f.UnitTests = append(f.UnitTests, feature.NewCallableUnitTest(goCtx, fb.registry, testFunc, starCtx.String(), f.FeatureType))
+			i++
+			continue
+		}
 		expectedVal := tuple.Index(1)
 		if vr := fb.validate(feature.ValidatorResultTypeTest, i, expectedVal); vr != nil && vr.Error != nil {
 			return errors.Wrap(vr.Error, "test value validate")
@@ -409,19 +418,19 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, message, starCtx.String(), expectedVal.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, message, starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeBool:
 			typedUnitTestVal, ok := expectedVal.(starlark.Bool)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, bool(typedUnitTestVal), starCtx.String(), expectedVal.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, bool(typedUnitTestVal), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeString:
 			typedUnitTestVal, ok := expectedVal.(starlark.String)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, typedUnitTestVal.GoString(), starCtx.String(), expectedVal.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, typedUnitTestVal.GoString(), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeInt:
 			typedUnitTestVal, ok := expectedVal.(starlark.Int)
 			if !ok {
@@ -431,13 +440,13 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			if !ok {
 				return errors.Wrapf(typeError(f.FeatureType, i, expectedVal), "%T not representable as int64", intVal)
 			}
-			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, intVal, starCtx.String(), expectedVal.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, intVal, starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeFloat:
 			typedUnitTestVal, ok := expectedVal.(starlark.Float)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
-			f.UnitTests = append(f.UnitTests, feature.NewUnitTest(goCtx, float64(typedUnitTestVal), starCtx.String(), expectedVal.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, float64(typedUnitTestVal), starCtx.String(), expectedVal.String()))
 		case feature.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(expectedVal)
 			if err != nil {
