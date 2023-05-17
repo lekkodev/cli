@@ -201,6 +201,8 @@ func (c *CallableUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	if err != nil {
 		return tr.WithError(err)
 	}
+
+	// unwrap from anypb to go-native object and then to starlark
 	vv, err := AnyToVal(a, c.FeatureType, c.Registry)
 	if err != nil {
 		return tr.WithError(err)
