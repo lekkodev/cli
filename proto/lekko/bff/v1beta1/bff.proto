@@ -389,14 +389,14 @@ message GetRepositoryContentsRequest {
   // the other one must be provided as well.
   string namespace_name = 2;
   string feature_name = 3;
-  // The user-defined type registry for the repository
-  google.protobuf.FileDescriptorSet file_descriptor_set = 4;
 }
 
 message GetRepositoryContentsResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  // The user-defined type registry for the repository
+  google.protobuf.FileDescriptorSet file_descriptor_set = 4;
 }
 
 message GetFeatureRequest {
