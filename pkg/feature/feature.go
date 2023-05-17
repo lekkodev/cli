@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
@@ -149,15 +150,49 @@ type CallableUnitTest struct {
 	Registry    *protoregistry.Types
 	TestFunc    starlark.Callable
 	ContextStar string
+	FeatureType FeatureType
 }
 
-func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string) *CallableUnitTest {
+func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string, ft FeatureType) *CallableUnitTest {
 	return &CallableUnitTest{
 		Context:     ctx,
 		Registry:    r,
 		TestFunc:    testFn,
 		ContextStar: ctxStar,
+		FeatureType: ft,
 	}
+}
+
+func valToStarValue(c any) (starlark.Value, error) {
+	var sv starlark.Value
+	var err error
+	switch c := c.(type) {
+	case *structpb.Value:
+		b, err := c.MarshalJSON()
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshal structpb.Value")
+		}
+		var obj interface{}
+		err = json.Unmarshal(b, &obj)
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshal json")
+		}
+		sv, err = toStarlarkValue(obj)
+		if err != nil {
+			return nil, errors.Wrap(err, "json to starlark")
+		}
+	case protoreflect.ProtoMessage:
+		sv, err = skycfg.NewProtoMessage(c)
+		if err != nil {
+			return nil, errors.Wrap(err, "unmarshal proto message")
+		}
+	default:
+		sv, err = toStarlarkValue(c)
+		if err != nil {
+			return nil, errors.Wrap(err, "convert value to starlark")
+		}
+	}
+	return sv, nil
 }
 
 func (c *CallableUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
@@ -166,28 +201,23 @@ func (c *CallableUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 	if err != nil {
 		return tr.WithError(err)
 	}
-	if c.TestFunc != nil {
-		message, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
-			Resolver: c.Registry,
-		})
-		if err != nil {
-			return tr.WithError(errors.Wrap(err, "unable to resolve message from any pb"))
-		}
-		starMessage, err := skycfg.NewProtoMessage(message)
-		if err != nil {
-			return tr.WithError(errors.Wrap(err, "unable to to get starlark value from protobuf"))
-		}
-		args := starlark.Tuple([]starlark.Value{starMessage})
-		thread := &starlark.Thread{Name: "test"}
-		reporter := &testReporter{}
-		starlarktest.SetReporter(thread, reporter)
-		_, err = starlark.Call(thread, c.TestFunc, args, nil)
-		if err != nil {
-			return tr.WithError(err)
-		}
-		return tr.WithError(reporter.toErr())
+	vv, err := AnyToVal(a, c.FeatureType, c.Registry)
+	if err != nil {
+		return tr.WithError(err)
 	}
-	return tr
+	v, err := valToStarValue(vv)
+	if err != nil {
+		return tr.WithError(err)
+	}
+	args := starlark.Tuple([]starlark.Value{v})
+	thread := &starlark.Thread{Name: "test"}
+	reporter := &testReporter{}
+	starlarktest.SetReporter(thread, reporter)
+	_, err = starlark.Call(thread, c.TestFunc, args, nil)
+	if err != nil {
+		return tr.WithError(err)
+	}
+	return tr.WithError(reporter.toErr())
 }
 
 // todo: refactor to use the validation report as this is an exact copy
@@ -693,4 +723,71 @@ func (vr *ValidatorResult) DebugString() string {
 
 func (vr *ValidatorResult) Passed() bool {
 	return vr.Error == nil
+}
+
+// toStarlarkScalarValue converts a scalar [obj] value to its starlark Value
+func toStarlarkScalarValue(obj interface{}) (starlark.Value, bool) {
+	if obj == nil {
+		return starlark.None, true
+	}
+	rt := reflect.TypeOf(obj)
+	v := reflect.ValueOf(obj)
+	switch rt.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return starlark.MakeInt64(v.Int()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return starlark.MakeUint64(v.Uint()), true
+	case reflect.Bool:
+		return starlark.Bool(v.Bool()), true
+	case reflect.Float32, reflect.Float64:
+		return starlark.Float(v.Float()), true
+	case reflect.String:
+		return starlark.String(v.String()), true
+	default:
+		return nil, false
+	}
+}
+
+// toStarlarkValue is a DFS walk to translate the DAG from go to starlark
+// this is straight from skycfg
+// https://github.com/stripe/skycfg/blob/a77cda5e9354b9079ee6e7feb4b7cef6895b02ae/go/yamlmodule/yamlmodule.go#L108
+func toStarlarkValue(obj interface{}) (starlark.Value, error) {
+	if objval, ok := toStarlarkScalarValue(obj); ok {
+		return objval, nil
+	}
+	rt := reflect.TypeOf(obj)
+	switch rt.Kind() {
+	case reflect.Map:
+		ret := &starlark.Dict{}
+		if obj, ok := obj.(map[string]interface{}); ok {
+			for k, v := range obj {
+				keyval, ok := toStarlarkScalarValue(k)
+				if !ok {
+					return nil, fmt.Errorf("%s (%v) is not a supported key type", rt.Kind(), obj)
+				}
+				starval, err := toStarlarkValue(v)
+				if err != nil {
+					return nil, err
+				}
+				if err = ret.SetKey(keyval, starval); err != nil {
+					return nil, err
+				}
+			}
+			return ret, nil
+		}
+
+	case reflect.Slice:
+		if slice, ok := obj.([]interface{}); ok {
+			starvals := make([]starlark.Value, len(slice))
+			for i, element := range slice {
+				v, err := toStarlarkValue(element)
+				if err != nil {
+					return nil, err
+				}
+				starvals[i] = v
+			}
+			return starlark.NewList(starvals), nil
+		}
+	}
+	return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
 }

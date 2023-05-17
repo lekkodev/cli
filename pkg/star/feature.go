@@ -404,7 +404,7 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 
 		testFunc, ok := tuple.Index(1).(starlark.Callable)
 		if ok {
-			f.UnitTests = append(f.UnitTests, feature.NewCallableUnitTest(goCtx, fb.registry, testFunc, starCtx.String()))
+			f.UnitTests = append(f.UnitTests, feature.NewCallableUnitTest(goCtx, fb.registry, testFunc, starCtx.String(), f.FeatureType))
 			i++
 			continue
 		}
