@@ -83,13 +83,13 @@ func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
 }
 
 func testWalker(t *testing.T, testStar []byte) *walker {
-	registry, err := prototypes.RegisterDynamicTypes(nil)
+	sTypes, err := prototypes.RegisterDynamicTypes(nil)
 	require.NoError(t, err)
-	require.NoError(t, prototypes.RegisterTypes(registry, testdatav1beta1.File_testproto_v1beta1_test_proto, true))
+	require.NoError(t, sTypes.AddFileDescriptor(testdatav1beta1.File_testproto_v1beta1_test_proto, true))
 	return &walker{
 		filename:  "test.star",
 		starBytes: testStar,
-		registry:  registry,
+		registry:  sTypes.Types,
 	}
 }
 
