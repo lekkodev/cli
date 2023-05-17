@@ -36,6 +36,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
@@ -45,6 +46,7 @@ type ConfigurationStore interface {
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
 	Format(ctx context.Context) error
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
@@ -453,7 +455,11 @@ func (r *repository) registry(ctx context.Context, registry *protoregistry.Types
 }
 
 func (r *repository) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
-	return prototypes.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	sTypes, err := prototypes.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	if err != nil {
+		return nil, err
+	}
+	return sTypes.Types, err
 }
 
 // Actually regenerates the buf image, and writes it to the file system.
@@ -464,7 +470,19 @@ func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPat
 	if !r.bufEnabled {
 		return nil, errors.New("buf cmd line not enabled")
 	}
-	return prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	sTypes, err := prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	if err != nil {
+		return nil, err
+	}
+	return sTypes.Types, err
+}
+
+func (r *repository) GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error) {
+	sTypes, err := prototypes.BuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	if err != nil {
+		return nil, err
+	}
+	return sTypes.FileDescriptorSet, nil
 }
 
 func (r *repository) Format(ctx context.Context) error {

@@ -17,6 +17,7 @@ syntax = "proto3";
 package lekko.bff.v1beta1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/error_details.proto";
 import "lekko/client/v1beta1/configuration_service.proto";
@@ -394,6 +395,8 @@ message GetRepositoryContentsResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
   Feature feature = 3;
+  // The user-defined type registry for the repository
+  google.protobuf.FileDescriptorSet file_descriptor_set = 4;
 }
 
 message GetFeatureRequest {

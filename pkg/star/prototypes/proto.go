@@ -38,10 +38,21 @@ Please install buf in order to use lekko cli.
 Using homebrew, run 'brew install bufbuild/buf/buf'. 
 For other options, see the installation page here: https://docs.buf.build/installation`
 
+var requiredFileDescriptors = []protoreflect.FileDescriptor{
+	// Since we're internally converting starlark primitive types to google.protobuf.*Value,
+	// we need to ensure that the wrapperspb types exist in the type registry in order for
+	// json marshaling to work. However, we also need to ensure that type registration does
+	// not panic in the event that the user also imported wrappers.proto
+	wrapperspb.File_google_protobuf_wrappers_proto,
+	// In the case of json feature flags, we will internally represent the json object as a structpb
+	// proto object.
+	structpb.File_google_protobuf_struct_proto,
+}
+
 // Takes a path to the protobuf directory in the config repo, and generates
 // a registry of user-defined types. This registry implements the Resolver
 // interface, which is useful for compiling to json.
-func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.Provider) (*protoregistry.Types, error) {
+func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.Provider) (*SerializableTypes, error) {
 	image, err := provider.GetFileContents(ctx, bufImageFilepath(protoDir))
 	if err != nil {
 		return nil, errors.Wrap(err, "read buf image")
@@ -50,7 +61,7 @@ func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.
 }
 
 // Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
-func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.ConfigWriter) (*protoregistry.Types, error) {
+func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.ConfigWriter) (*SerializableTypes, error) {
 	if err := checkBufExists(); err != nil {
 		return nil, err
 	}
@@ -65,7 +76,7 @@ func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.Conf
 	return BuildDynamicTypeRegistry(ctx, protoDir, cw)
 }
 
-func BuildDynamicTypeRegistryFromBufImage(image []byte) (*protoregistry.Types, error) {
+func BuildDynamicTypeRegistryFromBufImage(image []byte) (*SerializableTypes, error) {
 	fds := &descriptorpb.FileDescriptorSet{}
 
 	if err := proto.Unmarshal(image, fds); err != nil {
@@ -83,15 +94,22 @@ func bufImageFilepath(protoDir string) string {
 	return filepath.Join(protoDir, "image.bin")
 }
 
-func RegisterDynamicTypes(files *protoregistry.Files) (*protoregistry.Types, error) {
-	// Start from an empty type registry. All user-defined types
+func RegisterDynamicTypes(files *protoregistry.Files) (*SerializableTypes, error) {
+	// Start from an empty type registry.
+	ret := NewSerializableTypes()
+	// First, add required types
+	for _, fd := range requiredFileDescriptors {
+		if err := ret.AddFileDescriptor(fd, false); err != nil {
+			return nil, errors.Wrapf(err, "registering file descriptor: %s", string(fd.FullName()))
+		}
+	}
+	// Import user defined types, ignoring types that already exist. All user-defined types
 	// should be explicitly imported in their .proto files, which will end up
 	// getting included since we're including imports in our file descriptor set.
-	ret := &protoregistry.Types{}
 	if files != nil {
 		var rangeErr error
 		files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-			if err := RegisterTypes(ret, fd, false); err != nil {
+			if err := ret.AddFileDescriptor(fd, true); err != nil {
 				rangeErr = errors.Wrap(err, "registering user-defined types")
 				return false
 			}
@@ -101,67 +119,75 @@ func RegisterDynamicTypes(files *protoregistry.Files) (*protoregistry.Types, err
 			return nil, rangeErr
 		}
 	}
-	return ret, addRequiredTypes(ret)
+	return ret, nil
 }
 
-func addRequiredTypes(t *protoregistry.Types) error {
-	// Since we're internally converting starlark primitive types to google.protobuf.*Value,
-	// we need to ensure that the wrapperspb types exist in the type registry in order for
-	// json marshaling to work. However, we also need to ensure that type registration does
-	// not panic in the event that the user also imported wrappers.proto
-	if err := RegisterTypes(t, wrapperspb.File_google_protobuf_wrappers_proto, true); err != nil {
-		return errors.Wrap(err, "registering wrapperspb")
-	}
-	// In the case of json feature flags, we will internally represent the json object as a structpb
-	// proto object.
-	if err := RegisterTypes(t, structpb.File_google_protobuf_struct_proto, true); err != nil {
-		return errors.Wrap(err, "registering structpb")
-	}
-	return nil
+// Wrapper around a user-defined registry that allows it to be serialized.
+// Under the hood, the go-native types and the file descriptor set are kept
+// in-sync. If types are registered in one, they are added to the serializable
+// object as well. FileDescriptorSet is a protobuf object that can be serialized
+// and shared with external systems (e.g. the frontend)
+type SerializableTypes struct {
+	Types             *protoregistry.Types
+	FileDescriptorSet *descriptorpb.FileDescriptorSet
 }
 
-func RegisterTypes(t *protoregistry.Types, fd protoreflect.FileDescriptor, checkNotExists bool) error {
+func NewSerializableTypes() *SerializableTypes {
+	return &SerializableTypes{
+		Types:             &protoregistry.Types{},
+		FileDescriptorSet: &descriptorpb.FileDescriptorSet{},
+	}
+}
+
+func (st *SerializableTypes) AddFileDescriptor(fd protoreflect.FileDescriptor, checkNotExists bool) error {
 	existingTypes := make(map[string]struct{})
 	if checkNotExists {
-		t.RangeEnums(func(et protoreflect.EnumType) bool {
+		st.Types.RangeEnums(func(et protoreflect.EnumType) bool {
 			existingTypes[string(et.Descriptor().FullName())] = struct{}{}
 			return true
 		})
-		t.RangeMessages(func(et protoreflect.MessageType) bool {
+		st.Types.RangeMessages(func(et protoreflect.MessageType) bool {
 			existingTypes[string(et.Descriptor().FullName())] = struct{}{}
 			return true
 		})
-		t.RangeExtensions(func(et protoreflect.ExtensionType) bool {
+		st.Types.RangeExtensions(func(et protoreflect.ExtensionType) bool {
 			existingTypes[string(et.TypeDescriptor().FullName())] = struct{}{}
 			return true
 		})
 	}
+	var numRegistered int
 	for i := 0; i < fd.Enums().Len(); i++ {
 		ed := fd.Enums().Get(i)
 		if _, ok := existingTypes[string(ed.FullName())]; ok {
 			continue
 		}
-		if err := t.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
+		if err := st.Types.RegisterEnum(dynamicpb.NewEnumType(ed)); err != nil {
 			return errors.Wrap(err, "register enum")
 		}
+		numRegistered++
 	}
 	for i := 0; i < fd.Messages().Len(); i++ {
 		md := fd.Messages().Get(i)
 		if _, ok := existingTypes[string(md.FullName())]; ok {
 			continue
 		}
-		if err := t.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
+		if err := st.Types.RegisterMessage(dynamicpb.NewMessageType(md)); err != nil {
 			return errors.Wrap(err, "register message")
 		}
+		numRegistered++
 	}
 	for i := 0; i < fd.Extensions().Len(); i++ {
 		exd := fd.Extensions().Get(i)
 		if _, ok := existingTypes[string(exd.FullName())]; ok {
 			continue
 		}
-		if err := t.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
+		if err := st.Types.RegisterExtension(dynamicpb.NewExtensionType(exd)); err != nil {
 			return errors.Wrap(err, "register extension")
 		}
+		numRegistered++
+	}
+	if numRegistered > 0 {
+		st.FileDescriptorSet.File = append(st.FileDescriptorSet.File, protodesc.ToFileDescriptorProto(fd))
 	}
 	return nil
 }
