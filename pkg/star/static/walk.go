@@ -158,13 +158,20 @@ func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature)
 		return ret, featurev1beta1.FeatureType_FEATURE_TYPE_JSON, err
 	case *build.CallExpr:
 		// try to statically parse the protobuf
-		proto, err := CallExprToProto(t, f, w.registry)
-		if err != nil {
-			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
-		}
-		return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
+		return w.extractProtoValue(t, f)
+	case *build.DotExpr:
+		// could be a proto enum
+		return w.extractProtoValue(t, f)
 	}
 	return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+}
+
+func (w *walker) extractProtoValue(v build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
+	proto, err := ExprToProto(v, f, w.registry)
+	if err != nil {
+		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
+	}
+	return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
 }
 
 func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
@@ -386,16 +393,11 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *
 		if err != nil {
 			return nil, err
 		}
-		imp, err := findImport(sf.Imports, protoVal)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to find import that proto msg belongs to")
-		}
-		callExpr, err := ProtoToStatic(imp, protoVal)
+		// TODO: force sub multiline as well
+		callExpr, err := ProtoToStatic(sf.GetImports(), protoVal.ProtoReflect(), meta)
 		if err != nil {
 			return nil, err
 		}
-		// todo: round trip comments
-		callExpr.ForceMultiLine = meta.GetMultiline()
 		return callExpr, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "proto val type %v", a.TypeUrl)
@@ -586,22 +588,4 @@ func commentToProto(comment build.Comment) *featurev1beta1.Comment {
 	return &featurev1beta1.Comment{
 		Token: comment.Token,
 	}
-}
-
-// Given the list of proto imports that were defined by the starlark,
-// find the specific import that declared the protobuf package that
-// contains the schema for the provided message. Note: the message may be
-// dynamic.
-func findImport(imports []*featurev1beta1.ImportStatement, msg proto.Message) (*featurev1beta1.ImportStatement, error) {
-	msgFullName := string(msg.ProtoReflect().Descriptor().FullName())
-	for _, imp := range imports {
-		if len(imp.Rhs.Args) == 0 {
-			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
-		}
-		packagePrefix := imp.Rhs.Args[0]
-		if strings.HasPrefix(msgFullName, packagePrefix) {
-			return imp, nil
-		}
-	}
-	return nil, errors.New("no proto import statements found")
 }

@@ -383,7 +383,7 @@ func TestWalkerMutateDefaultJSON(t *testing.T) {
 	assert.Contains(t, string(bytes), "foobar")
 }
 
-func TestWalkerBuildProto(t *testing.T) {
+func TestWalkerProto(t *testing.T) {
 	for i, tc := range []struct {
 		starVal  string
 		expected proto.Message
@@ -476,7 +476,7 @@ func checkEqualProtos(t *testing.T, b *walker, a *anypb.Any, expected proto.Mess
 	require.True(t, proto.Equal(protoMessage, expected), "expected %v %T, got %v %T", expected, expected, protoMessage, protoMessage)
 }
 
-func TestWalkerBuildProtoMultiline(t *testing.T) {
+func TestWalkerProtoMultiline(t *testing.T) {
 	starVal := "pb.BoolValue(\n\tvalue = True,\n)"
 	expected := &wrapperspb.BoolValue{Value: true}
 	star := []byte(fmt.Sprintf(`
@@ -502,7 +502,7 @@ func TestWalkerBuildProtoMultiline(t *testing.T) {
 	require.Equal(t, 2, strings.Count(string(result), "value = True,\n"))
 }
 
-func TestWalkerReal(t *testing.T) {
+func TestWalkerBuildMultiline(t *testing.T) {
 	star, err := os.ReadFile("testdata/device.star")
 	require.NoError(t, err)
 
@@ -511,4 +511,18 @@ func TestWalkerReal(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	assert.True(t, f.GetFeature().GetDefault().GetMeta().GetMultiline())
+}
+
+func TestWalkerNestedProto(t *testing.T) {
+	star, err := os.ReadFile("testdata/nested.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	f, err := w.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	newStar, err := w.Mutate(f)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(star), string(newStar))
 }

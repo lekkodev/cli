@@ -4,9 +4,16 @@ package testproto.v1beta1;
 
 option go_package = "github.com/lekkodev/cli/pkg/star/static/testdata/gen/v1beta1;testdatav1beta1";
 
+import "google/protobuf/wrappers.proto";
+
 message TestMessage {
     string val = 1;
     TestEnum test_enum = 2;
+    float est = 3;
+    oneof either {
+        int64 number = 4;
+        google.protobuf.BoolValue off = 5;
+    }
 }
 
 enum TestEnum {
@@ -18,4 +25,15 @@ enum TestEnum {
 message OAuthDeviceConfig {
     string verification_uri = 1;
     int64 polling_interval_seconds = 2;
+}
+
+message MultiLevel {
+    message Nested {
+        bool nested_primitive = 1;
+    }
+
+    string primitive = 1;
+    TestMessage sub_message = 2;
+    Nested nested = 3;
+    google.protobuf.StringValue sub_external = 4;
 }

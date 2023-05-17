@@ -16,6 +16,7 @@ package static
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -31,9 +32,19 @@ import (
 
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
-func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message) (*build.CallExpr, error) {
-	msgDesc := msg.ProtoReflect()
-	res := &build.CallExpr{X: &build.DotExpr{X: &build.Ident{Name: importStmt.GetLhs().Token}, Name: string(msgDesc.Descriptor().Name())}}
+func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message, meta *featurev1beta1.StarMeta) (*build.CallExpr, error) {
+	imp, err := findImport(imports, msg.Descriptor().FullName())
+	if err != nil {
+		return nil, err
+	}
+	suffix := strings.TrimPrefix(strings.TrimPrefix(string(msg.Descriptor().FullName()), imp.Rhs.GetArgs()[0]), ".")
+	res := &build.CallExpr{
+		X: &build.DotExpr{
+			X:    &build.Ident{Name: imp.GetLhs().Token},
+			Name: suffix,
+		},
+		ForceMultiLine: meta.GetMultiline(),
+	}
 	var retErr error
 	// Note: Default values are not set in the proto spec.
 	// Thus, the following Range doesn't iterate over them.
@@ -42,8 +53,8 @@ func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message
 	// 		pb.BoolValue(value = False)
 	// will be overwritten as
 	// 		pb.BoolValue()
-	msgDesc.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		starExpr, err := ReflectValueToExpr(&val)
+	msg.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		starExpr, err := ReflectValueToExpr(imports, fieldDesc, &val, meta)
 		if err != nil {
 			retErr = err
 			return false
@@ -51,10 +62,15 @@ func ProtoToStatic(importStmt *featurev1beta1.ImportStatement, msg proto.Message
 		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr})
 		return true
 	})
+	// Since Range operates in undefined order, we need to introduce order to the output
+	// so that the round-trip is stable.
+	sort.Slice(res.List, func(i, j int) bool {
+		return build.FormatString(res.List[i]) < build.FormatString(res.List[j])
+	})
 	return res, retErr
 }
 
-func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
+func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc protoreflect.FieldDescriptor, val *protoreflect.Value, meta *featurev1beta1.StarMeta) (build.Expr, error) {
 	// There is a strict enum definition here:
 	/*
 		    ╔════════════╤═════════════════════════════════════╗
@@ -73,7 +89,6 @@ func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 			║ Message    │ MessageKind, GroupKind              ║
 			╚════════════╧═════════════════════════════════════╝
 	*/
-	// We need to implement this all.
 	goValInterface := val.Interface()
 	switch goVal := goValInterface.(type) {
 	case bool:
@@ -109,18 +124,29 @@ func ReflectValueToExpr(val *protoreflect.Value) (build.Expr, error) {
 		}, nil
 	case []byte:
 		return &build.StringExpr{Value: string(goVal)}, nil
+	case protoreflect.EnumNumber:
+		enumDesc := fieldDesc.Enum()
+		imp, err := findImport(imports, enumDesc.FullName())
+		if err != nil {
+			return nil, err
+		}
+		suffix := strings.TrimPrefix(strings.TrimPrefix(string(enumDesc.FullName()), imp.Rhs.GetArgs()[0]), ".")
+		return &build.DotExpr{
+			X:    &build.Ident{Name: imp.Lhs.GetToken()},
+			Name: fmt.Sprintf("%s.%s", suffix, enumDesc.Values().ByNumber(goVal).Name()),
+		}, nil
+	case protoreflect.Message:
+		return ProtoToStatic(imports, goVal, meta) // recurse
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
 	}
 }
 
 // Returns (nil, err) if the message is not protobuf.
-func CallExprToProto(ce *build.CallExpr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
-	thread := &starlark.Thread{
-		Name: "compile",
-	}
+func ExprToProto(expr build.Expr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
+	thread := &starlark.Thread{Name: "parse_proto"}
 	protoModule := protomodule.NewModule(registry)
-	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, ce), starlark.StringDict{
+	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, expr), starlark.StringDict{
 		"proto": protoModule,
 	})
 	if err != nil {
@@ -133,7 +159,7 @@ func CallExprToProto(ce *build.CallExpr, f *featurev1beta1.StaticFeature, regist
 	return proto, nil
 }
 
-func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (ret []byte) {
+func genMiniStar(imps []*featurev1beta1.ImportStatement, expr build.Expr) (ret []byte) {
 	var imports []string
 	for _, imp := range imps {
 		var args []string
@@ -143,5 +169,22 @@ func genMiniStar(imps []*featurev1beta1.ImportStatement, ce *build.CallExpr) (re
 		rhs := fmt.Sprintf("%s.%s(%s)", imp.Rhs.Dot.X, imp.Rhs.Dot.Name, strings.Join(args, ","))
 		imports = append(imports, fmt.Sprintf("%s %s %s", imp.Lhs.Token, imp.Operator, rhs))
 	}
-	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(ce)))
+	return []byte(fmt.Sprintf("%s\nres = %s\n", strings.Join(imports, "\n"), build.FormatString(expr)))
+}
+
+// Given the list of proto imports that were defined by the starlark,
+// find the specific import that declared the protobuf package that
+// contains the schema for the provided message. Note: the message may be
+// dynamic.
+func findImport(imports []*featurev1beta1.ImportStatement, fullName protoreflect.FullName) (*featurev1beta1.ImportStatement, error) {
+	for _, imp := range imports {
+		if len(imp.Rhs.Args) == 0 {
+			return nil, errors.Errorf("import statement found with no args: %v", imp.Rhs.String())
+		}
+		packagePrefix := imp.Rhs.Args[0]
+		if strings.HasPrefix(string(fullName), packagePrefix) {
+			return imp, nil
+		}
+	}
+	return nil, errors.New("no proto import statements found")
 }
