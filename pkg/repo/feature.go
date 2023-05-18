@@ -354,7 +354,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		}
 
 		fcr.CompilationDiffExists = compileDiffExists
-		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, registry, req.Verbose)
+		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, fcr.CompiledFeature.Feature.FeatureType, registry, req.Verbose)
 		if err != nil {
 			return nil, errors.Wrap(err, "format")
 		}
@@ -500,7 +500,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 
 		for _, ff := range ffs {
 			ff := ff
-			formatted, _, err := r.FormatFeature(ctx, &ff, nil, verbose)
+			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, verbose)
 			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
@@ -512,12 +512,20 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 	return nil
 }
 
-func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, registry *protoregistry.Types, verbose bool) (persisted, diffExists bool, err error) {
+func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, verbose bool) (persisted, diffExists bool, err error) {
 	registry, err = r.registry(ctx, registry)
 	if err != nil {
 		return false, false, err
 	}
-	formatter := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, r, false, registry)
+	formatter := star.NewStarFormatter(
+		ff.RootPath(ff.StarlarkFileName),
+		ff.Name,
+		r,
+		// dry-run for JSON features, because static formatting
+		// is unstable due to non-determinism of ordering keys.
+		fType == feature.FeatureTypeJSON,
+		registry,
+	)
 	// try static formatting
 	persisted, diffExists, err = formatter.StaticFormat(ctx)
 	if errors.Is(err, static.ErrUnsupportedStaticParsing) {
@@ -528,7 +536,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 		}
 	} else if err != nil {
 		return false, false, err
-	} else {
+	} else if persisted {
 		return persisted, diffExists, nil
 	}
 	// fall back to regular formatting
