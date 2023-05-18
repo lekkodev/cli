@@ -523,7 +523,8 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 		r,
 		// dry-run for JSON features, because static formatting
 		// is unstable due to non-determinism of ordering keys.
-		fType == feature.FeatureTypeJSON || fType == feature.FeatureTypeProto,
+		// fType == feature.FeatureTypeJSON || fType == feature.FeatureTypeProto,
+		false,
 		registry,
 	)
 	// try static formatting

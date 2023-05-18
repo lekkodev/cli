@@ -16,7 +16,6 @@ package static
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -65,9 +64,7 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	})
 	// Since Range operates in undefined order, we need to introduce order to the output
 	// so that the round-trip is stable.
-	sort.Slice(res.List, func(i, j int) bool {
-		return build.FormatString(res.List[i]) < build.FormatString(res.List[j])
-	})
+	sortExprList(res.List)
 	res.ForceMultiLine = numFields > 1 && meta.GetMultiline()
 	return res, retErr
 }
@@ -151,6 +148,7 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 				}
 				ret.List = append(ret.List, starElem)
 			}
+			sortExprList(ret.List)
 			ret.ForceMultiLine = listVal.Len() > 1 && meta.GetMultiline()
 			return ret, nil
 		}
@@ -179,6 +177,7 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 			if rangeErr != nil {
 				return nil, errors.Wrap(rangeErr, "map range")
 			}
+			sortKVs(ret.List)
 			ret.ForceMultiLine = mapVal.Len() > 1 && meta.GetMultiline()
 			return ret, nil
 		}
