@@ -37,3 +37,14 @@ message MultiLevel {
     Nested nested = 3;
     google.protobuf.StringValue sub_external = 4;
 }
+
+message RepeatedFields {
+    repeated string vals = 1;
+    repeated TestMessage messages = 2;
+    repeated TestEnum enums = 3;
+}
+
+message MapFields {
+    map<string, string> strings = 1;
+    map<int32, TestEnum> enums = 2;
+}
