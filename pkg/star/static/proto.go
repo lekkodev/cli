@@ -43,9 +43,14 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 			X:    &build.Ident{Name: imp.GetLhs().Token},
 			Name: suffix,
 		},
-		ForceMultiLine: meta.GetMultiline(),
 	}
+	type starListElem struct {
+		protoFieldNum int
+		starElem      build.Expr
+	}
+	var listElems []starListElem
 	var retErr error
+	var numFields int
 	// Note: Default values are not set in the proto spec.
 	// Thus, the following Range doesn't iterate over them.
 	// This can lead to behavior where, after a round trip
@@ -54,19 +59,27 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	// will be overwritten as
 	// 		pb.BoolValue()
 	msg.Range(func(fieldDesc protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		numFields++
 		starExpr, err := ReflectValueToExpr(imports, fieldDesc, &val, meta)
 		if err != nil {
 			retErr = err
 			return false
 		}
-		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr})
+		listElems = append(listElems, starListElem{
+			protoFieldNum: fieldDesc.Index(),
+			starElem:      &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr},
+		})
 		return true
 	})
 	// Since Range operates in undefined order, we need to introduce order to the output
-	// so that the round-trip is stable.
-	sort.Slice(res.List, func(i, j int) bool {
-		return build.FormatString(res.List[i]) < build.FormatString(res.List[j])
+	// so that the round-trip is stable. We sort by proto field numbers.
+	sort.Slice(listElems, func(i, j int) bool {
+		return listElems[i].protoFieldNum < listElems[j].protoFieldNum
 	})
+	for _, elem := range listElems {
+		res.List = append(res.List, elem.starElem)
+	}
+	res.ForceMultiLine = numFields > 1 && meta.GetMultiline()
 	return res, retErr
 }
 
@@ -138,7 +151,51 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 	case protoreflect.Message:
 		return ProtoToStatic(imports, goVal, meta) // recurse
 	default:
-		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val %v", val)
+		if fieldDesc.IsList() {
+			ret := &build.ListExpr{}
+			listVal := val.List()
+			for i := 0; i < listVal.Len(); i++ {
+				listElem := listVal.Get(i)
+				starElem, err := ReflectValueToExpr(imports, fieldDesc, &listElem, meta)
+				if err != nil {
+					return nil, errors.Wrapf(err, "list elem #%d", i)
+				}
+				ret.List = append(ret.List, starElem)
+			}
+			sortExprList(ret.List)
+			ret.ForceMultiLine = listVal.Len() > 1 && meta.GetMultiline()
+			return ret, nil
+		}
+		if fieldDesc.IsMap() {
+			ret := &build.DictExpr{}
+			mapVal := val.Map()
+			var rangeErr error
+			mapVal.Range(func(mk protoreflect.MapKey, v protoreflect.Value) bool {
+				keyVal := mk.Value()
+				keyExpr, err := ReflectValueToExpr(imports, fieldDesc.MapKey(), &keyVal, meta)
+				if err != nil {
+					rangeErr = err
+					return false
+				}
+				valExpr, err := ReflectValueToExpr(imports, fieldDesc.MapValue(), &v, meta)
+				if err != nil {
+					rangeErr = err
+					return false
+				}
+				ret.List = append(ret.List, &build.KeyValueExpr{
+					Key:   keyExpr,
+					Value: valExpr,
+				})
+				return true
+			})
+			if rangeErr != nil {
+				return nil, errors.Wrap(rangeErr, "map range")
+			}
+			sortKVs(ret.List)
+			ret.ForceMultiLine = mapVal.Len() > 1 && meta.GetMultiline()
+			return ret, nil
+		}
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "static mutate proto val [%T] %v", goValInterface, val)
 	}
 }
 

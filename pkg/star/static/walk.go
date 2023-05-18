@@ -15,6 +15,7 @@
 package static
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -43,10 +44,8 @@ type Walker interface {
 	// AST if it exists. If not, it will fall back to the ruleString
 	// provided in the feature.
 	// Note: static mutation is supported for all lekko types with the following
-	// caveats: (1) static mutation of JSON features is not roundtrip stable
-	// because keys in a json object can be reordered. (2) Any feature that
-	// has advanced starlark such as helper functions, list comprehension, etc
-	// will fail to be statically parsed at the moment.
+	// caveat: Any feature that has advanced starlark such as helper functions,
+	// list comprehension, etc will fail to be statically parsed at the moment.
 	Mutate(f *featurev1beta1.StaticFeature) ([]byte, error)
 	// Returns the formatted bytes.
 	Format() ([]byte, error)
@@ -431,6 +430,7 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 			}
 			listExpr.List = append(listExpr.List, expr)
 		}
+		sortExprList(listExpr.List)
 		return listExpr, nil
 	case *structpb.Value_StructValue:
 		dictExpr := &build.DictExpr{
@@ -446,10 +446,23 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 				Value: valExpr,
 			})
 		}
+		sortKVs(dictExpr.List)
 		return dictExpr, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "structpb val type %T", k)
 	}
+}
+
+func sortExprList(l []build.Expr) {
+	sort.Slice(l, func(i, j int) bool {
+		return build.FormatString(l[i]) < build.FormatString(l[j])
+	})
+}
+
+func sortKVs(l []*build.KeyValueExpr) {
+	sort.Slice(l, func(i, j int) bool {
+		return build.FormatString(l[i]) < build.FormatString(l[j])
+	})
 }
 
 func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {

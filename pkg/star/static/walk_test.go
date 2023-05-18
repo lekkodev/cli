@@ -17,7 +17,6 @@ package static
 import (
 	"fmt"
 	"os"
-	"strings"
 	"testing"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -59,11 +58,16 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 	case feature.FeatureTypeString:
 		return testVal{"foo", "\"foo\""}, testVal{"bar", "\"bar\""}
 	case feature.FeatureTypeJSON:
-		goVal, err := structpb.NewValue([]interface{}{1, 2, 4.2, "foo"})
+		goVal, err := structpb.NewValue([]interface{}{"foo", 1, 2, 4.2})
 		require.NoError(t, err)
 		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
 		require.NoError(t, err)
-		return testVal{goVal, "[1, 2, 4.2, \"foo\"]"}, testVal{ruleVal, "{\"a\": 1, \"b\": False, \"c\": [99, \"bar\"]}"}
+		ruleStarVal := `{
+            "a": 1.0,
+            "b": False,
+            "c": ["bar", 99.0],
+        }`
+		return testVal{goVal, "[\"foo\", 1.0, 2.0, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
 	return
@@ -120,13 +124,7 @@ func TestWalkerMutateNoop(t *testing.T) {
 
 			bytes, err := b.Mutate(f)
 			require.NoError(t, err)
-			if fType != feature.FeatureTypeJSON {
-				// JSON struct feature types are represented as go maps
-				// after being parsed. Go maps have nondeterministic ordering
-				// of keys. As a result, when they are transformed back to
-				// starlark bytes, the order of the json object may be different.
-				assert.EqualValues(t, string(starBytes), string(bytes))
-			}
+			assert.EqualValues(t, string(starBytes), string(bytes))
 		})
 	}
 }
@@ -476,32 +474,6 @@ func checkEqualProtos(t *testing.T, b *walker, a *anypb.Any, expected proto.Mess
 	require.True(t, proto.Equal(protoMessage, expected), "expected %v %T, got %v %T", expected, expected, protoMessage, protoMessage)
 }
 
-func TestWalkerProtoMultiline(t *testing.T) {
-	starVal := "pb.BoolValue(\n\tvalue = True,\n)"
-	expected := &wrapperspb.BoolValue{Value: true}
-	star := []byte(fmt.Sprintf(`
-		pb = proto.package("google.protobuf")
-		result = feature(
-			description = "proto feature",
-			default = %s,
-			rules = [("age > 1", %s)]
-		)
-		`, starVal, starVal))
-	b := testWalker(t, star)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	require.Len(t, f.Imports, 1)
-	checkEqualProtos(t, b, f.FeatureOld.Tree.Default, expected)
-	checkEqualProtos(t, b, f.FeatureOld.Tree.Constraints[0].Value, expected)
-
-	// Now that static parsing is done, try a no-op static mutation.
-	result, err := b.Mutate(f)
-	require.NoError(t, err)
-	// formatted value should have comma and newline
-	require.Equal(t, 2, strings.Count(string(result), "value = True,\n"))
-}
-
 func TestWalkerBuildMultiline(t *testing.T) {
 	star, err := os.ReadFile("testdata/device.star")
 	require.NoError(t, err)
@@ -511,10 +483,43 @@ func TestWalkerBuildMultiline(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	assert.True(t, f.GetFeature().GetDefault().GetMeta().GetMultiline())
+
+	// Now that static parsing is done, try a no-op static mutation.
+	result, err := w.Mutate(f)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(star), string(result))
 }
 
 func TestWalkerNestedProto(t *testing.T) {
 	star, err := os.ReadFile("testdata/nested.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	f, err := w.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	newStar, err := w.Mutate(f)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(star), string(newStar))
+}
+
+func TestWalkerRepeatedProto(t *testing.T) {
+	star, err := os.ReadFile("testdata/repeated.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	f, err := w.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	newStar, err := w.Mutate(f)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(star), string(newStar))
+}
+
+func TestWalkerMapProto(t *testing.T) {
+	star, err := os.ReadFile("testdata/map.star")
 	require.NoError(t, err)
 
 	w := testWalker(t, star)
