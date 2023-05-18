@@ -16,6 +16,7 @@ package static
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -43,6 +44,11 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 			Name: suffix,
 		},
 	}
+	type starListElem struct {
+		protoFieldNum int
+		starElem      build.Expr
+	}
+	var listElems []starListElem
 	var retErr error
 	var numFields int
 	// Note: Default values are not set in the proto spec.
@@ -59,12 +65,20 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 			retErr = err
 			return false
 		}
-		res.List = append(res.List, &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr})
+		listElems = append(listElems, starListElem{
+			protoFieldNum: fieldDesc.Index(),
+			starElem:      &build.AssignExpr{LHS: &build.Ident{Name: string(fieldDesc.Name())}, Op: "=", RHS: starExpr},
+		})
 		return true
 	})
 	// Since Range operates in undefined order, we need to introduce order to the output
-	// so that the round-trip is stable.
-	sortExprList(res.List)
+	// so that the round-trip is stable. We sort by proto field numbers.
+	sort.Slice(listElems, func(i, j int) bool {
+		return listElems[i].protoFieldNum < listElems[j].protoFieldNum
+	})
+	for _, elem := range listElems {
+		res.List = append(res.List, elem.starElem)
+	}
 	res.ForceMultiLine = numFields > 1 && meta.GetMultiline()
 	return res, retErr
 }
