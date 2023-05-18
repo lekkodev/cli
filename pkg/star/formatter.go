@@ -20,42 +20,58 @@ import (
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
-	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 type Formatter interface {
+	// Runs the starlark formatter from bazel buildtools.
 	Format(ctx context.Context) (persisted, diffExists bool, err error)
+	// Runs the lekko static parser to format starlark the way the UI would.
+	StaticFormat(ctx context.Context) (persisted, diffExists bool, err error)
 }
 
 type formatter struct {
 	filePath, featureName string
-	fType                 feature.FeatureType
 	dryRun                bool
+	registry              *protoregistry.Types
 
 	cw fs.ConfigWriter
 }
 
-func NewStarFormatter(filePath, featureName string, fType feature.FeatureType, cw fs.ConfigWriter, dryRun bool) Formatter {
+func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool, registry *protoregistry.Types) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
-		fType:       fType,
 		cw:          cw,
 		dryRun:      dryRun,
+		registry:    registry,
 	}
 }
 
 func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err error) {
+	return f.format(ctx, false)
+}
+
+func (f *formatter) StaticFormat(ctx context.Context) (persisted, diffExists bool, err error) {
+	return f.format(ctx, true)
+}
+
+func (f *formatter) format(ctx context.Context, static bool) (persisted, diffExists bool, err error) {
 	data, err := f.cw.GetFileContents(ctx, f.filePath)
 	if err != nil {
 		return false, false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
-	ndata, err := f.format(data)
+	var ndata []byte
+	if static {
+		ndata, err = f.staticFormat(data)
+	} else {
+		ndata, err = f.bazelFormat(data)
+	}
 	if err != nil {
-		return false, false, errors.Wrap(err, "static parser format")
+		return false, false, err
 	}
 	diffExists = !bytes.Equal(data, ndata)
 	if !diffExists {
@@ -69,26 +85,23 @@ func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err
 	return !f.dryRun, diffExists, nil
 }
 
-func (f *formatter) format(data []byte) ([]byte, error) {
-	// Static formatter is only supported for primitive types.
-	// Protobuf features cannot be statically parsed.
-	// Json features can be statically parsed, but static mutation
-	// is not roundtrip stable because keys in a json object can be
-	// reordered.
-	if f.fType.IsPrimitive() {
-		// first try static walking
-		ndata, err := static.NewWalker(f.filePath, data, nil).Format()
-		if err != nil && !errors.Is(err, static.ErrUnsupportedStaticParsing) {
-			return nil, errors.Wrap(err, "static parser format")
-		} else if err == nil {
-			return ndata, nil
-		}
-	}
-	// raw formatting without static parsing
+func (f *formatter) bazelFormat(data []byte) ([]byte, error) {
 	parser := butils.GetParser(static.InputTypeAuto)
 	bfile, err := parser(f.filePath, data)
 	if err != nil {
 		return nil, errors.Wrap(err, "bparse")
 	}
 	return build.Format(bfile), nil
+}
+
+func (f *formatter) staticFormat(data []byte) ([]byte, error) {
+	// This statically parses the feature
+	// and writes it back to the file without any functional changes.
+	// Doing this ensures that the file is formatted exactly the way that
+	// the UI would format it, essentially eliminating formatting
+	// changes from UI generated PRs.
+	// If static formatting passes, we can skip buildifier formatting.
+	// If static formatting fails, we can show a warning to the user
+	// that the UI will not be able to parse the feature.
+	return static.NewWalker(f.filePath, data, f.registry).Format()
 }

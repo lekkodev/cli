@@ -106,7 +106,7 @@ func (t *traverser) traverse() error {
 	descriptionExpr := *descriptionExprPtr
 	descriptionStr, ok := descriptionExpr.(*build.StringExpr)
 	if !ok {
-		return fmt.Errorf("description kwarg: expected string, got %T", descriptionExpr)
+		return errors.Wrapf(ErrUnsupportedStaticParsing, "description kwarg: expected string, got %T", descriptionExpr)
 	}
 	if err := t.descriptionFn(descriptionStr); err != nil {
 		return errors.Wrap(err, "description fn")
@@ -177,7 +177,7 @@ func (ast *starFeatureAST) parseRules(fn rulesFn) error {
 		v := *rulesExprPtr
 		listV, ok := v.(*build.ListExpr)
 		if !ok {
-			return fmt.Errorf("expecting list, got %T", v)
+			return errors.Wrapf(ErrUnsupportedStaticParsing, "expecting list, got %T", v)
 		}
 		for i, elemV := range listV.List {
 			r, err := newRule(elemV)
@@ -271,15 +271,15 @@ type importVal struct {
 func newRule(li build.Expr) (*rule, error) {
 	tupleV, ok := li.(*build.TupleExpr)
 	if !ok {
-		return nil, fmt.Errorf("expecting tuple, got %T", li)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting tuple, got %T", li)
 	}
 	if len(tupleV.List) != 2 {
-		return nil, fmt.Errorf("expecting tuple of length 2, got length %d", len(tupleV.List))
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting tuple of length 2, got length %d", len(tupleV.List))
 	}
 	conditionV := tupleV.List[0]
 	conditionStringV, ok := conditionV.(*build.StringExpr)
 	if !ok {
-		return nil, fmt.Errorf("expecting condition string, got %T", conditionV)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting condition string, got %T", conditionV)
 	}
 	return &rule{
 		conditionV: conditionStringV,
