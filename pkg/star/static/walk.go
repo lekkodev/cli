@@ -15,7 +15,6 @@
 package static
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -43,6 +42,11 @@ type Walker interface {
 	// Note: this method will perform mutations based on the V3 ruleslang
 	// AST if it exists. If not, it will fall back to the ruleString
 	// provided in the feature.
+	// Note: static mutation is supported for all lekko types with the following
+	// caveats: (1) static mutation of JSON features is not roundtrip stable
+	// because keys in a json object can be reordered. (2) Any feature that
+	// has advanced starlark such as helper functions, list comprehension, etc
+	// will fail to be statically parsed at the moment.
 	Mutate(f *featurev1beta1.StaticFeature) ([]byte, error)
 	// Returns the formatted bytes.
 	Format() ([]byte, error)
@@ -125,7 +129,7 @@ func (w *walker) genAST() (*build.File, error) {
 
 func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
 	if vPtr == nil {
-		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, fmt.Errorf("received nil value")
+		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "received nil value")
 	}
 	v := *vPtr
 	switch t := v.(type) {
@@ -212,7 +216,7 @@ func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
 			kvExpr := kvExpr
 			keyExpr, ok := kvExpr.Key.(*build.StringExpr)
 			if !ok {
-				return nil, errors.Errorf("json structs must have keys of type string, not %T", kvExpr.Key)
+				return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "json structs must have keys of type string, not %T", kvExpr.Key)
 			}
 			key := keyExpr.Value
 			vVar, err := w.extractJSONValue(kvExpr.Value)
@@ -253,7 +257,7 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 			}
 			protoVal, featureType, err := w.extractValue(&r.v, f)
 			if err != nil {
-				return fmt.Errorf("rule #%d: extract value: %w", i, err)
+				return errors.Wrapf(err, "rule #%d: extract value", i)
 			}
 			ruleVal, err := w.toAny(protoVal)
 			if err != nil {
@@ -279,7 +283,7 @@ func (w *walker) buildProtoImportsFn(f *featurev1beta1.StaticFeature) importsFn 
 			return nil
 		}
 		typeError := func(expected, actual build.Expr) error {
-			return errors.Errorf("expecting %T, found %T. expr: %s", expected, actual, build.FormatString(actual))
+			return errors.Wrapf(ErrUnsupportedStaticParsing, "expecting %T, found %T. expr: %s", expected, actual, build.FormatString(actual))
 		}
 		for _, starImport := range imports.imports {
 			lhs, ok := starImport.assignExpr.LHS.(*build.Ident)
@@ -299,13 +303,13 @@ func (w *walker) buildProtoImportsFn(f *featurev1beta1.StaticFeature) importsFn 
 				return typeError(&build.Ident{}, dotExpr.X)
 			}
 			if dotX.Name != "proto" || dotExpr.Name != "package" {
-				return errors.Errorf("found badly formed proto import: %s", build.FormatString(dotExpr))
+				return errors.Wrapf(ErrUnsupportedStaticParsing, "found badly formed proto import: %s", build.FormatString(dotExpr))
 			}
 			var args []string
 			for _, arg := range rhs.List {
 				stringExpr, ok := arg.(*build.StringExpr)
 				if !ok {
-					return errors.Errorf("expecting string expr, found %T. expr: %s", arg, build.FormatString(arg))
+					return errors.Wrapf(ErrUnsupportedStaticParsing, "expecting string expr, found %T. expr: %s", arg, build.FormatString(arg))
 				}
 				args = append(args, stringExpr.Value)
 			}

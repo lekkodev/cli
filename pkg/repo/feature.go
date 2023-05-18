@@ -47,7 +47,7 @@ type ConfigurationStore interface {
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
-	Format(ctx context.Context) error
+	Format(ctx context.Context, verbose bool) error
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
@@ -113,6 +113,8 @@ type CompileRequest struct {
 	// Note: if upgrading, no feature filter is allowed to be specified.
 	// That is because you must upgrade an entire namespace at a time.
 	Upgrade bool
+	// Enable verbose logging output
+	Verbose bool
 }
 
 func (cr CompileRequest) Validate() error {
@@ -352,7 +354,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		}
 
 		fcr.CompilationDiffExists = compileDiffExists
-		fmtPersisted, fmtDiffExists, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, fcr.CompiledFeature.Feature.FeatureType, r, req.DryRun).Format(ctx)
+		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, fcr.CompiledFeature.Feature.FeatureType, registry, req.Verbose)
 		if err != nil {
 			return nil, errors.Wrap(err, "format")
 		}
@@ -485,7 +487,7 @@ func (r *repository) GetFileDescriptorSet(ctx context.Context, protoDirPath stri
 	return sTypes.FileDescriptorSet, nil
 }
 
-func (r *repository) Format(ctx context.Context) error {
+func (r *repository) Format(ctx context.Context, verbose bool) error {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "parse metadata")
@@ -497,7 +499,8 @@ func (r *repository) Format(ctx context.Context) error {
 		}
 
 		for _, ff := range ffs {
-			formatted, _, err := star.NewStarFormatter(ff.RootPath(ff.StarlarkFileName), ff.Name, feature.FeatureType("unknown"), r, false).Format(ctx)
+			ff := ff
+			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, verbose)
 			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
@@ -507,6 +510,37 @@ func (r *repository) Format(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, verbose bool) (persisted, diffExists bool, err error) {
+	registry, err = r.registry(ctx, registry)
+	if err != nil {
+		return false, false, err
+	}
+	formatter := star.NewStarFormatter(
+		ff.RootPath(ff.StarlarkFileName),
+		ff.Name,
+		r,
+		// dry-run for JSON features, because static formatting
+		// is unstable due to non-determinism of ordering keys.
+		fType == feature.FeatureTypeJSON,
+		registry,
+	)
+	// try static formatting
+	persisted, diffExists, err = formatter.StaticFormat(ctx)
+	if errors.Is(err, static.ErrUnsupportedStaticParsing) {
+		// show warning
+		r.Logf("%s\n", r.Yellow(fmt.Sprintf("[%s] Unable to statically parse feature. Web features may be limited.", fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))))
+		if verbose {
+			r.Logf("\t%v\n", err)
+		}
+	} else if err != nil {
+		return false, false, err
+	} else if persisted {
+		return persisted, diffExists, nil
+	}
+	// fall back to regular formatting
+	return formatter.Format(ctx)
 }
 
 // Adds a new feature to the given namespace using the given type.
