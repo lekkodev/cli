@@ -92,6 +92,8 @@ type GitRepository interface {
 	Status() (git.Status, error)
 	HeadCommit() (*object.Commit, error)
 	DefaultBranchName() string
+
+	mirror(ctx context.Context, ap AuthProvider, url string) error
 }
 
 // Abstraction around git and github operations associated with the lekko configuration repo.
@@ -205,7 +207,7 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
-func NewEphemeral(url string, auth AuthProvider, branchName string) (ConfigurationRepository, error) {
+func NewEphemeral(url string, auth AuthProvider, branchName *string) (ConfigurationRepository, error) {
 	// clone from default, then check out the requested branch.
 	// this allows us to populate the repo's default branch name.
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
@@ -232,7 +234,10 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 		return nil, errors.Wrap(err, "branch name")
 	}
 	cr.defaultBranch = defaultBranch
-	return cr, cr.CheckoutRemoteBranch(branchName)
+	if branchName != nil {
+		return cr, cr.CheckoutRemoteBranch(*branchName)
+	}
+	return cr, nil
 }
 
 func getDefaultBranchName(r *git.Repository) (string, error) {
@@ -572,4 +577,36 @@ func (r *repository) NewRemoteBranch(branchName string) error {
 	r.Logf("Local branch %s has been set up to track changes from %s\n",
 		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
 	return nil
+}
+
+func (r *repository) mirror(ctx context.Context, ap AuthProvider, url string) error {
+	ref := plumbing.NewBranchReferenceName(r.defaultBranch)
+	remote, err := r.repo.CreateRemote(&config.RemoteConfig{
+		Name: "mirror",
+		URLs: []string{url},
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create new mirrored remote")
+	}
+	if err := r.repo.PushContext(ctx, &git.PushOptions{
+		RemoteName: remote.Config().Name,
+		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
+		Auth:       basicAuth(ap),
+	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return errors.Wrap(err, "failed to push")
+	}
+	return nil
+}
+
+// Mirrors the template config repo at the provided url. Note: a repository must already
+// exist at the given url.
+func MirrorAtURL(ctx context.Context, ap AuthProvider, url string) error {
+	templateURL := "https://github.com/lekkodev/template.git"
+
+	templateRepo, err := NewEphemeral(templateURL, ap, nil)
+	if err != nil {
+		return errors.Wrap(err, "failed to create ephemeral template repo")
+	}
+
+	return templateRepo.mirror(ctx, ap, url)
 }
