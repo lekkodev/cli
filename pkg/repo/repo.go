@@ -236,6 +236,10 @@ func NewEphemeral(url string, auth AuthProvider, branchName string) (Configurati
 }
 
 func getDefaultBranchName(r *git.Repository) (string, error) {
+	envName := os.Getenv("LEKKO_DEFAULT_BRANCH")
+	if len(envName) > 0 {
+		return envName, nil
+	}
 	ref, err := r.Reference(plumbing.NewRemoteHEADReferenceName(RemoteName), true)
 	if err != nil {
 		return "", errors.Wrapf(err, "remote reference for remote '%s'", RemoteName)
