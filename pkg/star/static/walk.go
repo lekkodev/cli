@@ -434,7 +434,6 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 			}
 			listExpr.List = append(listExpr.List, expr)
 		}
-		sortExprList(listExpr.List)
 		return listExpr, nil
 	case *structpb.Value_StructValue:
 		dictExpr := &build.DictExpr{
@@ -455,12 +454,6 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "structpb val type %T", k)
 	}
-}
-
-func sortExprList(l []build.Expr) {
-	sort.Slice(l, func(i, j int) bool {
-		return build.FormatString(l[i]) < build.FormatString(l[j])
-	})
 }
 
 func sortKVs(l []*build.KeyValueExpr) {

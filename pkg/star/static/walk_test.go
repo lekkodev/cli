@@ -65,7 +65,7 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 		ruleStarVal := `{
             "a": 1,
             "b": False,
-            "c": ["bar", 99],
+            "c": [99, "bar"],
         }`
 		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
