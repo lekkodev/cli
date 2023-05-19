@@ -190,25 +190,11 @@ func verifyCmd() *cobra.Command {
 					return err
 				}
 			}
-			fcrs, err := r.Compile(ctx, &repo.CompileRequest{
+			return r.Verify(ctx, &repo.VerifyRequest{
 				Registry:        registry,
 				NamespaceFilter: ns,
 				FeatureFilter:   f,
-				DryRun:          true,
-				Verify:          true,
 			})
-			if err != nil {
-				return errors.Wrap(err, "compile")
-			}
-			for _, fcr := range fcrs {
-				if fcr.CompilationDiffExists {
-					return errors.Errorf("Found diff in generated files: %s/%s", fcr.NamespaceName, fcr.FeatureName)
-				}
-				if fcr.FormattingDiffExists {
-					return errors.Errorf("Found formatting diff: %s/%s.star", fcr.NamespaceName, fcr.FeatureName)
-				}
-			}
-			return nil
 		},
 	}
 	return cmd
@@ -294,10 +280,8 @@ func reviewCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			if _, err := r.Compile(ctx, &repo.CompileRequest{
-				Verify: true,
-			}); err != nil {
-				return errors.Wrap(err, "compile")
+			if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
+				return errors.Wrap(err, "verify")
 			}
 
 			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
@@ -337,10 +321,8 @@ var mergeCmd = &cobra.Command{
 			return errors.Wrap(err, "new repo")
 		}
 		ctx := cmd.Context()
-		if _, err := r.Compile(ctx, &repo.CompileRequest{
-			Verify: true,
-		}); err != nil {
-			return errors.Wrap(err, "compile")
+		if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
+			return errors.Wrap(err, "verify")
 		}
 		var prNum *int
 		if len(args) > 0 {
@@ -438,10 +420,8 @@ func applyCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if _, err := r.Compile(ctx, &repo.CompileRequest{
-				Verify: true,
-			}); err != nil {
-				return errors.Wrap(err, "compile")
+			if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
+				return errors.Wrap(err, "verify")
 			}
 			kube, err := k8s.NewKubernetes(kubeConfig, r)
 			if err != nil {
@@ -503,10 +483,8 @@ func commitCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			ctx := cmd.Context()
-			if _, err := r.Compile(ctx, &repo.CompileRequest{
-				Verify: true,
-			}); err != nil {
-				return errors.Wrap(err, "compile")
+			if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
+				return errors.Wrap(err, "verify")
 			}
 			if _, err = r.Commit(ctx, rs, message); err != nil {
 				return err
