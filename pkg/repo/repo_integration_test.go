@@ -141,7 +141,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 }
 
 func testEphemeral(ctx context.Context, t *testing.T, ap AuthProvider, branchName string) {
-	cr, err := NewEphemeral(integrationTestURL, ap, branchName)
+	cr, err := NewEphemeral(integrationTestURL, ap, &branchName)
 	require.NoError(t, err)
 	r, ok := cr.(*repository)
 	require.True(t, ok)

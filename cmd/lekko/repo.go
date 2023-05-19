@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/repo"
@@ -45,6 +46,7 @@ func repoCmd() *cobra.Command {
 		repoCreateCmd(),
 		repoCloneCmd(),
 		repoDeleteCmd(),
+		repoInitCmd(),
 	)
 	return cmd
 }
@@ -215,5 +217,38 @@ func repoDeleteCmd() *cobra.Command {
 			return nil
 		},
 	}
+	return cmd
+}
+
+func repoInitCmd() *cobra.Command {
+	var owner, repoName string
+	cmd := &cobra.Command{
+		Use:   "init",
+		Short: "Initialize a new template git repository",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			if len(owner) == 0 || len(repoName) == 0 {
+				return errors.Errorf("must provide owner and repo name")
+			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
+			if rs.GetGithubUser() == owner {
+				owner = "" // create repo expects an empty owner for personal accounts
+			}
+
+			url, err := ghCli.CreateRepo(ctx, owner, repoName, true)
+			if err != nil {
+				return errors.Wrap(err, "create github repo")
+			}
+			if err := repo.MirrorAtURL(ctx, rs, url); err != nil {
+				return errors.Wrapf(err, "mirror at url: %s", url)
+			}
+
+			fmt.Printf("Mirrored repo at url %s\n", url)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner to house repository in")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repository name")
 	return cmd
 }

@@ -67,7 +67,7 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 	if err == nil {
 		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
 	}
-	if err != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
+	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
 		return "", err
 	}
 	description := defaultDescription
@@ -80,6 +80,32 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 	if err != nil {
 		body, _ := io.ReadAll(resp.Body)
 		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
+	}
+	return repo.GetCloneURL(), nil
+}
+
+func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, private bool) (string, error) {
+	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
+	if err == nil {
+		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
+	}
+	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
+		return "", err
+	}
+	description := defaultDescription
+	repo, resp, err = gc.Repositories.Create(ctx, owner, &github.Repository{
+		Name:        &repoName,
+		Private:     &private,
+		Description: &description,
+	})
+	if err != nil {
+		var body []byte
+		var status string
+		if resp != nil {
+			body, _ = io.ReadAll(resp.Body)
+			status = resp.Status
+		}
+		return "", errors.Wrapf(err, "create repo [%s]: %s", status, string(body))
 	}
 	return repo.GetCloneURL(), nil
 }
