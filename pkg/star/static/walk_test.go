@@ -63,11 +63,11 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
 		require.NoError(t, err)
 		ruleStarVal := `{
-            "a": 1.0,
+            "a": 1,
             "b": False,
-            "c": ["bar", 99.0],
+            "c": [99, "bar"],
         }`
-		return testVal{goVal, "[\"foo\", 1.0, 2.0, 4.2]"}, testVal{ruleVal, ruleStarVal}
+		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
 	return

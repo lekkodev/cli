@@ -5,6 +5,7 @@ result = feature(
     description = "repeated feature for testing",
     default = tpb.RepeatedFields(
         vals = [
+            "d",
             "a",
             "b",
             "c",

@@ -418,6 +418,10 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 	case *structpb.Value_StringValue:
 		return starString(k.StringValue), nil
 	case *structpb.Value_NumberValue:
+		intVal := int64(k.NumberValue)
+		if k.NumberValue == float64(intVal) {
+			return starInt(intVal), nil
+		}
 		return starFloat(k.NumberValue), nil
 	case *structpb.Value_ListValue:
 		listExpr := &build.ListExpr{
@@ -430,7 +434,6 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 			}
 			listExpr.List = append(listExpr.List, expr)
 		}
-		sortExprList(listExpr.List)
 		return listExpr, nil
 	case *structpb.Value_StructValue:
 		dictExpr := &build.DictExpr{
@@ -451,12 +454,6 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "structpb val type %T", k)
 	}
-}
-
-func sortExprList(l []build.Expr) {
-	sort.Slice(l, func(i, j int) bool {
-		return build.FormatString(l[i]) < build.FormatString(l[j])
-	})
 }
 
 func sortKVs(l []*build.KeyValueExpr) {

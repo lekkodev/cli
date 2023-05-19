@@ -162,7 +162,6 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 				}
 				ret.List = append(ret.List, starElem)
 			}
-			sortExprList(ret.List)
 			ret.ForceMultiLine = listVal.Len() > 1 && meta.GetMultiline()
 			return ret, nil
 		}
