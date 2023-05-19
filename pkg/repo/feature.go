@@ -44,6 +44,7 @@ import (
 // This interface should make no assumptions about where the configuration is stored.
 type ConfigurationStore interface {
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
+	Verify(ctx context.Context, req *VerifyRequest) error
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
@@ -91,6 +92,13 @@ func (r *repository) CompileFeature(ctx context.Context, registry *protoregistry
 		return nil, errors.Wrap(err, "compile")
 	}
 	return f, nil
+}
+
+type VerifyRequest struct {
+	// Registry of protobuf types. This field is optional, if it does not exist, it will be instantiated.
+	Registry *protoregistry.Types
+	// Optional fields to filter features by, so as to not verify the entire world.
+	NamespaceFilter, FeatureFilter string
 }
 
 type CompileRequest struct {
@@ -257,6 +265,39 @@ func (fcrs FeatureCompilationResults) Err() error {
 	return nil
 }
 
+func (r *repository) Verify(ctx context.Context, req *VerifyRequest) error {
+	fcrs, err := r.Compile(ctx, &CompileRequest{
+		Registry:        req.Registry,
+		NamespaceFilter: req.NamespaceFilter,
+		FeatureFilter:   req.FeatureFilter,
+		// verification should not modify data
+		DryRun: true,
+		// verification should perform backwards compatibility check
+		IgnoreBackwardsCompatibility: false,
+		Verify:                       true,
+		Verbose:                      false,
+	})
+	if err != nil {
+		return errors.Wrap(err, "compile")
+	}
+
+	var hasDiff bool
+	for _, fcr := range fcrs {
+		if fcr.CompilationDiffExists {
+			r.Logf("%s\n", r.Red(fmt.Sprintf("Found diff in generated files: %s/%s", fcr.NamespaceName, fcr.FeatureName)))
+			hasDiff = true
+		}
+		if fcr.FormattingDiffExists {
+			r.Logf("%s\n", r.Red(fmt.Sprintf("Found formatting diff: %s/%s.star", fcr.NamespaceName, fcr.FeatureName)))
+			hasDiff = true
+		}
+	}
+	if hasDiff {
+		return errors.New("Found feature(s) with compilation or formatting diffs")
+	}
+	return nil
+}
+
 func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
 	if err := req.Validate(); err != nil {
 		return nil, errors.Wrap(err, "validate request")
@@ -354,7 +395,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		}
 
 		fcr.CompilationDiffExists = compileDiffExists
-		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, fcr.CompiledFeature.Feature.FeatureType, registry, req.Verbose)
+		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, fcr.CompiledFeature.Feature.FeatureType, registry, req.DryRun, req.Verbose)
 		if err != nil {
 			return nil, errors.Wrap(err, "format")
 		}
@@ -500,7 +541,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 
 		for _, ff := range ffs {
 			ff := ff
-			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, verbose)
+			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, false, verbose)
 			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
@@ -512,7 +553,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 	return nil
 }
 
-func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, verbose bool) (persisted, diffExists bool, err error) {
+func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, dryRun, verbose bool) (persisted, diffExists bool, err error) {
 	registry, err = r.registry(ctx, registry)
 	if err != nil {
 		return false, false, err
@@ -521,9 +562,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 		ff.RootPath(ff.StarlarkFileName),
 		ff.Name,
 		r,
-		// dry-run for JSON features, because static formatting
-		// is unstable due to non-determinism of ordering keys.
-		false,
+		dryRun,
 		registry,
 	)
 	// try static formatting
