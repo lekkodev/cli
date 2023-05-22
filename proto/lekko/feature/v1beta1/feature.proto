@@ -51,6 +51,7 @@ message Tree {
   // defined, this is what gets returned.
   google.protobuf.Any default = 1;
   repeated Constraint constraints = 2;
+  Any default_new = 3;
 }
 
 message Constraint {
@@ -72,4 +73,13 @@ message Constraint {
 
   // Rules AST used for rules evaluation. It is an n-ary tree.
   lekko.rules.v1beta3.Rule rule_ast_new = 5;
+
+  Any value_new = 6;
+}
+
+// New custom any type which allows us to manage dynamic types and values
+// ourselves in application code.
+message Any {
+  string type_url = 1;
+  bytes value = 2;
 }
