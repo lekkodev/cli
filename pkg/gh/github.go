@@ -126,6 +126,27 @@ func (gc *GithubClient) GetUserOrganizations(ctx context.Context) ([]string, err
 	return result, nil
 }
 
+// GetAuthenticatedRepos gets all repos for a user. Passing the empty string will list
+// repositories for the authenticated user.
+func (gc *GithubClient) GetAllUserRepositories(ctx context.Context, username string) ([]*github.Repository, error) {
+	var allRepos []*github.Repository
+	opts := &github.RepositoryListOptions{
+		ListOptions: github.ListOptions{PerPage: 100},
+	}
+	for {
+		repos, resp, err := gc.Repositories.List(ctx, username, opts)
+		if err != nil {
+			return nil, err
+		}
+		allRepos = append(allRepos, repos...)
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return allRepos, nil
+}
+
 func ParseOwnerRepo(githubURL string) (string, string, error) {
 	// TODO: make this exhaustive and check the git standard for remotes, or do it the URL way.
 	// ssh url

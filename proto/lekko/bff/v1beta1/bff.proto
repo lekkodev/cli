@@ -30,6 +30,7 @@ import "lekko/rules/v1beta3/rules.proto";
 // does not need to be passed into the RPCs.
 service BFFService {
   // User management
+  rpc GetUserGitHubRepos(GetUserGitHubReposRequest) returns (GetUserGitHubReposResponse) {}
   rpc GetUserLoggedInInfo(GetUserLoggedInInfoRequest) returns (GetUserLoggedInInfoResponse) {}
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {}
   // Retrieves an oauth access token for the user, and stores in in the database
@@ -122,6 +123,11 @@ service BFFService {
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
   rpc GetRollout(GetRolloutRequest) returns (GetRolloutResponse) {}
+}
+
+message GetUserGitHubReposRequest {}
+message GetUserGitHubReposResponse {
+  repeated Repository repositories = 1;
 }
 
 message GetUserLoggedInInfoRequest {}
