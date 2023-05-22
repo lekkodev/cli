@@ -756,6 +756,7 @@ message EvalRequest {
 message EvalResponse {
   google.protobuf.Any result = 1;
   lekko.feature.v1beta1.FeatureType type = 2;
+  lekko.feature.v1beta1.Any result_new = 3;
 }
 
 message GetFlagEvaluationMetricsRequest {
