@@ -127,11 +127,7 @@ service BFFService {
 
 message GetUserGitHubReposRequest {}
 message GetUserGitHubReposResponse {
-  message GitHubRepo {
-    string owner = 1;
-    string repo_name = 2;
-  }
-  repeated GitHubRepo repositories = 1;
+  repeated Repository repositories = 1;
 }
 
 message GetUserLoggedInInfoRequest {}
