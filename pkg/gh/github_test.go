@@ -61,3 +61,26 @@ func TestGetUserOrganizations(t *testing.T) {
 	require.Equal(t, "lekkodev2", result[1])
 	require.Equal(t, "lekkodev3", result[2])
 }
+
+func TestGetAllUserRepositories(t *testing.T) {
+	mockedHTTPClient := mock.NewMockedHTTPClient(
+		mock.WithRequestMatch(
+			mock.GetUserRepos,
+			[]github.Repository{
+				{
+					FullName: github.String("lekkodev/hello-world"),
+				},
+				{
+					FullName: github.String("lekkodev/foobar"),
+				},
+				{
+					FullName: github.String("lekkodev/baz"),
+				},
+			},
+		),
+	)
+	mgh := NewGithubClient(mockedHTTPClient)
+	repos, err := mgh.GetAllUserRepositories(context.Background(), "")
+	require.NoError(t, err)
+	require.Len(t, repos, 3)
+}
