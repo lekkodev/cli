@@ -277,7 +277,6 @@ message CreateRepositoryRequest {
 message CreateRepositoryResponse {
   string url = 1;
 }
-
 message DeleteRepositoryRequest {
   RepositoryKey repo_key = 1;
   // If provided, this rpc will also delete the repository upstream, e.g. on github.
@@ -300,6 +299,13 @@ message Repository {
   // Whether or not the requesting user is authorized
   // to access this repository on github
   bool user_authorized = 8;
+  // The git sha of the repo that is currently deployed
+  // in Lekko. If empty, it means that the repo has not
+  // been rolled out yet.
+  string sha = 9;
+  // The branch name currently deployed in Lekko. This
+  // is typically the default branch, e.g. 'main'.
+  string branch_name = 10;
 }
 
 // RepositoriesResponse contains either a

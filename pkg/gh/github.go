@@ -84,13 +84,13 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 	return repo.GetCloneURL(), nil
 }
 
-func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, private bool) (string, error) {
+func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, private bool) (*github.Repository, error) {
 	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
 	if err == nil {
-		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
+		return repo, errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
 	}
 	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
-		return "", err
+		return nil, err
 	}
 	description := defaultDescription
 	repo, resp, err = gc.Repositories.Create(ctx, owner, &github.Repository{
@@ -105,9 +105,9 @@ func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, 
 			body, _ = io.ReadAll(resp.Body)
 			status = resp.Status
 		}
-		return "", errors.Wrapf(err, "create repo [%s]: %s", status, string(body))
+		return nil, errors.Wrapf(err, "create repo [%s]: %s", status, string(body))
 	}
-	return repo.GetCloneURL(), nil
+	return repo, nil
 }
 
 // GetUserOrganizations uses an authenticated call to get the users private and public organizations
