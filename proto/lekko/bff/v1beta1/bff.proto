@@ -31,6 +31,7 @@ import "lekko/rules/v1beta3/rules.proto";
 service BFFService {
   // User management
   rpc GetUserGitHubRepos(GetUserGitHubReposRequest) returns (GetUserGitHubReposResponse) {}
+  rpc GetUserGitHubInstallations(GetUserGitHubInstallationsRequest) returns (GetUserGitHubInstallationsResponse) {}
   rpc GetUserLoggedInInfo(GetUserLoggedInInfoRequest) returns (GetUserLoggedInInfoResponse) {}
   rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {}
   // Retrieves an oauth access token for the user, and stores in in the database
@@ -125,9 +126,24 @@ service BFFService {
   rpc GetRollout(GetRolloutRequest) returns (GetRolloutResponse) {}
 }
 
-message GetUserGitHubReposRequest {}
+message GetUserGitHubReposRequest {
+  repeated int64 github_installation_ids = 1;
+}
+
 message GetUserGitHubReposResponse {
   repeated Repository repositories = 1;
+}
+
+message Installation {
+  int64 id = 1;
+  string name = 2;
+  string owner_type = 3;
+}
+
+message GetUserGitHubInstallationsRequest {}
+
+message GetUserGitHubInstallationsResponse {
+  repeated Installation installations = 1;
 }
 
 message GetUserLoggedInInfoRequest {}
