@@ -292,7 +292,9 @@ message CreateRepositoryRequest {
 
 message CreateRepositoryResponse {
   string url = 1;
+  Repository repository = 2;
 }
+
 message DeleteRepositoryRequest {
   RepositoryKey repo_key = 1;
   // If provided, this rpc will also delete the repository upstream, e.g. on github.
