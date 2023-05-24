@@ -147,11 +147,8 @@ func (gc *GithubClient) GetAllUserRepositories(ctx context.Context, username str
 	return allRepos, nil
 }
 
-// GetAllUserInstallations gets all installations for a user. Passing the empty string will list
-// repositories for the authenticated user.
+// GetAllUserInstallations gets all installations for a user
 func (gc *GithubClient) GetAllUserInstallations(ctx context.Context, filterSuspended bool) ([]*github.Installation, error) {
-	{
-	}
 	var allInstalls []*github.Installation
 	opts := &github.ListOptions{PerPage: 100}
 	for {
