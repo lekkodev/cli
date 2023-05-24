@@ -137,7 +137,7 @@ message GetUserGitHubReposResponse {
 message Installation {
   int64 id = 1;
   string name = 2;
-  string type = 3;
+  string owner_type = 3;
 }
 
 message GetUserGitHubInstallationsRequest {}
