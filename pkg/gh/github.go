@@ -155,7 +155,7 @@ func (gc *GithubClient) GetAllUserInstallations(ctx context.Context, filterSuspe
 	var allInstalls []*github.Installation
 	opts := &github.ListOptions{PerPage: 100}
 	for {
-		installs, resp, err := gc.Apps.ListInstallations(ctx, opts)
+		installs, resp, err := gc.Apps.ListUserInstallations(ctx, opts)
 		if err != nil {
 			return nil, err
 		}
