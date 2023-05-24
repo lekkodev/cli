@@ -147,6 +147,32 @@ func (gc *GithubClient) GetAllUserRepositories(ctx context.Context, username str
 	return allRepos, nil
 }
 
+// GetAllUserInstallations gets all installations for a user. Passing the empty string will list
+// repositories for the authenticated user.
+func (gc *GithubClient) GetAllUserInstallations(ctx context.Context, filterSuspended bool) ([]*github.Installation, error) {
+	{
+	}
+	var allInstalls []*github.Installation
+	opts := &github.ListOptions{PerPage: 100}
+	for {
+		installs, resp, err := gc.Apps.ListInstallations(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+		for _, install := range installs {
+			if filterSuspended && install.SuspendedAt != nil {
+				continue
+			}
+			allInstalls = append(allInstalls, install)
+		}
+		if resp.NextPage == 0 {
+			break
+		}
+		opts.Page = resp.NextPage
+	}
+	return allInstalls, nil
+}
+
 func ParseOwnerRepo(githubURL string) (string, string, error) {
 	// TODO: make this exhaustive and check the git standard for remotes, or do it the URL way.
 	// ssh url
