@@ -47,6 +47,7 @@ func repoCmd() *cobra.Command {
 		repoCloneCmd(),
 		repoDeleteCmd(),
 		repoInitCmd(),
+		repoTestCmd(),
 	)
 	return cmd
 }
@@ -250,5 +251,28 @@ func repoInitCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner to house repository in")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repository name")
+	return cmd
+}
+
+func repoTestCmd() *cobra.Command {
+	var url string
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "test",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			r, err := repo.NewLocal(wd, rs)
+			if err != nil {
+				return errors.Wrap(err, "new local")
+			}
+			fmt.Println(r.DefaultBranchName())
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&url, "url", "u", "", "url of GitHub-hosted configuration repository to clone")
 	return cmd
 }
