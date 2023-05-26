@@ -18,8 +18,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -53,6 +55,7 @@ func main() {
 	rootCmd.AddCommand(featureCmd())
 	rootCmd.AddCommand(namespaceCmd())
 	rootCmd.AddCommand(apikeyCmd())
+	rootCmd.AddCommand(upgradeCmd())
 	// auth
 	rootCmd.AddCommand(authCmd())
 	// exp
@@ -562,5 +565,74 @@ func restoreCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
+	return cmd
+}
+
+func upgradeCmd() *cobra.Command {
+	var apikey string
+	execCmd := func(name string, args ...string) ([]byte, error) {
+		ret, err := exec.Command(name, args...).Output()
+		if err != nil {
+			return nil, errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
+		}
+		return ret, nil
+	}
+	execCmdStdout := func(name string, args ...string) error {
+		cmd := exec.Command(name, args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		fmt.Printf("Running '%s %s'...\n", name, strings.Join(args, " "))
+		if err := cmd.Run(); err != nil {
+			return errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
+		}
+		return nil
+	}
+	checkToolExists := func(name string) error {
+		if _, err := execCmd(name, "--version"); err != nil {
+			return errors.Wrapf(err, "command not found: '%s'", name)
+		}
+		return nil
+	}
+	cmd := &cobra.Command{
+		Use:   "upgrade",
+		Short: "upgrade lekko to the latest version using homebrew",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(apikey) == 0 {
+				return errors.New("no api key provided")
+			}
+			for _, tool := range []string{"brew", "curl", "jq"} {
+				if err := checkToolExists(tool); err != nil {
+					return err
+				}
+			}
+			if err := execCmdStdout("brew", "tap", "lekkodev/lekko"); err != nil {
+				return err
+			}
+			brewRepoOutput, err := execCmd("brew", "--repo")
+			if err != nil {
+				return err
+			}
+			brewRepo := strings.TrimSpace(string(brewRepoOutput))
+			tokenScript := fmt.Sprintf("%s/Library/Taps/lekkodev/homebrew-lekko/gen_token.sh", string(brewRepo))
+			tokenOutput, err := execCmd(tokenScript)
+			if err != nil {
+				return err
+			}
+			token := strings.TrimSpace(string(tokenOutput))
+			envToSet := "HOMEBREW_GITHUB_API_TOKEN"
+			name := "brew"
+			args = []string{"upgrade", "lekko"}
+			upgradeCmd := exec.Command(name, args...)
+			upgradeCmd.Stdout = os.Stdout
+			upgradeCmd.Stderr = os.Stderr
+			upgradeCmd.Env = append(upgradeCmd.Env, fmt.Sprintf("%s=%s", envToSet, token))
+			fmt.Printf("Running '%s %s'...\n", name, strings.Join(args, " "))
+			if err := upgradeCmd.Run(); err != nil {
+				return errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&apikey, "apikey", "a", os.Getenv("LEKKO_APIKEY"), "apikey used to upgrade")
 	return cmd
 }
