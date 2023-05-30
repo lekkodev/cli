@@ -29,6 +29,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
+	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
@@ -147,24 +148,18 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 		return nil, errors.Wrap(err, "failed to get work tree")
 	}
 
-	defaultBranch, err := getDefaultBranchName(repo)
-	if err != nil {
-		return nil, errors.Wrap(err, "get default branch")
-	}
-
 	cr := &repository{
-		repo:          repo,
-		wt:            wt,
-		fs:            wt.Filesystem,
-		path:          path,
-		defaultBranch: defaultBranch,
+		repo: repo,
+		wt:   wt,
+		fs:   wt.Filesystem,
+		path: path,
 		log: &LoggingConfiguration{
 			Writer: os.Stdout,
 		},
 		bufEnabled: true,
 	}
 
-	return cr, nil
+	return cr, cr.storeDefaultBranchName(auth)
 }
 
 // Creates a local clone of a remote github config repository based on the
@@ -196,14 +191,7 @@ func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository
 		},
 		bufEnabled: true,
 	}
-	// the default branch is the current branch, since we cloned
-	// from the default branch.
-	defaultBranch, err := cr.BranchName()
-	if err != nil {
-		return nil, errors.Wrap(err, "branch name")
-	}
-	cr.defaultBranch = defaultBranch
-	return cr, nil
+	return cr, cr.storeDefaultBranchName(auth)
 }
 
 // Creates a new instance of Repo designed to work with ephemeral repos.
@@ -229,11 +217,9 @@ func NewEphemeral(url string, auth AuthProvider, branchName *string) (Configurat
 		wt:   wt,
 		fs:   wt.Filesystem,
 	}
-	defaultBranch, err := cr.BranchName()
-	if err != nil {
-		return nil, errors.Wrap(err, "branch name")
+	if err := cr.storeDefaultBranchName(auth); err != nil {
+		return nil, errors.Wrapf(err, "store default branch name")
 	}
-	cr.defaultBranch = defaultBranch
 	if branchName != nil {
 		return cr, cr.CheckoutRemoteBranch(*branchName)
 	}
@@ -245,12 +231,79 @@ func getDefaultBranchName(r *git.Repository) (string, error) {
 	if len(envName) > 0 {
 		return envName, nil
 	}
-	ref, err := r.Reference(plumbing.NewRemoteHEADReferenceName(RemoteName), true)
+	remoteHeadRefName := plumbing.NewRemoteHEADReferenceName(RemoteName)
+	ref, err := r.Reference(remoteHeadRefName, true)
 	if err != nil {
-		return "", errors.Wrapf(err, "remote reference for remote '%s'", RemoteName)
+		return "", errors.Wrapf(err, "remote reference not found '%s'", remoteHeadRefName)
 	}
 	parts := strings.Split(ref.Name().Short(), "/")
 	return parts[len(parts)-1], nil
+}
+
+// This method will check the git references for the git repository
+// and deduce what the default branch name is. The reference it is looking for
+// is the symbolic remote HEAD reference, which you can replicate on a
+// filesystem by running `cat .git/refs/remotes/origin/HEAD`.
+// If the above reference does not exist, this method will query the
+// remote url and determine what that reference points to, updating
+// its local filesystem to match. Thus, on subsequent runs, the default
+// branch name can be deduced appropriately.
+func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
+	defaultBranch, err := getDefaultBranchName(r.repo)
+	if err == nil {
+		r.defaultBranch = defaultBranch
+		return nil
+	}
+	// The local filesystem does not have enough info to deduce the
+	// default branch name. Query remote, and save the result
+	remote, err := r.repo.Remote(RemoteName)
+	if err != nil {
+		return errors.Wrap(err, "remote")
+	}
+	if len(remote.Config().URLs) == 0 {
+		return errors.Errorf("no urls found for '%s' remote config", RemoteName)
+	}
+
+	e, err := transport.NewEndpoint(remote.Config().URLs[0])
+	if err != nil {
+		return errors.Wrap(err, "new endpoint")
+	}
+
+	cli, err := gitclient.NewClient(e)
+	if err != nil {
+		return errors.Wrap(err, "new git client")
+	}
+
+	s, err := cli.NewUploadPackSession(e, basicAuth(ap))
+	if err != nil {
+		return errors.Wrap(err, "new upload pack session")
+	}
+
+	info, err := s.AdvertisedReferences()
+	if err != nil {
+		return errors.Wrap(err, "adv refs")
+	}
+
+	allrefs, err := info.AllReferences()
+	if err != nil {
+		return errors.Wrap(err, "all refs")
+	}
+	headReference, err := allrefs.Reference(plumbing.HEAD)
+	if err != nil {
+		return errors.Wrapf(err, "no head reference found in remote ref set")
+	}
+	defaultBranch = headReference.Target().Short()
+	// Now that we have the default branch according to remote,
+	// store the reference in the local filesystem so that it is
+	// available for subsequent runs of the cli.
+	refName := plumbing.NewRemoteHEADReferenceName(RemoteName)
+	targetName := plumbing.NewRemoteReferenceName(RemoteName, defaultBranch)
+	refToSet := plumbing.NewSymbolicReference(refName, targetName)
+	if err := r.repo.Storer.SetReference(refToSet); err != nil {
+		return errors.Wrap(err, "set reference")
+	}
+	r.defaultBranch = defaultBranch
+	return nil
 }
 
 func (r *repository) DefaultBranchName() string { return r.defaultBranch }
@@ -580,7 +633,7 @@ func (r *repository) NewRemoteBranch(branchName string) error {
 }
 
 func (r *repository) mirror(ctx context.Context, ap AuthProvider, url string) error {
-	ref := plumbing.NewBranchReferenceName(r.defaultBranch)
+	ref := plumbing.NewBranchReferenceName(r.DefaultBranchName())
 	remote, err := r.repo.CreateRemote(&config.RemoteConfig{
 		Name: "mirror",
 		URLs: []string{url},
