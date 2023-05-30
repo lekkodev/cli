@@ -15,8 +15,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -570,25 +572,36 @@ func restoreCmd() *cobra.Command {
 
 func upgradeCmd() *cobra.Command {
 	var apikey string
-	execCmd := func(name string, args ...string) ([]byte, error) {
-		ret, err := exec.Command(name, args...).Output()
+	type execReq struct {
+		stdout, stderr io.Writer
+		env            []string
+		verbose        bool
+	}
+	execCmd := func(ctx context.Context, req *execReq, name string, args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, name, args...)
+		stdout, stderr := bytes.NewBuffer(nil), bytes.NewBuffer(nil)
+		if req.stdout != nil {
+			cmd.Stdout = req.stdout
+		} else {
+			cmd.Stdout = stdout
+		}
+		if req.stderr != nil {
+			cmd.Stderr = req.stderr
+		} else {
+			cmd.Stderr = stderr
+		}
+		cmd.Env = append(cmd.Env, req.env...)
+		if req.verbose {
+			fmt.Printf("Running '%s %s'...\n", name, strings.Join(args, " "))
+		}
+		err := cmd.Run()
 		if err != nil {
 			return nil, errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
 		}
-		return ret, nil
+		return stdout.Bytes(), nil
 	}
-	execCmdStdout := func(name string, args ...string) error {
-		cmd := exec.Command(name, args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		fmt.Printf("Running '%s %s'...\n", name, strings.Join(args, " "))
-		if err := cmd.Run(); err != nil {
-			return errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
-		}
-		return nil
-	}
-	checkToolExists := func(name string) error {
-		if _, err := execCmd(name, "--version"); err != nil {
+	checkToolExists := func(ctx context.Context, name string) error {
+		if _, err := execCmd(ctx, &execReq{}, name, "--version"); err != nil {
 			return errors.Wrapf(err, "command not found: '%s'", name)
 		}
 		return nil
@@ -600,37 +613,45 @@ func upgradeCmd() *cobra.Command {
 			if len(apikey) == 0 {
 				return errors.New("no api key provided")
 			}
+			ctx := cmd.Context()
 			for _, tool := range []string{"brew", "curl", "jq"} {
-				if err := checkToolExists(tool); err != nil {
+				if err := checkToolExists(ctx, tool); err != nil {
 					return err
 				}
 			}
-			if err := execCmdStdout("brew", "tap", "lekkodev/lekko"); err != nil {
+			if _, err := execCmd(ctx, &execReq{
+				stdout:  os.Stdout,
+				stderr:  os.Stderr,
+				verbose: true,
+			}, "brew", "update"); err != nil {
 				return err
 			}
-			brewRepoOutput, err := execCmd("brew", "--repo")
+			if _, err := execCmd(ctx, &execReq{
+				stdout:  os.Stdout,
+				stderr:  os.Stderr,
+				verbose: true,
+			}, "brew", "tap", "lekkodev/lekko"); err != nil {
+				return err
+			}
+			brewRepoOutput, err := execCmd(ctx, &execReq{}, "brew", "--repo")
 			if err != nil {
 				return err
 			}
 			brewRepo := strings.TrimSpace(string(brewRepoOutput))
-			tokenScript := fmt.Sprintf("%s/Library/Taps/lekkodev/homebrew-lekko/gen_token.sh", string(brewRepo))
-			tokenOutput, err := execCmd(tokenScript)
+			tokenScript := fmt.Sprintf("%s/Library/Taps/lekkodev/homebrew-lekko/gen_token.sh", brewRepo)
+			tokenOutput, err := execCmd(ctx, &execReq{}, tokenScript)
 			if err != nil {
 				return err
 			}
 			token := strings.TrimSpace(string(tokenOutput))
 			envToSet := "HOMEBREW_GITHUB_API_TOKEN"
-			name := "brew"
-			args = []string{"upgrade", "lekko"}
-			upgradeCmd := exec.Command(name, args...)
-			upgradeCmd.Stdout = os.Stdout
-			upgradeCmd.Stderr = os.Stderr
-			upgradeCmd.Env = append(upgradeCmd.Env, fmt.Sprintf("%s=%s", envToSet, token))
-			fmt.Printf("Running '%s %s'...\n", name, strings.Join(args, " "))
-			if err := upgradeCmd.Run(); err != nil {
-				return errors.Wrapf(err, "%s %s", name, strings.Join(args, " "))
-			}
-			return nil
+			_, err = execCmd(ctx, &execReq{
+				stdout:  os.Stdout,
+				stderr:  os.Stderr,
+				verbose: true,
+				env:     []string{fmt.Sprintf("%s=%s", envToSet, token)},
+			}, "brew", "upgrade", "lekko")
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&apikey, "apikey", "a", os.Getenv("LEKKO_APIKEY"), "apikey used to upgrade")
