@@ -644,6 +644,9 @@ func upgradeCmd() *cobra.Command {
 				return err
 			}
 			token := strings.TrimSpace(string(tokenOutput))
+			if len(token) == 0 {
+				return errors.New("failed to generate token")
+			}
 			envToSet := "HOMEBREW_GITHUB_API_TOKEN"
 			_, err = execCmd(ctx, &execReq{
 				stdout:  os.Stdout,
