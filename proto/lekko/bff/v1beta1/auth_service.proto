@@ -58,6 +58,7 @@ message LoginRequest {
 enum ChallengeName {
   CHALLENGE_NAME_UNSPECIFIED = 0;
   CHALLENGE_NAME_NEW_PASSWORD_REQUIRED = 1;
+  CHALLENGE_NAME_CONFIRM_USER = 2;
 }
 
 message LoginResponse {
