@@ -29,6 +29,7 @@ import "google/protobuf/struct.proto";
 //
 // !(A && B && C) || D can be represented by LogExp ( Not ( LogExp ( LogExp ( Atom(A) && Atom(B) ) && Atom (C))) || Atom(D))
 message Rule {
+  option deprecated = true;
   oneof rule {
     Atom atom = 1;
     Rule not = 2;
@@ -40,6 +41,7 @@ message Rule {
 // LogicalExpression operator applies a logical operator like "and" or "or" to two rules.
 // They are evaluated in the order expressed by the field numbers and field names, with "first_rule" first.
 message LogicalExpression {
+  option deprecated = true;
   Rule first_rule = 1;
   Rule second_rule = 2;
   LogicalOperator logical_operator = 3;
@@ -49,6 +51,7 @@ message LogicalExpression {
 // An atom always has a comparison operator and a context key, and can optionally
 // have a comparison value.
 message Atom {
+  option deprecated = true;
   string context_key = 1;
   // For the "PRESENT" operator, the comparison value should be null.
   google.protobuf.Value comparison_value = 2;
@@ -57,6 +60,7 @@ message Atom {
 }
 
 enum ComparisonOperator {
+  option deprecated = true;
   COMPARISON_OPERATOR_UNSPECIFIED = 0;
   // == only applies to number, string and bool values.
   COMPARISON_OPERATOR_EQUALS = 1;
@@ -80,6 +84,7 @@ enum ComparisonOperator {
 }
 
 enum LogicalOperator {
+  option deprecated = true;
   LOGICAL_OPERATOR_UNSPECIFIED = 0;
   LOGICAL_OPERATOR_AND = 1;
   LOGICAL_OPERATOR_OR = 2;

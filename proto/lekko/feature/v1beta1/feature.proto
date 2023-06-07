@@ -55,8 +55,8 @@ message Tree {
 }
 
 message Constraint {
-  // RulesLang string. All edits to ruleslang will be made to
-  // this string for now, and the ast will be derived from it.
+  // RulesLang string. Purely for readability. All edits to ruleslang
+  // are made through rule_ast_new instead.
   string rule = 1;
 
   // This can be empty. If non-empty, and the above rule evaluated to true,
@@ -69,7 +69,8 @@ message Constraint {
 
   // Rules AST used for rules evaluation. It is a strict derivative of the
   // string rule above.
-  lekko.rules.v1beta2.Rule rule_ast = 4;
+  // Deprecated: use rule_ast_new instead.
+  lekko.rules.v1beta2.Rule rule_ast = 4 [deprecated = true];
 
   // Rules AST used for rules evaluation. It is an n-ary tree.
   lekko.rules.v1beta3.Rule rule_ast_new = 5;
