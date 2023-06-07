@@ -15,11 +15,20 @@
 package rules
 
 import (
+	"fmt"
 	"strings"
 
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/types/known/structpb"
+)
+
+var (
+	ErrEmptyRule                error = fmt.Errorf("empty rule")
+	ErrUnknownLogicalOperator   error = fmt.Errorf("unknown logical operator")
+	ErrEmptyRuleComparisonValue error = fmt.Errorf("empty rule comparison value")
+	ErrMismatchedType           error = fmt.Errorf("mismatched context type")
+	ErrUnsupportedType          error = fmt.Errorf("unsupported type")
 )
 
 // v1beta3 refers to the version of the rules protobuf type in lekko.rules.v1beta3.rules.proto
@@ -206,4 +215,43 @@ func (v1b3 *v1beta3) evaluateStringComparator(co rulesv1beta3.ComparisonOperator
 	default:
 		return false, errors.Errorf("expected string comparison operator, got %v", co)
 	}
+}
+
+func getNumber(val interface{}) (float64, error) {
+	switch typed := val.(type) {
+	case int:
+		return float64(typed), nil
+	case int8:
+		return float64(typed), nil
+	case int16:
+		return float64(typed), nil
+	case int32:
+		return float64(typed), nil
+	case int64:
+		return float64(typed), nil
+	case uint:
+		return float64(typed), nil
+	case uint8:
+		return float64(typed), nil
+	case uint16:
+		return float64(typed), nil
+	case uint32:
+		return float64(typed), nil
+	case uint64:
+		return float64(typed), nil
+	case float32:
+		return float64(typed), nil
+	case float64:
+		return typed, nil
+	default:
+		return 0, errMismatchedType(val, "int", "float")
+	}
+}
+
+func errMismatchedType(actual interface{}, expected ...string) error {
+	return errors.Wrapf(ErrMismatchedType, "expected %v, got %T", strings.Join(expected, ","), actual)
+}
+
+func errUnsupportedType(co fmt.Stringer, actual *structpb.Value) error {
+	return errors.Wrapf(ErrUnsupportedType, "rule type %T for comparison operator %s", actual.GetKind(), co.String())
 }

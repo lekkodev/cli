@@ -21,6 +21,35 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const (
+	ContextKeyAge  = "age"
+	ContextKeyCity = "city"
+)
+
+type ctxBuilder struct {
+	c map[string]interface{}
+}
+
+func CtxBuilder() *ctxBuilder {
+	return &ctxBuilder{
+		c: make(map[string]interface{}),
+	}
+}
+
+func (cb *ctxBuilder) Age(val interface{}) *ctxBuilder {
+	cb.c[ContextKeyAge] = val
+	return cb
+}
+
+func (cb *ctxBuilder) City(val interface{}) *ctxBuilder {
+	cb.c[ContextKeyCity] = val
+	return cb
+}
+
+func (cb *ctxBuilder) B() map[string]interface{} {
+	return cb.c
+}
+
 // age ==
 func AgeEqualsV3(age float64) *rulesv1beta3.Atom {
 	return AgeV3("==", age)

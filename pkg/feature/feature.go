@@ -21,7 +21,6 @@ import (
 	"reflect"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg"
@@ -115,8 +114,7 @@ func FeatureTypeFromProto(ft featurev1beta1.FeatureType) FeatureType {
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
 
 type Rule struct {
-	Condition      string             // source of truth
-	ConditionAST   *rulesv1beta2.Rule // by-product of Condition
+	Condition      string // source of truth
 	ConditionASTV3 *rulesv1beta3.Rule
 	Value          interface{}
 }
@@ -435,64 +433,59 @@ func valFromJSON(encoded []byte) (*structpb.Value, error) {
 	return val, nil
 }
 
-func (f *Feature) AddBoolRule(rule string, ast *rulesv1beta2.Rule, astNew *rulesv1beta3.Rule, val bool) error {
+func (f *Feature) AddBoolRule(rule string, astNew *rulesv1beta3.Rule, val bool) error {
 	if f.FeatureType != FeatureTypeBool {
 		return newTypeMismatchErr(FeatureTypeBool, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
-		ConditionAST:   ast,
 		ConditionASTV3: astNew,
 		Value:          val,
 	})
 	return nil
 }
 
-func (f *Feature) AddStringRule(rule string, ast *rulesv1beta2.Rule, astNew *rulesv1beta3.Rule, val string) error {
+func (f *Feature) AddStringRule(rule string, astNew *rulesv1beta3.Rule, val string) error {
 	if f.FeatureType != FeatureTypeString {
 		return newTypeMismatchErr(FeatureTypeString, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
-		Condition:    rule,
-		ConditionAST: ast,
-		Value:        val,
+		Condition: rule,
+		Value:     val,
 	})
 	return nil
 }
 
-func (f *Feature) AddIntRule(rule string, ast *rulesv1beta2.Rule, astNew *rulesv1beta3.Rule, val int64) error {
+func (f *Feature) AddIntRule(rule string, astNew *rulesv1beta3.Rule, val int64) error {
 	if f.FeatureType != FeatureTypeInt {
 		return newTypeMismatchErr(FeatureTypeInt, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
-		ConditionAST:   ast,
 		ConditionASTV3: astNew,
 		Value:          val,
 	})
 	return nil
 }
 
-func (f *Feature) AddFloatRule(rule string, ast *rulesv1beta2.Rule, astNew *rulesv1beta3.Rule, val float64) error {
+func (f *Feature) AddFloatRule(rule string, astNew *rulesv1beta3.Rule, val float64) error {
 	if f.FeatureType != FeatureTypeFloat {
 		return newTypeMismatchErr(FeatureTypeFloat, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
-		ConditionAST:   ast,
 		ConditionASTV3: astNew,
 		Value:          val,
 	})
 	return nil
 }
 
-func (f *Feature) AddJSONRule(rule string, ast *rulesv1beta2.Rule, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
+func (f *Feature) AddJSONRule(rule string, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
 	if f.FeatureType != FeatureTypeJSON {
 		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
-		ConditionAST:   ast,
 		ConditionASTV3: astNew,
 		Value:          val,
 	})
@@ -528,7 +521,6 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 		}
 		tree.Constraints = append(tree.Constraints, &featurev1beta1.Constraint{
 			Rule:       rule.Condition,
-			RuleAst:    rule.ConditionAST,
 			RuleAstNew: rule.ConditionASTV3,
 			Value:      ruleAny,
 		})
@@ -558,7 +550,6 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		}
 		ret.Rules = append(ret.Rules, &Rule{
 			Condition:      constraint.Rule,
-			ConditionAST:   constraint.RuleAst,
 			ConditionASTV3: constraint.RuleAstNew,
 			Value:          ruleVal,
 		})
