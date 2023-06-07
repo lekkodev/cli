@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
@@ -81,7 +80,7 @@ func (v1b3 *v1beta3) evaluate(context map[string]interface{}) (*anypb.Any, []int
 }
 
 func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
-	passes, err := v1b3.evaluateRule(constraint.GetRuleAst(), constraint.GetRuleAstNew(), context)
+	passes, err := v1b3.evaluateRule(constraint.GetRuleAstNew(), context)
 	if err != nil {
 		return nil, false, []int{}, errors.Wrap(err, "processing")
 	}
@@ -109,22 +108,10 @@ func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map
 	return retVal, passes, []int{}, nil
 }
 
-func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta2.Rule, ruleV3 *rulesv1beta3.Rule, context map[string]interface{}) (bool, error) {
-	// evaluate using the new rule AST if it exists.
-	if ruleV3 != nil {
-		passes, err := rules.NewV1Beta3(ruleV3).EvaluateRule(context)
-		if err != nil {
-			return false, errors.Wrap(err, "evaluating rule v3")
-		}
-		return passes, nil
-	}
-	if rule == nil {
-		// empty rule evaluates to 'true'
-		return true, nil
-	}
-	passes, err := rules.NewV1Beta2(rule).EvaluateRule(context)
+func (v1b3 *v1beta3) evaluateRule(ruleV3 *rulesv1beta3.Rule, context map[string]interface{}) (bool, error) {
+	passes, err := rules.NewV1Beta3(ruleV3).EvaluateRule(context)
 	if err != nil {
-		return false, errors.Wrap(err, "evaluating rule")
+		return false, errors.Wrap(err, "evaluating rule v3")
 	}
 	return passes, nil
 }

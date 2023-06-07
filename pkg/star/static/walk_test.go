@@ -20,7 +20,7 @@ import (
 	"testing"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/star/prototypes"
 	testdatav1beta1 "github.com/lekkodev/cli/pkg/star/static/testdata/gen/testproto/v1beta1"
@@ -188,12 +188,12 @@ func TestWalkerMutateAddRule(t *testing.T) {
 
 	f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
 		Rule: "age == 12",
-		RuleAst: &rulesv1beta2.Rule{
-			Rule: &rulesv1beta2.Rule_Atom{
-				Atom: &rulesv1beta2.Atom{
+		RuleAstNew: &rulesv1beta3.Rule{
+			Rule: &rulesv1beta3.Rule_Atom{
+				Atom: &rulesv1beta3.Atom{
 					ContextKey:         "age",
 					ComparisonValue:    structpb.NewNumberValue(12),
-					ComparisonOperator: rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+					ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
 				},
 			},
 		},
@@ -222,12 +222,12 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
 
 	f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
 		Rule: "age == 12",
-		RuleAst: &rulesv1beta2.Rule{
-			Rule: &rulesv1beta2.Rule_Atom{
-				Atom: &rulesv1beta2.Atom{
+		RuleAstNew: &rulesv1beta3.Rule{
+			Rule: &rulesv1beta3.Rule_Atom{
+				Atom: &rulesv1beta3.Atom{
 					ContextKey:         "age",
 					ComparisonValue:    structpb.NewNumberValue(12),
-					ComparisonOperator: rulesv1beta2.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+					ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
 				},
 			},
 		},
