@@ -25,6 +25,7 @@ import (
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg/go/protomodule"
+	"go.starlark.net/lib/math"
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
@@ -74,6 +75,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 		"proto":   protoModule,
 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"math":    math.Module,
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
