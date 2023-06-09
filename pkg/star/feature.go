@@ -42,7 +42,7 @@ const (
 )
 
 var (
-	allowedAttrNames map[string]struct{} = map[string]struct{}{
+	allowedAttrNamesMap map[string]struct{} = map[string]struct{}{
 		DefaultValueAttrName: {},
 		DescriptionAttrName:  {},
 		RulesAttrName:        {},
@@ -50,6 +50,19 @@ var (
 		unitTestsAttrName:    {},
 	}
 )
+
+func allowedAttrName(name string) bool {
+	_, ok := allowedAttrNamesMap[name]
+	return ok
+}
+
+func allowedAttrNames() []string {
+	var ret []string
+	for name := range allowedAttrNamesMap {
+		ret = append(ret, name)
+	}
+	return ret
+}
 
 func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
@@ -156,8 +169,8 @@ func (fb *featureBuilder) getValidator(featureVal *starlarkstruct.Struct) (starl
 
 func (fb *featureBuilder) validateFeature(featureVal *starlarkstruct.Struct) error {
 	for _, attr := range featureVal.AttrNames() {
-		if _, ok := allowedAttrNames[attr]; !ok {
-			return fmt.Errorf("result attribute name %s not supported. use one of: %v", attr, featureVal.AttrNames())
+		if !allowedAttrName(attr) {
+			return fmt.Errorf("result attribute name %s not supported. use one of: %v", attr, allowedAttrNames())
 		}
 	}
 	return nil
