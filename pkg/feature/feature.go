@@ -450,8 +450,9 @@ func (f *Feature) AddStringRule(rule string, astNew *rulesv1beta3.Rule, val stri
 		return newTypeMismatchErr(FeatureTypeString, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
-		Condition: rule,
-		Value:     val,
+		Condition:      rule,
+		ConditionASTV3: astNew,
+		Value:          val,
 	})
 	return nil
 }
