@@ -25,7 +25,7 @@ import (
 )
 
 func testFile(t *testing.T) *build.File {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	p := butils.GetParser(InputTypeAuto)
 	file, err := p("test.star", starBytes)
 	require.NoError(t, err, "failed to parse test star file")
@@ -33,7 +33,7 @@ func testFile(t *testing.T) *build.File {
 }
 
 func TestTraverseNoop(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	f := testFile(t)
 	tvs := newTraverser(f)
 	err := tvs.traverse()

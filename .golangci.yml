@@ -53,4 +53,5 @@ linters:
     - varcheck
     - wastedassign
     - whitespace
+    - unparam
   disable-all: true
