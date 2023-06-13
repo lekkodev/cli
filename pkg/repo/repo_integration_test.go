@@ -20,6 +20,7 @@ package repo
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,10 +106,19 @@ func testConstructor(t *testing.T, tmpDir string, ap AuthProvider) *repository {
 
 func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.GithubClient, ap AuthProvider) string {
 	// Add feature, so we have some changes in our working directory.
-	namespace, featureName := "default", "test"
-	path, err := r.AddFeature(ctx, namespace, featureName, feature.FeatureTypeBool, "")
-	require.NoError(t, err)
-	t.Logf("wrote feature to path %s\n", path)
+	namespace := "default"
+	getFeatureName := func(ft string) string {
+		return fmt.Sprintf("integration_test_%s", ft)
+	}
+	for _, fType := range feature.FeatureTypes() {
+		var protoMessageName string
+		if feature.FeatureType(fType) == feature.FeatureTypeProto {
+			protoMessageName = "google.protobuf.BoolValue"
+		}
+		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), feature.FeatureType(fType), protoMessageName)
+		require.NoError(t, err)
+		t.Logf("wrote feature to path %s\n", path)
+	}
 	// Compile
 	rootMD, _, err := r.ParseMetadata(ctx)
 	require.NoError(t, err)
@@ -118,15 +128,23 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	clear := r.ConfigureLogger(&LoggingConfiguration{Writer: &b, ColorsDisabled: true})
 	defer clear()
 	result, err := r.Compile(ctx, &CompileRequest{
-		Registry:        registry,
-		NamespaceFilter: namespace,
-		FeatureFilter:   featureName,
-		DryRun:          false,
+		Registry: registry,
+		DryRun:   false,
 	})
 	require.NoError(t, err)
-	assert.Len(t, result, 1)
-	require.NoError(t, result[0].Err())
+	assert.GreaterOrEqual(t, len(result), 6)
+	for _, fcr := range result {
+		require.NoErrorf(t, fcr.Err(), "%s/%s compilation result should have no error", fcr.NamespaceName, fcr.FeatureName)
+	}
 	assert.NotEmpty(t, b.String())
+	// Eval
+	for _, fType := range feature.FeatureTypes() {
+		evalResult, evalType, resultPath, err := r.Eval(ctx, namespace, getFeatureName(fType), nil)
+		require.NoError(t, err)
+		require.NotNil(t, evalResult)
+		require.Equal(t, fType, string(evalType))
+		require.Len(t, resultPath, 0)
+	}
 	// Review
 	url, err := r.Review(ctx, "Test PR", ghCli, ap)
 	require.NoError(t, err)
