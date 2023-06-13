@@ -469,7 +469,7 @@ func (r *repository) cleanupBranch(ctx context.Context, branchName *string, ap A
 	}
 	// now, we are on default and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
-	if err := r.repo.Push(&git.PushOptions{
+	if err := r.repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: RemoteName,
 		// Note: the fact that the source ref is empty means this is a delete. This is
 		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.

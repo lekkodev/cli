@@ -73,9 +73,9 @@ func typedVals(t *testing.T, ft feature.FeatureType) (defaultVal testVal, ruleVa
 	return
 }
 
-func testStar(t *testing.T, ft feature.FeatureType) (testVal, testVal, []byte) {
+func testStar(t *testing.T, ft feature.FeatureType) (testVal, []byte) {
 	val, ruleVal := typedVals(t, ft)
-	return val, ruleVal, []byte(fmt.Sprintf(`result = feature(
+	return val, []byte(fmt.Sprintf(`result = feature(
     description = "this is a simple feature",
     default = %s,
     rules = [
@@ -98,7 +98,7 @@ func testWalker(t *testing.T, testStar []byte) *walker {
 }
 
 func TestWalkerBuild(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestWalkerBuild(t *testing.T) {
 }
 
 func TestWalkerBuildJSON(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
+	_, starBytes := testStar(t, feature.FeatureTypeJSON)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestWalkerBuildJSON(t *testing.T) {
 func TestWalkerMutateNoop(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {
-			_, _, starBytes := testStar(t, fType)
+			_, starBytes := testStar(t, fType)
 			b := testWalker(t, starBytes)
 			f, err := b.Build()
 			require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestWalkerMutateNoop(t *testing.T) {
 }
 
 func TestWalkerMutateDefault(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -147,7 +147,7 @@ func TestWalkerMutateDefault(t *testing.T) {
 }
 
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -162,7 +162,7 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 }
 
 func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -177,7 +177,7 @@ func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
 }
 
 func TestWalkerMutateAddRule(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -240,7 +240,7 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
 }
 
 func TestWalkerMutateRemoveRule(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, feature.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -278,7 +278,7 @@ func TestWalkerMutateRemoveOnlyRule(t *testing.T) {
 func TestWalkerMutateDescription(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {
-			_, _, starBytes := testStar(t, fType)
+			_, starBytes := testStar(t, fType)
 			b := testWalker(t, starBytes)
 			f, err := b.Build()
 			require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestWalkerMutateDescription(t *testing.T) {
 }
 
 func TestWalkerMutateTypeMismatch(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeFloat)
+	_, starBytes := testStar(t, feature.FeatureTypeFloat)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -308,7 +308,7 @@ func TestWalkerMutateTypeMismatch(t *testing.T) {
 }
 
 func TestWalkerMutateDefaultFloat(t *testing.T) {
-	val, _, starBytes := testStar(t, feature.FeatureTypeFloat)
+	val, starBytes := testStar(t, feature.FeatureTypeFloat)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -326,7 +326,7 @@ func TestWalkerMutateDefaultFloat(t *testing.T) {
 }
 
 func TestWalkerMutateDefaultInt(t *testing.T) {
-	val, _, starBytes := testStar(t, feature.FeatureTypeInt)
+	val, starBytes := testStar(t, feature.FeatureTypeInt)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -344,7 +344,7 @@ func TestWalkerMutateDefaultInt(t *testing.T) {
 }
 
 func TestWalkerMutateDefaultString(t *testing.T) {
-	val, _, starBytes := testStar(t, feature.FeatureTypeString)
+	val, starBytes := testStar(t, feature.FeatureTypeString)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
@@ -363,7 +363,7 @@ func TestWalkerMutateDefaultString(t *testing.T) {
 }
 
 func TestWalkerMutateDefaultJSON(t *testing.T) {
-	_, _, starBytes := testStar(t, feature.FeatureTypeJSON)
+	_, starBytes := testStar(t, feature.FeatureTypeJSON)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
