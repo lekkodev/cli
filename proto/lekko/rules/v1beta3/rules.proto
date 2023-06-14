@@ -24,6 +24,7 @@ import "google/protobuf/struct.proto";
 // 2. Not -> This negates the result of the underlying Rule.
 // 3. LogicalExpression -> This rule links at least two rules through an "and" or an "or".
 // 4. BoolConst -> true or false. This will be used for higher level short-circuits.
+// 5. CallExpression -> This rule is a function call that returns true or false.
 // Parentheses and other logical constructs can all be represented by the correct
 // construction of this rule tree.
 //
@@ -34,6 +35,7 @@ message Rule {
     Rule not = 2;
     LogicalExpression logical_expression = 3;
     bool bool_const = 4;
+    CallExpression call_expression = 5;
   }
 }
 
@@ -84,4 +86,30 @@ enum LogicalOperator {
   LOGICAL_OPERATOR_UNSPECIFIED = 0;
   LOGICAL_OPERATOR_AND = 1;
   LOGICAL_OPERATOR_OR = 2;
+}
+
+// CallExpression represents a function call, e.g. f(a, b, c).
+// Each function has a specific signature, so a CallExpression is
+// expressed as one of the different supported functions.
+message CallExpression {
+  // Example signature
+  // message Example {
+  //   uint32 x = 1;
+  //   string y = 2;
+  // }
+
+  // Bucketing function for percentage-based context evaluation
+  message Bucket {
+    string context_key = 1;
+    // Threshold for dividing buckets.
+    // Stored as an integer in the range [0, 100000] instead of a double
+    // to avoid potential precision issues while supporting up to 3
+    // decimal places to users.
+    // e.g. threshold = 75125 -> 75.125%
+    uint32 threshold = 2;
+  }
+
+  oneof function {
+    Bucket bucket = 1;
+  }
 }
