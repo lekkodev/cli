@@ -61,7 +61,12 @@ func BuildDynamicTypeRegistry(ctx context.Context, protoDir string, provider fs.
 }
 
 // Note: this method is not safe to be run on ephemeral repos, as it invokes the buf cmd line.
-func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, cw fs.ConfigWriter) (*SerializableTypes, error) {
+func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, useExternalTypes bool, cw fs.ConfigWriter) (*SerializableTypes, error) {
+	if useExternalTypes {
+		// If using external types, don't rebuild the protobuf file descriptor set because
+		// it was imported from elsewhere. Simply use it.
+		return BuildDynamicTypeRegistry(ctx, protoDir, cw)
+	}
 	if err := checkBufExists(); err != nil {
 		return nil, err
 	}

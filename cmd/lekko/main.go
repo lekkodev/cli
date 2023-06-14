@@ -130,7 +130,7 @@ func compileCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse metadata")
 			}
-			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
 			if err != nil {
 				return errors.Wrap(err, "rebuild type registry")
 			}
@@ -184,7 +184,7 @@ func verifyCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse metadata")
 			}
-			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
 			if err != nil {
 				return errors.Wrap(err, "rebuild type registry")
 			}
@@ -550,7 +550,7 @@ func restoreCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "parse metadata")
 			}
-			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
 			if err != nil {
 				return errors.Wrap(err, "rebuild type registry")
 			}

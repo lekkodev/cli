@@ -46,7 +46,7 @@ type ConfigurationStore interface {
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
 	Verify(ctx context.Context, req *VerifyRequest) error
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
-	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
+	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
 	Format(ctx context.Context, verbose bool) error
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error)
@@ -509,11 +509,11 @@ func (r *repository) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath 
 // Note: we don't have a way yet to run this from an ephemeral repo,
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
-func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error) {
+func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error) {
 	if !r.bufEnabled {
 		return nil, errors.New("buf cmd line not enabled")
 	}
-	sTypes, err := prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, r)
+	sTypes, err := prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, useExternalTypes, r)
 	if err != nil {
 		return nil, err
 	}
