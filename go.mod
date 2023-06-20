@@ -3,8 +3,8 @@ module github.com/lekkodev/cli
 go 1.19
 
 require (
-	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230607172306-0b4839cf5164.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230607172306-0b4839cf5164.1
+	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230614183715-890c7a85aff8.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230614183715-890c7a85aff8.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/bufbuild/connect-go v1.8.0
@@ -12,7 +12,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/google/go-github/v52 v52.0.0
-	github.com/lekkodev/rules v1.5.2-0.20230404221103-5b5ef75b9fd6
+	github.com/lekkodev/rules v1.5.2
 	github.com/migueleliasweb/go-github-mock v0.0.16
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/olekukonko/tablewriter v0.0.5
@@ -32,7 +32,7 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/acomagu/bufpipe v1.0.3 // indirect
-	github.com/antlr/antlr4/runtime/Go/antlr/v4 v4.0.0-20230305170008-8188dc5388df // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cli/safeexec v1.0.0 // indirect
 	github.com/cloudflare/circl v1.1.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
@@ -66,7 +66,7 @@ require (
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/xanzy/ssh-agent v0.3.0 // indirect
 	golang.org/x/crypto v0.7.0 // indirect
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
+	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/term v0.7.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
