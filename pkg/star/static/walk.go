@@ -241,17 +241,12 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 	return func(rulesW *rulesWrapper) error {
 		for i, r := range rulesW.rules {
 			rulesLang := r.conditionV.Value
-			ast, err := parser.BuildAST(rulesLang)
-			if err != nil {
-				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
-			}
 			astNew, err := parser.BuildASTV3(rulesLang)
 			if err != nil {
 				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
 			}
 			rule := &featurev1beta1.Constraint{
 				Rule:       rulesLang,
-				RuleAst:    ast,
 				RuleAstNew: astNew,
 			}
 			protoVal, featureType, err := w.extractValue(&r.v, f)
