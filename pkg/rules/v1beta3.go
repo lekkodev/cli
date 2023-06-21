@@ -41,11 +41,11 @@ func NewV1Beta3(rule *rulesv1beta3.Rule) *v1beta3 {
 	return &v1beta3{rule: rule}
 }
 
-func (v1b3 *v1beta3) EvaluateRule(context map[string]interface{}) (bool, error) {
-	return v1b3.evaluateRule(v1b3.rule, context)
+func (v1b3 *v1beta3) EvaluateRule(featureCtx map[string]interface{}) (bool, error) {
+	return v1b3.evaluateRule(v1b3.rule, featureCtx)
 }
 
-func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]interface{}) (bool, error) {
+func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, featureCtx map[string]interface{}) (bool, error) {
 	if rule == nil {
 		return false, ErrEmptyRule
 	}
@@ -53,7 +53,7 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 	case *rulesv1beta3.Rule_BoolConst:
 		return r.BoolConst, nil
 	case *rulesv1beta3.Rule_Not:
-		innerPasses, err := v1b3.evaluateRule(r.Not, context)
+		innerPasses, err := v1b3.evaluateRule(r.Not, featureCtx)
 		if err != nil {
 			return false, errors.Wrap(err, "not: ")
 		}
@@ -64,7 +64,7 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 			return false, errors.New("no rules found in logical expression")
 		}
 		for i, rule := range r.LogicalExpression.GetRules() {
-			passes, err := v1b3.evaluateRule(rule, context)
+			passes, err := v1b3.evaluateRule(rule, featureCtx)
 			if err != nil {
 				return false, errors.Wrapf(err, "rule idx %d", i)
 			}
@@ -73,7 +73,7 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, context map[string]in
 		return reduce(bools, r.LogicalExpression.LogicalOperator)
 	case *rulesv1beta3.Rule_Atom:
 		contextKey := r.Atom.GetContextKey()
-		runtimeCtxVal, present := context[contextKey]
+		runtimeCtxVal, present := featureCtx[contextKey]
 		if r.Atom.ComparisonOperator == rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_PRESENT {
 			return present, nil
 		}
