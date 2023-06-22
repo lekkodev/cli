@@ -76,7 +76,7 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 				return "", errors.Wrap(err, "branch add commit push")
 			}
 		} else { // push (does nothing if there's nothing to push)
-			if err := r.Push(ctx, ap, branchName); err != nil {
+			if err := r.Push(ctx, ap, branchName, false); err != nil {
 				return "", errors.Wrap(err, "push")
 			}
 		}

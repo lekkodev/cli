@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/go-git/go-billy/v5"
 	"github.com/go-git/go-billy/v5/memfs"
 	"github.com/go-git/go-git/v5"
@@ -38,7 +39,8 @@ import (
 )
 
 const (
-	RemoteName = "origin"
+	RemoteName        = "origin"
+	backoffMaxElapsed = 7 * time.Second
 )
 
 var (
@@ -81,7 +83,7 @@ type GitRepository interface {
 	// pull from remote to ensure we are on the latest commit.
 	Cleanup(ctx context.Context, branchName *string, ap AuthProvider) error
 	// Pull the latest changes from the given branch name.
-	Pull(ap AuthProvider, branchName string) error
+	Pull(ctx context.Context, ap AuthProvider, branchName string) error
 	// Returns the hash of the current commit that HEAD is pointing to.
 	Hash() (string, error)
 	BranchName() (string, error)
@@ -391,7 +393,7 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	if err != nil {
 		return "", errors.Wrap(err, "branch name")
 	}
-	if err := r.Push(ctx, ap, branchName); err != nil {
+	if err := r.Push(ctx, ap, branchName, false); err != nil {
 		return "", errors.Wrap(err, "push")
 	}
 	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
@@ -406,37 +408,55 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 	if err := r.cleanupBranch(ctx, branchName, ap); err != nil {
 		return errors.Wrap(err, "cleanup branch")
 	}
-	if err := r.ensureDefaultBranch(ap); err != nil {
+	if err := r.ensureDefaultBranch(ctx, ap); err != nil {
 		return errors.Wrap(err, "ensure default branch")
 	}
 	r.Logf("Pulled from remote. Local branch %s is up to date.\n", r.DefaultBranchName())
 	return nil
 }
 
-func (r *repository) Pull(ap AuthProvider, branchName string) error {
-	if err := r.wt.Pull(&git.PullOptions{
-		RemoteName:    RemoteName,
-		Auth:          basicAuth(ap),
-		ReferenceName: plumbing.NewBranchReferenceName(branchName),
-	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return errors.Wrap(err, "failed to pull")
+func (r *repository) Pull(ctx context.Context, ap AuthProvider, branchName string) error {
+	operation := func() error {
+		if err := r.wt.PullContext(ctx, &git.PullOptions{
+			RemoteName:    RemoteName,
+			Auth:          basicAuth(ap),
+			ReferenceName: plumbing.NewBranchReferenceName(branchName),
+		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return errors.Wrap(err, "failed to pull")
+		}
+		return nil
 	}
-	return nil
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = backoffMaxElapsed
+	return backoff.Retry(operation, backoff.WithContext(b, ctx))
 }
 
-func (r *repository) Push(ctx context.Context, ap AuthProvider, branchName string) error {
+func (r *repository) Push(ctx context.Context, ap AuthProvider, branchName string, deleteOnRemote bool) error {
 	ref := plumbing.NewBranchReferenceName(branchName)
-	if err := r.repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: RemoteName,
-		// We push only the branch provided. To understand how refspecs
-		// are constructed, see https://git-scm.com/book/en/v2/Git-Internals-The-Refspec
-		// and https://stackoverflow.com/a/48430450.
-		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
-		Auth:     basicAuth(ap),
-	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return errors.Wrap(err, "failed to push")
+	var refspec config.RefSpec
+	if deleteOnRemote {
+		// Note: the fact that the source ref is empty means this is a delete. This is
+		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
+		refspec = config.RefSpec(fmt.Sprintf(":%s", ref))
+	} else {
+		refspec = config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))
 	}
-	return nil
+	operation := func() error {
+		if err := r.repo.PushContext(ctx, &git.PushOptions{
+			RemoteName: RemoteName,
+			// We push only the branch provided. To understand how refspecs
+			// are constructed, see https://git-scm.com/book/en/v2/Git-Internals-The-Refspec
+			// and https://stackoverflow.com/a/48430450.
+			RefSpecs: []config.RefSpec{refspec},
+			Auth:     basicAuth(ap),
+		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			return errors.Wrap(err, "failed to push")
+		}
+		return nil
+	}
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = backoffMaxElapsed
+	return backoff.Retry(operation, backoff.WithContext(b, ctx))
 }
 
 func (r *repository) cleanupBranch(ctx context.Context, branchName *string, ap AuthProvider) error {
@@ -469,13 +489,7 @@ func (r *repository) cleanupBranch(ctx context.Context, branchName *string, ap A
 	}
 	// now, we are on default and need to delete branchToCleanup. First, delete on remote.
 	localBranchRef := plumbing.NewBranchReferenceName(branchToCleanup)
-	if err := r.repo.PushContext(ctx, &git.PushOptions{
-		RemoteName: RemoteName,
-		// Note: the fact that the source ref is empty means this is a delete. This is
-		// equivalent to doing `git push origin --delete <branch_name> on the cmd line.
-		RefSpecs: []config.RefSpec{config.RefSpec(fmt.Sprintf(":%s", localBranchRef))},
-		Auth:     basicAuth(ap),
-	}); err != nil {
+	if err := r.Push(ctx, ap, branchToCleanup, true); err != nil {
 		if errors.Is(err, git.NoErrAlreadyUpToDate) {
 			r.Logf("Remote branch %s already up to date\n", localBranchRef)
 		} else {
@@ -513,7 +527,7 @@ func (r *repository) headHash() (*plumbing.Hash, error) {
 	return &hash, nil
 }
 
-func (r *repository) ensureDefaultBranch(ap AuthProvider) error {
+func (r *repository) ensureDefaultBranch(ctx context.Context, ap AuthProvider) error {
 	h, err := r.repo.Head()
 	if err != nil {
 		return errors.Wrap(err, "head")
@@ -533,7 +547,7 @@ func (r *repository) ensureDefaultBranch(ap AuthProvider) error {
 		}
 		return nil
 	}
-	if err := r.Pull(ap, r.DefaultBranchName()); err != nil {
+	if err := r.Pull(ctx, ap, r.DefaultBranchName()); err != nil {
 		return errors.Wrap(err, "pull default")
 	}
 	return nil
