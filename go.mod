@@ -6,6 +6,7 @@ require (
 	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230614183715-890c7a85aff8.1
 	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230614183715-890c7a85aff8.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
+	github.com/OneOfOne/xxhash v1.2.8
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/bufbuild/connect-go v1.8.0
 	github.com/cli/browser v1.0.0

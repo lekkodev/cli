@@ -117,6 +117,11 @@ func (v1b3 *v1beta3) evaluateRule(rule *rulesv1beta3.Rule, featureCtx map[string
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			return v1b3.evaluateStringComparator(r.Atom.ComparisonOperator, r.Atom.GetComparisonValue(), runtimeCtxVal)
 		}
+	case *rulesv1beta3.Rule_CallExpression:
+		switch f := r.CallExpression.Function.(type) {
+		case *rulesv1beta3.CallExpression_Bucket_:
+			return v1b3.evaluateBucket(f.Bucket, featureCtx)
+		}
 	}
 	return false, errors.Errorf("unknown rule type %T", rule.Rule)
 }
