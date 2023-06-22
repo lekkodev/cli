@@ -37,7 +37,7 @@ type EvaluableFeature interface {
 	// For user defined protos, we shouldn't attempt to Unmarshal
 	// this unless we know the type. For primitive types, we can
 	// safely unmarshal into BoolValue, StringValue, etc.
-	Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error)
+	Evaluate(featureCtx map[string]interface{}) (*anypb.Any, ResultPath, error)
 	// Returns the feature type (bool, string, json, proto, etc)
 	// or "" if the type is not supported
 	Type() FeatureType
@@ -49,18 +49,19 @@ type ResultPath []int
 
 type v1beta3 struct {
 	*featurev1beta1.Feature
+	namespace string
 }
 
-func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
-	return &v1beta3{f}
+func NewV1Beta3(f *featurev1beta1.Feature, namespace string) EvaluableFeature {
+	return &v1beta3{f, namespace}
 }
 
 func (v1b3 *v1beta3) Type() FeatureType {
 	return FeatureTypeFromProto(v1b3.GetType())
 }
 
-func (v1b3 *v1beta3) Evaluate(evalContext map[string]interface{}) (*anypb.Any, ResultPath, error) {
-	return v1b3.evaluate(evalContext)
+func (v1b3 *v1beta3) Evaluate(featureCtx map[string]interface{}) (*anypb.Any, ResultPath, error) {
+	return v1b3.evaluate(featureCtx)
 }
 
 func (v1b3 *v1beta3) evaluate(context map[string]interface{}) (*anypb.Any, []int, error) {
@@ -79,8 +80,8 @@ func (v1b3 *v1beta3) evaluate(context map[string]interface{}) (*anypb.Any, []int
 	return v1b3.GetTree().Default, []int{}, nil
 }
 
-func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map[string]interface{}) (*anypb.Any, bool, []int, error) {
-	passes, err := v1b3.evaluateRule(constraint.GetRuleAstNew(), context)
+func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, featureCtx map[string]interface{}) (*anypb.Any, bool, []int, error) {
+	passes, err := v1b3.evaluateRule(constraint.GetRuleAstNew(), featureCtx)
 	if err != nil {
 		return nil, false, []int{}, errors.Wrap(err, "processing")
 	}
@@ -91,7 +92,7 @@ func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map
 	// rule passed
 	retVal := constraint.Value // may be null
 	for i, child := range constraint.GetConstraints() {
-		childVal, childPasses, childPath, err := v1b3.traverse(child, context)
+		childVal, childPasses, childPath, err := v1b3.traverse(child, featureCtx)
 		if err != nil {
 			return nil, false, []int{}, errors.Wrapf(err, "traverse %d", i)
 		}
@@ -108,8 +109,8 @@ func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, context map
 	return retVal, passes, []int{}, nil
 }
 
-func (v1b3 *v1beta3) evaluateRule(ruleV3 *rulesv1beta3.Rule, context map[string]interface{}) (bool, error) {
-	passes, err := rules.NewV1Beta3(ruleV3).EvaluateRule(context)
+func (v1b3 *v1beta3) evaluateRule(ruleV3 *rulesv1beta3.Rule, featureCtx map[string]interface{}) (bool, error) {
+	passes, err := rules.NewV1Beta3(ruleV3, rules.EvalContext{Namespace: v1b3.namespace, FeatureName: v1b3.Key}).EvaluateRule(featureCtx)
 	if err != nil {
 		return false, errors.Wrap(err, "evaluating rule v3")
 	}

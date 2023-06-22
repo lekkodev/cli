@@ -235,13 +235,13 @@ func featureEval() *cobra.Command {
 			if len(jsonContext) == 0 {
 				jsonContext = "{}"
 			}
-			ctxMap := make(map[string]interface{})
-			if err := json.Unmarshal([]byte(jsonContext), &ctxMap); err != nil {
+			featureCtx := make(map[string]interface{})
+			if err := json.Unmarshal([]byte(jsonContext), &featureCtx); err != nil {
 				return err
 			}
 			fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
 			fmt.Printf("-------------------\n")
-			anyVal, fType, path, err := r.Eval(ctx, ns, featureName, ctxMap)
+			anyVal, fType, path, err := r.Eval(ctx, ns, featureName, featureCtx)
 			if err != nil {
 				return err
 			}

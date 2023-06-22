@@ -77,15 +77,17 @@ type Builder interface {
 
 type featureBuilder struct {
 	featureName string
+	namespace   string
 	globals     starlark.StringDict
 	validator   starlark.Callable
 	nv          feature.NamespaceVersion
 	registry    *protoregistry.Types
 }
 
-func newFeatureBuilder(featureName string, globals starlark.StringDict, nv feature.NamespaceVersion, registry *protoregistry.Types) Builder {
+func newFeatureBuilder(featureName string, namespace string, globals starlark.StringDict, nv feature.NamespaceVersion, registry *protoregistry.Types) Builder {
 	return &featureBuilder{
 		featureName: featureName,
+		namespace:   namespace,
 		globals:     globals,
 		nv:          nv,
 		registry:    registry,
@@ -122,6 +124,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "description")
 	}
+	f.Namespace = fb.namespace
 
 	ruleVals, err := fb.addRules(f, featureVal)
 	if err != nil {

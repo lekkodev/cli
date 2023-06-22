@@ -53,7 +53,7 @@ type ConfigurationStore interface {
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
-	Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error)
+	Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error)
 	Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
@@ -811,7 +811,7 @@ func (r *repository) RemoveNamespace(ctx context.Context, ns string) error {
 	return nil
 }
 
-func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error) {
+func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, feature.FeatureType, feature.ResultPath, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, "", nil, errors.Wrap(err, "parse metadata")
@@ -834,7 +834,7 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, iCtx map[
 	if err != nil {
 		return nil, "", nil, err
 	}
-	ret, path, err := evalF.Evaluate(iCtx)
+	ret, path, err := evalF.Evaluate(featureCtx)
 	return ret, evalF.Type(), path, err
 }
 

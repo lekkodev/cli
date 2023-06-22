@@ -23,14 +23,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var testEvalCtx = EvalContext{
+	Namespace:   "namespace",
+	FeatureName: "feature",
+}
+
 func TestBoolConstV3(t *testing.T) {
 	for _, b := range []bool{true, false} {
 		t.Run(fmt.Sprintf("test bool %v", b), func(t *testing.T) {
-			result, err := NewV1Beta3(&rulesv1beta3.Rule{
-				Rule: &rulesv1beta3.Rule_BoolConst{
-					BoolConst: b,
+			result, err := NewV1Beta3(
+				&rulesv1beta3.Rule{
+					Rule: &rulesv1beta3.Rule_BoolConst{
+						BoolConst: b,
+					},
 				},
-			}).EvaluateRule(nil)
+				testEvalCtx,
+			).EvaluateRule(nil)
 			require.NoError(t, err)
 			assert.Equal(t, b, result)
 		})
@@ -38,11 +46,14 @@ func TestBoolConstV3(t *testing.T) {
 }
 
 func TestPresentV3(t *testing.T) {
-	rule := NewV1Beta3(&rulesv1beta3.Rule{
-		Rule: &rulesv1beta3.Rule_Atom{
-			Atom: AgeV3("PRESENT", 0),
+	rule := NewV1Beta3(
+		&rulesv1beta3.Rule{
+			Rule: &rulesv1beta3.Rule_Atom{
+				Atom: AgeV3("PRESENT", 0),
+			},
 		},
-	})
+		testEvalCtx,
+	)
 	result, err := rule.EvaluateRule(nil)
 	require.NoError(t, err)
 	assert.False(t, result)
@@ -65,11 +76,14 @@ type AtomTestV3 struct {
 
 func testAtomV3(t *testing.T, idx int, tc AtomTestV3) {
 	t.Run(fmt.Sprintf("test atom %d", idx), func(t *testing.T) {
-		rule := NewV1Beta3(&rulesv1beta3.Rule{
-			Rule: &rulesv1beta3.Rule_Atom{
-				Atom: tc.atom,
+		rule := NewV1Beta3(
+			&rulesv1beta3.Rule{
+				Rule: &rulesv1beta3.Rule_Atom{
+					Atom: tc.atom,
+				},
 			},
-		})
+			testEvalCtx,
+		)
 		result, err := rule.EvaluateRule(tc.context)
 		if tc.hasError {
 			require.Error(t, err)
@@ -80,15 +94,18 @@ func testAtomV3(t *testing.T, idx int, tc AtomTestV3) {
 		assert.Equal(t, tc.expected, result)
 	})
 	t.Run(fmt.Sprintf("test not %d", idx), func(t *testing.T) {
-		rule := NewV1Beta3(&rulesv1beta3.Rule{
-			Rule: &rulesv1beta3.Rule_Not{
-				Not: &rulesv1beta3.Rule{
-					Rule: &rulesv1beta3.Rule_Atom{
-						Atom: tc.atom,
+		rule := NewV1Beta3(
+			&rulesv1beta3.Rule{
+				Rule: &rulesv1beta3.Rule_Not{
+					Not: &rulesv1beta3.Rule{
+						Rule: &rulesv1beta3.Rule_Atom{
+							Atom: tc.atom,
+						},
 					},
 				},
 			},
-		})
+			testEvalCtx,
+		)
 		result, err := rule.EvaluateRule(tc.context)
 		if tc.hasError {
 			require.Error(t, err)
@@ -377,14 +394,17 @@ func TestLogicalExpressionV3(t *testing.T) {
 		},
 	} {
 		t.Run(fmt.Sprintf("test logical expression %d", i), func(t *testing.T) {
-			rule := NewV1Beta3(&rulesv1beta3.Rule{
-				Rule: &rulesv1beta3.Rule_LogicalExpression{
-					LogicalExpression: &rulesv1beta3.LogicalExpression{
-						Rules:           tc.rules,
-						LogicalOperator: tc.lo,
+			rule := NewV1Beta3(
+				&rulesv1beta3.Rule{
+					Rule: &rulesv1beta3.Rule_LogicalExpression{
+						LogicalExpression: &rulesv1beta3.LogicalExpression{
+							Rules:           tc.rules,
+							LogicalOperator: tc.lo,
+						},
 					},
 				},
-			})
+				testEvalCtx,
+			)
 			result, err := rule.EvaluateRule(tc.context)
 			if tc.hasError {
 				require.Error(t, err)
