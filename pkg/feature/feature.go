@@ -269,6 +269,7 @@ type Feature struct {
 	Key, Description string
 	Value            interface{}
 	FeatureType      FeatureType
+	Namespace        string
 
 	Rules     []*Rule
 	UnitTests []UnitTest
@@ -595,7 +596,7 @@ func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &v1beta3{res}, nil
+	return &v1beta3{res, f.Namespace}, nil
 }
 
 // Contains the compiled feature model, along with any

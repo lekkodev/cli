@@ -49,10 +49,11 @@ type ResultPath []int
 
 type v1beta3 struct {
 	*featurev1beta1.Feature
+	namespace string
 }
 
-func NewV1Beta3(f *featurev1beta1.Feature) EvaluableFeature {
-	return &v1beta3{f}
+func NewV1Beta3(f *featurev1beta1.Feature, namespace string) EvaluableFeature {
+	return &v1beta3{f, namespace}
 }
 
 func (v1b3 *v1beta3) Type() FeatureType {
@@ -109,7 +110,7 @@ func (v1b3 *v1beta3) traverse(constraint *featurev1beta1.Constraint, featureCtx 
 }
 
 func (v1b3 *v1beta3) evaluateRule(ruleV3 *rulesv1beta3.Rule, featureCtx map[string]interface{}) (bool, error) {
-	passes, err := rules.NewV1Beta3(ruleV3).EvaluateRule(featureCtx)
+	passes, err := rules.NewV1Beta3(ruleV3, rules.EvalContext{Namespace: v1b3.namespace, FeatureName: v1b3.Key}).EvaluateRule(featureCtx)
 	if err != nil {
 		return false, errors.Wrap(err, "evaluating rule v3")
 	}

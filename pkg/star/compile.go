@@ -80,7 +80,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	cf, err := newFeatureBuilder(c.ff.Name, globals, nv, c.registry).Build()
+	cf, err := newFeatureBuilder(c.ff.Name, c.ff.NamespaceName, globals, nv, c.registry).Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}

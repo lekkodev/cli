@@ -78,7 +78,7 @@ func TestEvaluateFeatureBoolV1Beta3(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := NewV1Beta3(tc.feature).Evaluate(tc.context)
+		val, path, err := NewV1Beta3(tc.feature, "namespace").Evaluate(tc.context)
 		if tc.testErr != nil {
 			require.Error(t, err)
 		} else {
@@ -124,7 +124,7 @@ func TestEvaluateFeatureComplexV1Beta3(t *testing.T) {
 	}
 
 	for i, tc := range tcs {
-		val, path, err := NewV1Beta3(complexFeature).Evaluate(tc.context)
+		val, path, err := NewV1Beta3(complexFeature, "namespace").Evaluate(tc.context)
 		require.NoError(t, err)
 		var res wrapperspb.Int64Value
 		require.NoError(t, val.UnmarshalTo(&res))

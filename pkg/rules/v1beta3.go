@@ -31,14 +31,20 @@ var (
 	ErrUnsupportedType          error = fmt.Errorf("unsupported type")
 )
 
+type EvalContext struct {
+	Namespace   string
+	FeatureName string
+}
+
 // v1beta3 refers to the version of the rules protobuf type in lekko.rules.v1beta3.rules.proto
 type v1beta3 struct {
-	rule *rulesv1beta3.Rule
+	rule        *rulesv1beta3.Rule
+	evalContext EvalContext
 }
 
 // Represents the rules defined in the proto package 'lekko.rules.v1beta3'.
-func NewV1Beta3(rule *rulesv1beta3.Rule) *v1beta3 {
-	return &v1beta3{rule: rule}
+func NewV1Beta3(rule *rulesv1beta3.Rule, evalCtx EvalContext) *v1beta3 {
+	return &v1beta3{rule: rule, evalContext: evalCtx}
 }
 
 func (v1b3 *v1beta3) EvaluateRule(featureCtx map[string]interface{}) (bool, error) {

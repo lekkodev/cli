@@ -45,7 +45,7 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 		if err := proto.Unmarshal(contents, &f); err != nil {
 			return nil, err
 		}
-		return feature.NewV1Beta3(&f), nil
+		return feature.NewV1Beta3(&f, nsMD.Name), nil
 	default:
 		return nil, fmt.Errorf("unknown version when parsing feature: %s", nsMD.Version)
 	}
