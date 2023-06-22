@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -102,7 +101,6 @@ type GitRepository interface {
 // This class can be used either by the cli, or by any other system that intends to manage
 // operations around the lekko config repo.
 type repository struct {
-	name string
 	repo *git.Repository
 	wt   *git.Worktree
 	fs   billy.Filesystem
@@ -151,8 +149,6 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 	}
 
 	cr := &repository{
-		// TODO: local folder name does not have to match remote repo name
-		name: filepath.Base(path),
 		repo: repo,
 		wt:   wt,
 		fs:   wt.Filesystem,
