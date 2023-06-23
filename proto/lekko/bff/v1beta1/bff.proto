@@ -57,6 +57,7 @@ service BFFService {
   rpc ListUserMemberships(ListUserMembershipsRequest) returns (ListUserMembershipsResponse) {}
   rpc UpsertMembership(UpsertMembershipRequest) returns (UpsertMembershipResponse) {}
   rpc RemoveMembership(RemoveMembershipRequest) returns (RemoveMembershipResponse) {}
+  rpc ResendInvitationEmail(ResendInvitationEmailRequest) returns (ResendInvitationEmailResponse) {}
 
   // Repository management
 
@@ -247,6 +248,12 @@ message UpsertMembershipRequest {
 message UpsertMembershipResponse {
   Membership membership = 1;
 }
+
+message ResendInvitationEmailRequest {
+  string username = 1;
+}
+
+message ResendInvitationEmailResponse {}
 
 message RemoveMembershipRequest {
   // User that you wish to remove from the current team
