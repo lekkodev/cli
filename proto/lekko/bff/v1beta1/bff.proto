@@ -272,6 +272,7 @@ message RepositoryKey {
 
 message CreateRepositoryRequest {
   RepositoryKey repo_key = 1;
+  string description = 2;
 }
 
 message CreateRepositoryResponse {
