@@ -221,7 +221,7 @@ func repoDeleteCmd() *cobra.Command {
 }
 
 func repoInitCmd() *cobra.Command {
-	var owner, repoName string
+	var owner, repoName, description string
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "Initialize a new template git repository",
@@ -236,7 +236,7 @@ func repoInitCmd() *cobra.Command {
 				owner = "" // create repo expects an empty owner for personal accounts
 			}
 
-			ghRepo, err := ghCli.CreateRepo(ctx, owner, repoName, true)
+			ghRepo, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
 			if err != nil {
 				return errors.Wrap(err, "create github repo")
 			}
@@ -248,7 +248,8 @@ func repoInitCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&owner, "owner", "o", "", "github owner to house repository in")
-	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "github repository name")
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
 	return cmd
 }
