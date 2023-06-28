@@ -76,7 +76,7 @@ func waitForEnter(r io.Reader) error {
 }
 
 func repoCreateCmd() *cobra.Command {
-	var owner, repoName string
+	var owner, repoName, description string
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new, empty config repository in the currently active team",
@@ -84,7 +84,7 @@ func repoCreateCmd() *cobra.Command {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			if len(owner) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Github Owner:",
+					Message: "GitHub Owner:",
 					Help:    "Name of the GitHub organization the create the repository under. If left empty, defaults to personal account.",
 				}, &owner); err != nil {
 					return errors.Wrap(err, "prompt")
@@ -100,13 +100,21 @@ func repoCreateCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
+			if len(description) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Repo Description:",
+					Help:    "Description for your new repository. If left empty, a default description message will be used.",
+				}, &description); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
 			fmt.Printf("Attempting to create a new configuration repository %s in team %s.\n", logging.Bold(fmt.Sprintf("[%s/%s]", owner, repoName)), rs.GetLekkoTeam())
 			fmt.Printf("First, ensure that the github owner '%s' has installed Lekko App by visiting:\n\t%s\n", owner, lekkoAppInstallURL)
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)
 
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
-			url, err := repo.Create(cmd.Context(), owner, repoName)
+			url, err := repo.Create(cmd.Context(), owner, repoName, description)
 			if err != nil {
 				return err
 			}
@@ -115,8 +123,9 @@ func repoCreateCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&owner, "owner", "o", "", "Github owner to create the repository under. If empty, defaults to the authorized user's personal account.")
-	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "Github repository name")
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to create the repository under. If empty, defaults to the authorized user's personal account.")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
 	return cmd
 }
 
