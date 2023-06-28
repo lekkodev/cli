@@ -84,7 +84,7 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 	return repo.GetCloneURL(), nil
 }
 
-func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, private bool) (*github.Repository, error) {
+func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, description string, private bool) (*github.Repository, error) {
 	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
 	if err == nil {
 		return repo, errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
@@ -92,7 +92,9 @@ func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, 
 	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
 		return nil, err
 	}
-	description := defaultDescription
+	if len(description) == 0 {
+		description = defaultDescription
+	}
 	repo, resp, err = gc.Repositories.Create(ctx, owner, &github.Repository{
 		Name:        &repoName,
 		Private:     &private,
