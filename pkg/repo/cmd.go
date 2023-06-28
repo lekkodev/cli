@@ -66,12 +66,13 @@ func repoFromProto(repo *bffv1beta1.Repository) *Repository {
 	}
 }
 
-func (r *RepoCmd) Create(ctx context.Context, owner, repo string) (string, error) {
+func (r *RepoCmd) Create(ctx context.Context, owner, repo, description string) (string, error) {
 	resp, err := r.lekkoBFFClient.CreateRepository(ctx, connect_go.NewRequest(&bffv1beta1.CreateRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,
 		},
+		Description: description,
 	}))
 	if err != nil {
 		return "", errors.Wrap(err, "create repository")

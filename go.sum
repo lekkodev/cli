@@ -1,9 +1,9 @@
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230614183715-890c7a85aff8.1 h1:43ldeDlb7/VtwdE24AdQMqlTvV1lcLhUz+IhsYfCtYA=
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230614183715-890c7a85aff8.1/go.mod h1:sIpzV6mGDP+uMP+xNgJEG/3BFvcaSnZXML/z78kqkxs=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230614183715-890c7a85aff8.1 h1:eeRHEk15TOQNz0CPsocbAJNfSHWxji/mQKbBm9ddAx0=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230614183715-890c7a85aff8.1/go.mod h1:qijTOXmCa9QRYY5jUPpXBh0TqOathvHp/Fap3CdjA8U=
-buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.30.0-20230419180142-0694c10ef23c.1 h1:pNIAXt2M6w6hLbe5esGcfAJVa/y228PYtywXuiMpGe4=
-buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.30.0-20230419180142-0694c10ef23c.1/go.mod h1:Abc3XPzGO1gMBxFO7cEr6oy5AhahszvenAckrydG2qE=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230628003124-17a94718b453.1 h1:uIKqYHADcCDNQu2W85KNewTqVYhCj5djTR6lNrsYBVc=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230628003124-17a94718b453.1/go.mod h1:3VTWcT3VW54XCOq0J4HbCbId83B1W9RvyqXvwyA3Kio=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230628003124-17a94718b453.1 h1:qKfHimN9j5sX3WtYoSSuOpeqpnXVC2Zxtb+VH/Twy6w=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230628003124-17a94718b453.1/go.mod h1:mYcnts9MJhUckfRD5/qOThXC7Kaj7O714LOw5GoGZ9c=
+buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230419180142-0694c10ef23c.1 h1:RydeudpO53wiJvrmYk6qdzR4HYfrkZzwYxxieA9HR3E=
+buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230419180142-0694c10ef23c.1/go.mod h1:UOnQUnbc9uR4s5SlhBKspO4dffz+T3A6X200yYBnaZg=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/AlecAivazis/survey/v2 v2.3.6 h1:NvTuVHISgTHEHeBFqt6BHOe4Ny/NwGZr7w+F8S9ziyw=
 github.com/AlecAivazis/survey/v2 v2.3.6/go.mod h1:4AuI9b7RjAR+G7v9+C4YSlX/YL3K3cWNXgWXOhllqvI=
@@ -32,8 +32,8 @@ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPd
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91 h1:7xSt0nPZ74liqR8jjBYmjentrQVrdQEhoW4/+4BrmoM=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91/go.mod h1:689QdV3hBP7Vo9dJMmzhoYIyo/9iMhEmHkJcnaPRCbo=
-github.com/bufbuild/connect-go v1.8.0 h1:srluNkFkZBfSfg9Qb6DrO+5nMaxix//h2ctrHZhMGKc=
-github.com/bufbuild/connect-go v1.8.0/go.mod h1:GmMJYR6orFqD0Y6ZgX8pwQ8j9baizDrIQMm1/a6LnHk=
+github.com/bufbuild/connect-go v1.9.0 h1:JIgAeNuFpo+SUPfU19Yt5TcWlznsN5Bv10/gI/6Pjoc=
+github.com/bufbuild/connect-go v1.9.0/go.mod h1:CAIePUgkDR5pAFaylSMtNK45ANQjp9JvpluG20rhpV8=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/bwesterb/go-ristretto v1.2.0/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
 github.com/cenkalti/backoff/v4 v4.2.0 h1:HN5dHm3WBOgndBH6E8V0q2jIYIR3s9yglV8k/+MN3u4=
@@ -335,8 +335,8 @@ google.golang.org/protobuf v1.24.0/go.mod h1:r/3tXBNzIEhYS9I1OUVjXDlt8tc493IdKGj
 google.golang.org/protobuf v1.25.0/go.mod h1:9JNX74DMeImyA3h4bdi1ymwjUzf21/xIlbajtzgsN7c=
 google.golang.org/protobuf v1.26.0-rc.1/go.mod h1:jlhhOSvTdKEhbULTjvd4ARK9grFBp09yW+WbY/TyQbw=
 google.golang.org/protobuf v1.26.0/go.mod h1:9q0QmTI4eRPtz6boOQmLYwt+qCgq0jsYwAQnmE0givc=
-google.golang.org/protobuf v1.30.0 h1:kPPoIgf3TsEvrm0PFe15JQ+570QVxYzEvvHqChK+cng=
-google.golang.org/protobuf v1.30.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
+google.golang.org/protobuf v1.31.0 h1:g0LDEJHgrBl9N9r17Ru3sqWhkIx2NB67okBHPwC7hs8=
+google.golang.org/protobuf v1.31.0/go.mod h1:HV8QOd/L58Z+nl8r43ehVNZIU/HEI6OcFqwMG9pJV4I=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=

@@ -3,12 +3,12 @@ module github.com/lekkodev/cli
 go 1.20
 
 require (
-	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.8.0-20230614183715-890c7a85aff8.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.30.0-20230614183715-890c7a85aff8.1
+	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230628003124-17a94718b453.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230628003124-17a94718b453.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/OneOfOne/xxhash v1.2.8
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
-	github.com/bufbuild/connect-go v1.8.0
+	github.com/bufbuild/connect-go v1.9.0
 	github.com/cli/browser v1.0.0
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
@@ -21,13 +21,13 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/whilp/git-urls v1.0.0
 	golang.org/x/oauth2 v0.7.0
-	google.golang.org/protobuf v1.30.0
+	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.25.0
 )
 
 require (
-	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.30.0-20230419180142-0694c10ef23c.1 // indirect
+	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230419180142-0694c10ef23c.1 // indirect
 	github.com/Microsoft/go-winio v0.4.16 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230217124315-7d5c6f04bbb8 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
