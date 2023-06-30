@@ -17,8 +17,8 @@ package gh
 import (
 	"context"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -54,9 +54,9 @@ func NewGithubClientFromToken(ctx context.Context, token string) *GithubClient {
 }
 
 func (gc *GithubClient) GetUser(ctx context.Context) (*github.User, error) {
-	user, resp, err := gc.Users.Get(ctx, "")
+	user, _, err := gc.Users.Get(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("get user failed [%v]: %w", resp, err)
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
 	return user, nil
 }
@@ -68,18 +68,17 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
 	}
 	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
-		return "", err
+		return "", errors.New(SanitizedErrorMessage(err))
 	}
 	description := defaultDescription
-	repo, resp, err = gc.Repositories.CreateFromTemplate(ctx, templateOwner, templateRepo, &github.TemplateRepoRequest{
+	repo, _, err = gc.Repositories.CreateFromTemplate(ctx, templateOwner, templateRepo, &github.TemplateRepoRequest{
 		Name:        &repoName,
 		Owner:       &owner,
 		Description: &description,
 		Private:     &private,
 	})
 	if err != nil {
-		body, _ := io.ReadAll(resp.Body)
-		return "", errors.Wrapf(err, "create from template [%s], %s", resp.Status, string(body))
+		return "", errors.New(SanitizedErrorMessage(err))
 	}
 	return repo.GetCloneURL(), nil
 }
@@ -90,24 +89,18 @@ func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, 
 		return repo, errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
 	}
 	if err != nil && resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
-		return nil, err
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
 	if len(description) == 0 {
 		description = defaultDescription
 	}
-	repo, resp, err = gc.Repositories.Create(ctx, owner, &github.Repository{
+	repo, _, err = gc.Repositories.Create(ctx, owner, &github.Repository{
 		Name:        &repoName,
 		Private:     &private,
 		Description: &description,
 	})
 	if err != nil {
-		var body []byte
-		var status string
-		if resp != nil {
-			body, _ = io.ReadAll(resp.Body)
-			status = resp.Status
-		}
-		return nil, errors.Wrapf(err, "create repo [%s]: %s", status, string(body))
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
 	return repo, nil
 }
@@ -117,7 +110,7 @@ func (gc *GithubClient) GetUserOrganizations(ctx context.Context) ([]string, err
 	// TODO: may need pagination if user is in more than 100 orgs
 	orgs, _, err := gc.Organizations.List(ctx, "", nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
 	var result = make([]string, 0, len(orgs))
 	for _, org := range orgs {
@@ -138,7 +131,7 @@ func (gc *GithubClient) GetAllUserRepositories(ctx context.Context, username str
 	for {
 		repos, resp, err := gc.Repositories.List(ctx, username, opts)
 		if err != nil {
-			return nil, err
+			return nil, errors.New(SanitizedErrorMessage(err))
 		}
 		allRepos = append(allRepos, repos...)
 		if resp.NextPage == 0 {
@@ -156,7 +149,7 @@ func (gc *GithubClient) GetAllUserInstallations(ctx context.Context, filterSuspe
 	for {
 		installs, resp, err := gc.Apps.ListUserInstallations(ctx, opts)
 		if err != nil {
-			return nil, err
+			return nil, errors.New(SanitizedErrorMessage(err))
 		}
 		for _, install := range installs {
 			if filterSuspended && install.SuspendedAt != nil {
@@ -197,4 +190,24 @@ func ParseOwnerRepo(githubURL string) (string, string, error) {
 		repo = repo[0:idx]
 	}
 	return owner, repo, nil
+}
+
+// Parses GitHub's errors for cleaner error messages
+func SanitizedErrorMessage(err error) string {
+	var gErrResp *github.ErrorResponse
+	var gerr *github.Error
+	var uerr *url.Error
+	if errors.As(err, &gErrResp) {
+		var errMsgs []string
+		for _, gerr := range gErrResp.Errors {
+			errMsgs = append(errMsgs, gerr.Message)
+		}
+		return strings.Join(errMsgs, ",")
+	} else if errors.As(err, &gerr) {
+		return gerr.Message
+	} else if errors.As(err, &uerr) {
+		return uerr.Unwrap().Error()
+	} else {
+		return err.Error()
+	}
 }

@@ -4,3 +4,4 @@
 /.vscode/
 /cmd/lekko/lekko
 /dist/
+vendor/
