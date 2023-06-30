@@ -237,7 +237,7 @@ func repoInitCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if len(owner) == 0 || len(repoName) == 0 {
-				return errors.Errorf("must provide owner and repo name")
+				return errors.Errorf("Must provide owner and repo name")
 			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
@@ -247,13 +247,13 @@ func repoInitCmd() *cobra.Command {
 
 			ghRepo, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
 			if err != nil {
-				return errors.Wrap(err, "create github repo")
+				return errors.Wrap(err, "Failed to create GitHub repository")
 			}
 			if err := repo.MirrorAtURL(ctx, rs, ghRepo.GetCloneURL()); err != nil {
-				return errors.Wrapf(err, "mirror at url: %s", ghRepo.GetCloneURL())
+				return errors.Wrapf(err, "Failed to mirror at URL: %s", ghRepo.GetCloneURL())
 			}
 
-			fmt.Printf("Mirrored repo at url %s\n", ghRepo.GetCloneURL())
+			fmt.Printf("Mirrored repo at URL %s\n", ghRepo.GetCloneURL())
 			return nil
 		},
 	}
