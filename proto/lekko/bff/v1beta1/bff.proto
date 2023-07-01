@@ -66,6 +66,7 @@ service BFFService {
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse) {}
 
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
+  rpc GetFeatureHistory(GetFeatureHistoryRequest) returns (GetFeatureHistoryResponse) {}
   rpc GetRepositoryContents(GetRepositoryContentsRequest) returns (GetRepositoryContentsResponse) {}
   rpc AddNamespace(AddNamespaceRequest) returns (AddNamespaceResponse) {}
   rpc RemoveNamespace(RemoveNamespaceRequest) returns (RemoveNamespaceResponse) {}
@@ -378,6 +379,18 @@ message GetFeatureResponse {
   Branch branch = 2;
 }
 
+message GetFeatureHistoryRequest {
+  BranchKey branch_key = 1;
+  string namespace_name = 2;
+  string feature_name = 3;
+  int32 page = 4;
+  int32 per_page = 5;
+}
+
+message GetFeatureHistoryResponse {
+  repeated FeatureHistoryItem history = 1;
+}
+
 message Feature {
   string name = 1;
   string namespace_name = 2;
@@ -388,6 +401,13 @@ message Feature {
   lekko.feature.v1beta1.Feature static_feature = 5;
   // the blob sha of the proto bin file according to git
   string sha = 6;
+}
+
+message FeatureHistoryItem {
+  string commit_sha = 1;
+  string commit_message = 2;
+  google.protobuf.Timestamp commit_timestamp = 3;
+  string author_email = 4;
 }
 
 message AddNamespaceRequest {
