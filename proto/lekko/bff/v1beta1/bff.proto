@@ -408,6 +408,7 @@ message FeatureHistoryItem {
   string commit_message = 2;
   google.protobuf.Timestamp commit_timestamp = 3;
   string author_email = 4;
+  string author_name = 5;
 }
 
 message AddNamespaceRequest {

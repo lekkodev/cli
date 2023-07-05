@@ -34,6 +34,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/pkg/errors"
 	giturls "github.com/whilp/git-urls"
 )
@@ -356,6 +357,11 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	if err := credentialsExist(ap); err != nil {
 		return "", err
 	}
+	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
+	user, err := ghCli.GetUser(ctx)
+	if err != nil {
+		return "", errors.New("could not fetch author identity from GitHub")
+	}
 	defaultBranch, err := r.isDefaultBranch()
 	if err != nil {
 		return "", errors.Wrap(err, "is default branch")
@@ -378,11 +384,23 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 		return "", errors.Wrap(err, "add glob")
 	}
 
+	// Try to use name/email associated with GitHub account if available
+	var name, email string
+	if user.Name != nil {
+		name = *user.Name
+	} else {
+		name = ap.GetUsername()
+	}
+	if user.Email != nil {
+		email = *user.Email
+	}
+
 	hash, err := r.wt.Commit(message, &git.CommitOptions{
 		All: true,
 		Author: &object.Signature{
-			Name: ap.GetUsername(),
-			When: time.Now(),
+			Name:  name,
+			Email: email,
+			When:  time.Now(),
 		},
 	})
 	if err != nil {

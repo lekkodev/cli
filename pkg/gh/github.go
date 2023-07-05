@@ -202,7 +202,12 @@ func SanitizedErrorMessage(err error) string {
 		for _, gerr := range gErrResp.Errors {
 			errMsgs = append(errMsgs, gerr.Message)
 		}
-		return strings.Join(errMsgs, ",")
+		errReasons := strings.Join(errMsgs, ",")
+		if len(errReasons) > 0 {
+			return errReasons
+		} else {
+			return fmt.Sprintf("%d %s", gErrResp.Response.StatusCode, gErrResp.Message)
+		}
 	} else if errors.As(err, &gerr) {
 		return gerr.Message
 	} else if errors.As(err, &uerr) {
