@@ -407,7 +407,14 @@ message FeatureHistoryItem {
   string commit_sha = 1;
   string commit_message = 2;
   google.protobuf.Timestamp commit_timestamp = 3;
+  // Email of the commit author. GitHub uses emails to identify user accounts.
+  // Might not be available.
   string author_email = 4;
+  // Commit author name. If we can't get the GitHub user's full name for the
+  // commit, this will simply be the GitHub login/username.
+  string author_name = 5;
+  // URL for the commit author's GitHub profile. Might not be available.
+  string author_url = 6;
 }
 
 message AddNamespaceRequest {
