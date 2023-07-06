@@ -61,6 +61,14 @@ func (gc *GithubClient) GetUser(ctx context.Context) (*github.User, error) {
 	return user, nil
 }
 
+func (gc *GithubClient) GetUserEmails(ctx context.Context) ([]*github.UserEmail, error) {
+	emails, _, err := gc.Users.ListEmails(ctx, nil)
+	if err != nil {
+		return nil, errors.New(SanitizedErrorMessage(err))
+	}
+	return emails, nil
+}
+
 // Init will create a new github repo based off of lekko's config repo template.
 func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, private bool) (string, error) {
 	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
