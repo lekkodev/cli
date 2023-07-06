@@ -353,6 +353,8 @@ func (r *repository) GetRemoteURL() (string, error) {
 
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
+// It will try to associate the authorized user's GitHub identity (name, primary email address)
+// with the commit and fall back to a username-only commit author if not available.
 func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string) (string, error) {
 	if err := credentialsExist(ap); err != nil {
 		return "", err
@@ -360,7 +362,7 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
 	user, err := ghCli.GetUser(ctx)
 	if err != nil {
-		return "", errors.New("could not fetch author identity from GitHub")
+		return "", errors.Wrap(err, "could not fetch author identity from GitHub")
 	}
 	defaultBranch, err := r.isDefaultBranch()
 	if err != nil {
@@ -385,14 +387,26 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	}
 
 	// Try to use name/email associated with GitHub account if available
-	var name, email string
+	var name string
 	if user.Name != nil {
 		name = *user.Name
 	} else {
 		name = ap.GetUsername()
 	}
+	var email string
 	if user.Email != nil {
 		email = *user.Email
+	} else {
+		// If user's email address is private, we need to fetch separately
+		// but don't fail loudly if we fail to fetch (could be due to app permissions, etc.)
+		if emails, err := ghCli.GetUserEmails(ctx); err == nil {
+			for _, fetchedEmail := range emails {
+				if fetchedEmail.Primary != nil && *fetchedEmail.Primary {
+					email = *fetchedEmail.Email
+					break
+				}
+			}
+		}
 	}
 
 	hash, err := r.wt.Commit(message, &git.CommitOptions{
