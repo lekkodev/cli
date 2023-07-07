@@ -401,11 +401,16 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 		// but don't fail loudly if we fail to fetch (could be due to app permissions, etc.)
 		if emails, err := ghCli.GetUserEmails(ctx); err == nil {
 			for _, fetchedEmail := range emails {
-				if fetchedEmail.Primary != nil && *fetchedEmail.Primary {
-					email = *fetchedEmail.Email
+				if fetchedEmail.GetPrimary() && fetchedEmail.GetVisibility() == "public" {
+					email = fetchedEmail.GetEmail()
 					break
 				}
 			}
+		}
+		// Use GitHub's noreply email as fallback
+		// https://docs.github.com/en/account-and-profile/setting-up-and-managing-your-personal-account-on-github/managing-email-preferences/setting-your-commit-email-address
+		if email == "" {
+			email = fmt.Sprintf("%d+%s@users.noreply.github.com", *user.ID, *user.Login)
 		}
 	}
 
