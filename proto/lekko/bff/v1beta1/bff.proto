@@ -466,6 +466,10 @@ message AddFeatureRequest {
   string feature_name = 3;
   FeatureType type = 4 [deprecated = true];
   lekko.feature.v1beta1.FeatureType type_new = 5;
+  // if the feature type is proto, you may specify the message
+  // name, e.g. google.protobuf.BoolValue. If empty, we will
+  // pick google.protobuf.BoolValue.
+  string proto_message_name = 6;
 }
 
 message AddFeatureResponse {
