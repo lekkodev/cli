@@ -143,6 +143,7 @@ message ChangePasswordResponse {}
 message GenerateAPIKeyRequest {
   // String to be associated with this api key.
   string nickname = 1;
+  string team_name = 2;
 }
 
 message GenerateAPIKeyResponse {
@@ -160,7 +161,9 @@ message APIKey {
   string api_key_masked = 5;
 }
 
-message ListAPIKeysRequest {}
+message ListAPIKeysRequest {
+  string team_name = 1;
+}
 
 message ListAPIKeysResponse {
   repeated APIKey api_keys = 1;
@@ -168,12 +171,14 @@ message ListAPIKeysResponse {
 
 message DeleteAPIKeyRequest {
   string nickname = 1;
+  string team_name = 2;
 }
 
 message DeleteAPIKeyResponse {}
 
 message CheckAPIKeyRequest {
   string api_key = 1;
+  string team_name = 2;
 }
 
 message CheckAPIKeyResponse {
@@ -189,7 +194,9 @@ message CreateTeamResponse {
   RepositoriesResponse repositories = 2;
 }
 
-message DeleteTeamRequest {}
+message DeleteTeamRequest {
+  string team_name = 1;
+}
 
 message DeleteTeamResponse {
   // Response contains team information about
@@ -227,7 +234,9 @@ message Membership {
   UserStatus user_status = 4;
 }
 
-message ListTeamMembershipsRequest {}
+message ListTeamMembershipsRequest {
+  string team_name = 1;
+}
 
 message ListTeamMembershipsResponse {
   repeated Membership memberships = 1;
@@ -244,6 +253,7 @@ message UpsertMembershipRequest {
   string username = 1;
   // Role that you wish to assign
   MembershipRole role = 2;
+  string team_name = 3;
 }
 
 message UpsertMembershipResponse {
@@ -252,6 +262,7 @@ message UpsertMembershipResponse {
 
 message ResendInvitationEmailRequest {
   string username = 1;
+  string team_name = 2;
 }
 
 message ResendInvitationEmailResponse {}
@@ -259,6 +270,7 @@ message ResendInvitationEmailResponse {}
 message RemoveMembershipRequest {
   // User that you wish to remove from the current team
   string username = 1;
+  string team_name = 2;
 }
 
 message RemoveMembershipResponse {}
@@ -269,6 +281,7 @@ message RepositoryKey {
   // random uuid to help identify a request, for
   // debugging purposes.
   string uuid = 3;
+  string team_name = 4;
 }
 
 message CreateRepositoryRequest {
@@ -615,6 +628,7 @@ message BranchKey {
   // random uuid to help identify a request, for
   // debugging purposes.
   string uuid = 4;
+  string team_name = 5;
 }
 
 message CreateBranchRequest {
