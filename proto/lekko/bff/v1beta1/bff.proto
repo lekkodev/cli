@@ -466,6 +466,10 @@ message AddFeatureRequest {
   string feature_name = 3;
   FeatureType type = 4 [deprecated = true];
   lekko.feature.v1beta1.FeatureType type_new = 5;
+  // if the feature type is proto, you may specify the message
+  // name, e.g. google.protobuf.BoolValue. If empty, we will
+  // pick google.protobuf.BoolValue.
+  string proto_message_name = 6;
 }
 
 message AddFeatureResponse {
@@ -669,6 +673,9 @@ message SaveRequest {
   bytes star = 4;
   lekko.feature.v1beta1.Feature feature = 5;
   BranchKey key = 6;
+  // If true, you are allowed to change the type of a feature
+  // as part of this save
+  bool ignore_backwards_compatibility = 7;
 }
 
 message SaveResponse {
@@ -683,6 +690,9 @@ message SaveStarlarkRequest {
   string feature_name = 3;
   // The starlark we wish to save.
   bytes star = 4;
+  // If true, you are allowed to change the type of a feature
+  // as part of this save
+  bool ignore_backwards_compatibility = 5;
 }
 
 message SaveStarlarkResponse {
