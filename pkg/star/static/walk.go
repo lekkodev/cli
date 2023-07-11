@@ -172,7 +172,7 @@ func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature)
 func (w *walker) extractProtoValue(v build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
 	proto, err := ExprToProto(v, f, w.registry)
 	if err != nil {
-		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression: %e", err)
+		return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown expression '%s': %e", build.FormatString(v), err)
 	}
 	return proto, featurev1beta1.FeatureType_FEATURE_TYPE_PROTO, nil
 }
