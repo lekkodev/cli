@@ -669,6 +669,9 @@ message SaveRequest {
   bytes star = 4;
   lekko.feature.v1beta1.Feature feature = 5;
   BranchKey key = 6;
+  // If true, you are allowed to change the type of a feature
+  // as part of this save
+  bool ignore_backwards_compatibility = 7;
 }
 
 message SaveResponse {
@@ -683,6 +686,9 @@ message SaveStarlarkRequest {
   string feature_name = 3;
   // The starlark we wish to save.
   bytes star = 4;
+  // If true, you are allowed to change the type of a feature
+  // as part of this save
+  bool ignore_backwards_compatibility = 5;
 }
 
 message SaveStarlarkResponse {
