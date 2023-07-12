@@ -42,6 +42,7 @@ message RepeatedFields {
     repeated string vals = 1;
     repeated TestMessage messages = 2;
     repeated TestEnum enums = 3;
+    repeated google.protobuf.StringValue strings = 4;
 }
 
 message MapFields {

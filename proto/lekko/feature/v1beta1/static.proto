@@ -31,6 +31,8 @@ message StaticFeature {
 
   repeated ImportStatement imports = 3;
 
+  // Experimental protobuf message that is a representation
+  // of the statically parsed starlark AST.
   FeatureStruct feature = 4;
 
   // For backwards compatibility. Eventually, the materialized
