@@ -30,7 +30,7 @@ import (
 func authCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth",
-		Short: "authenticates lekko cli",
+		Short: "Authenticates lekko cli",
 	}
 
 	cmd.AddCommand(confirmUserCmd())
@@ -49,7 +49,7 @@ func authCmd() *cobra.Command {
 func loginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "login",
-		Short: "authenticate with lekko and github, if unauthenticated",
+		Short: "Authenticate with lekko and github, if unauthenticated",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))

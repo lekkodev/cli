@@ -27,12 +27,17 @@ var green = "\033[32m"
 var bold = "\033[1m"
 var yellow = "\033[33m"
 
-func InitColors() {
+func InitColors(useColors bool) {
 	if runtime.GOOS == "windows" {
 		reset = ""
 		red = ""
 		green = ""
 		bold = ""
+	} else if !useColors {
+		red = reset
+		green = reset
+		bold = ""
+		yellow = reset
 	}
 }
 

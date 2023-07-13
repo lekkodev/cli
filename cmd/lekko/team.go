@@ -20,6 +20,7 @@ import (
 	"log"
 	"net/mail"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -33,37 +34,50 @@ import (
 func teamCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "team",
-		Short: "team management",
+		Short: "Team management",
 	}
 	cmd.AddCommand(
-		showCmd,
+		teamShowCmd(),
 		teamListCmd(),
 		teamSwitchCmd(),
-		createCmd(),
-		addMemberCmd(),
-		removeMemberCmd(),
+		teamCreateCmd(),
+		teamAddMemberCmd(),
+		teamRemoveMemberCmd(),
 		teamListMembersCmd(),
 	)
 	return cmd
 }
 
-var showCmd = &cobra.Command{
-	Use:   "show",
-	Short: "Show the team currently in use",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
-		t := team.NewTeam(lekko.NewBFFClient(rs))
-		fmt.Println(t.Show(rs))
-		return nil
-	},
+func teamShowCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Short:                 "Show the team currently in use",
+		Use:                   formCmdUse("show", FlagOptions),
+		DisableFlagsInUseLine: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{}, args); err != nil {
+				return err
+			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
+			t := team.NewTeam(lekko.NewBFFClient(rs))
+			printLinef(cmd, "%s\n", t.Show(rs))
+			return nil
+		},
+	}
+	cmd.Flags().BoolP(QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	return cmd
 }
 
 func teamListCmd() *cobra.Command {
+	var isQuiet bool
 	var flagOutput string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "list the teams that the logged-in user is a member of",
+		Short:                 "List the teams that the logged-in user is a member of",
+		Use:                   formCmdUse("list", FlagOptions),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{}, args); err != nil {
+				return err
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
 			t := team.NewTeam(lekko.NewBFFClient(rs))
 			memberships, err := t.List(cmd.Context())
@@ -71,31 +85,43 @@ func teamListCmd() *cobra.Command {
 				return err
 			}
 			if len(memberships) == 0 {
-				fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
+				if !IsInteractive {
+					fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
+				}
 				return nil
 			}
-			printTeamMemberships(memberships, flagOutput)
+			printTeamMemberships(cmd, memberships, flagOutput)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "Output format. ['json', 'table']")
+	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "output format: ['json', 'table']")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
 	return cmd
 }
 
 func teamSwitchCmd() *cobra.Command {
+	var isDryRun, isQuiet bool
 	var name string
 	cmd := &cobra.Command{
-		Use:   "switch",
-		Short: "switch the team currently in use",
+		Short:                 "Switch the team currently in use",
+		Use:                   formCmdUse("switch", "name"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{"name"}, args); err != nil {
+				return err
+			}
 			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				t := team.NewTeam(lekko.NewBFFClient(ws))
 				ctx := cmd.Context()
+
+				rArgs, _ := getNArgs(1, args)
+				name = rArgs[0]
+
+				memberships, err := t.List(ctx)
+				if err != nil {
+					return err
+				}
 				if len(name) == 0 {
-					memberships, err := t.List(ctx)
-					if err != nil {
-						return err
-					}
 					var options []string
 					for _, m := range memberships {
 						options = append(options, m.TeamName)
@@ -106,28 +132,56 @@ func teamSwitchCmd() *cobra.Command {
 					}, &name); err != nil {
 						return errors.Wrap(err, "prompt")
 					}
+				} else {
+					isTeam := false
+					for _, tm := range memberships {
+						if tm.TeamName == name {
+							isTeam = true
+							break
+						}
+					}
+					if !isTeam {
+						return errors.New(" No team with the given name found")
+					}
 				}
-				if err := t.Use(ctx, name, ws); err != nil {
-					return err
+				if !isDryRun {
+					if err := t.Use(ctx, name, ws); err != nil {
+						return err
+					}
 				}
 				return nil
 			}, secrets.RequireLekkoToken()); err != nil {
 				return err
 			}
-			fmt.Printf("Switched team to '%s'\n", name)
+
+			if !isQuiet {
+				printLinef(cmd, "Switched team to '%s'\n", name)
+			} else {
+				fmt.Printf("%s", name)
+			}
+
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "name of team to switch to")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	return cmd
 }
 
-func createCmd() *cobra.Command {
+func teamCreateCmd() *cobra.Command {
+	var isDryRun, isQuiet bool
 	var name string
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "create a lekko team",
+		Short:                 "Create a lekko team",
+		Use:                   formCmdUse("create", "name"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{"name"}, args); err != nil {
+				return err
+			}
+			rArgs, _ := getNArgs(1, args)
+			name = rArgs[0]
+
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "Team Name:",
@@ -135,38 +189,54 @@ func createCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, ws)
-			}, secrets.RequireLekkoToken()); err != nil {
-				return err
+			if !isDryRun {
+				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, ws)
+				}, secrets.RequireLekkoToken()); err != nil {
+					return err
+				}
 			}
-			fmt.Printf("Successfully created team %s, and switched to it", name)
+			if !isQuiet {
+				printLinef(cmd, "Created team %s, and switched to it \n", name)
+			} else {
+				fmt.Printf("%s", name)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "name of team to create")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	return cmd
 }
 
-func addMemberCmd() *cobra.Command {
+func teamAddMemberCmd() *cobra.Command {
+	var isDryRun, isQuiet bool
 	var email string
 	var role team.MemberRole
 	cmd := &cobra.Command{
-		Use:   "add-member",
-		Short: "add an existing lekko user as a member to the currently active team",
+		Short:                 "Add an existing lekko user as a member to the currently active team",
+		Use:                   formCmdUse("add-member", "email", "role"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{"email", "role"}, args); err != nil {
+				return err
+			}
+			rArgs, _ := getNArgs(2, args)
+
+			email = rArgs[0]
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "Email to add:",
 				}, &email); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
-				if _, err := mail.ParseAddress(email); err != nil {
-					return errors.Wrap(err, "invalid email")
-				}
 			}
-			if len(role) == 0 {
-				var roleStr string
+			if _, err := mail.ParseAddress(email); err != nil {
+				return errors.Wrap(err, "invalid email")
+			}
+			roleStr := rArgs[1]
+			if len(roleStr) == 0 {
+				//var roleStr string
 				if err := survey.AskOne(&survey.Select{
 					Message: "Role:",
 					Options: []string{string(team.MemberRoleMember), string(team.MemberRoleOwner)},
@@ -174,26 +244,46 @@ func addMemberCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 				role = team.MemberRole(roleStr)
+			} else {
+				role = team.MemberRole(roleStr)
+				if role != team.MemberRoleOwner && role != team.MemberRoleMember {
+					return errors.New("unrecognized team role")
+				}
 			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			if err := team.NewTeam(lekko.NewBFFClient(rs)).AddMember(cmd.Context(), email, role); err != nil {
-				return errors.Wrap(err, "add member")
+
+			if !isDryRun {
+				if err := team.NewTeam(lekko.NewBFFClient(rs)).AddMember(cmd.Context(), email, role); err != nil {
+					return errors.Wrap(err, "add member")
+				}
 			}
-			fmt.Printf("User %s added as %s to team %s", email, role, rs.GetLekkoTeam())
+
+			if !isQuiet {
+				printLinef(cmd, "User %s added as %s to team %s\n", email, role, rs.GetLekkoTeam())
+			} else {
+				printLinef(cmd, "%s", email)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
-	cmd.Flags().VarP(&role, "role", "r", "role to give member. allowed: 'owner', 'member'.")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	return cmd
 }
 
-func removeMemberCmd() *cobra.Command {
+func teamRemoveMemberCmd() *cobra.Command {
+	var isDryRun, isQuiet bool
 	var email string
 	cmd := &cobra.Command{
-		Use:   "remove-member",
-		Short: "remove a member from the currently active team",
+		Short:                 "Remove a member from the currently active team",
+		Use:                   formCmdUse("remove-member", "email"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{"email"}, args); err != nil {
+				return err
+			}
+			rArgs, _ := getNArgs(1, args)
+			email = rArgs[0]
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "Email to remove:",
@@ -201,25 +291,32 @@ func removeMemberCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			if err := team.NewTeam(lekko.NewBFFClient(rs)).RemoveMember(cmd.Context(), email); err != nil {
-				return errors.Wrap(err, "remove member")
+			if !isDryRun {
+				if err := team.NewTeam(lekko.NewBFFClient(rs)).RemoveMember(cmd.Context(), email); err != nil {
+					return errors.Wrap(err, "remove member")
+				}
 			}
-			fmt.Printf("User %s removed from team %s", email, rs.GetLekkoTeam())
+			if !isQuiet {
+				printLinef(cmd, "User %s removed from team %s\n", email, rs.GetLekkoTeam())
+			} else {
+				printLinef(cmd, "%s", email)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	return cmd
 }
 
 func teamListMembersCmd() *cobra.Command {
 	var flagOutput string
-
+	var isQuiet bool
 	cmd := &cobra.Command{
-		Use:   "list-members",
-		Short: "list the members of the currently active team",
+		Short:                 "List the members of the currently active team",
+		Use:                   formCmdUse("list-members"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			t := team.NewTeam(lekko.NewBFFClient(rs))
@@ -228,33 +325,51 @@ func teamListMembersCmd() *cobra.Command {
 				return err
 			}
 			if len(memberships) == 0 {
-				fmt.Printf("Team '%s' has no memberhips\n", rs.GetLekkoTeam())
+				if !isQuiet {
+					fmt.Printf("Team '%s' has no memberhips\n", rs.GetLekkoTeam())
+				}
 				return nil
 			}
-			printTeamMemberships(memberships, flagOutput)
+
+			printTeamMemberships(cmd, memberships, flagOutput)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "Output format. ['json', 'table']")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().StringVarP(&flagOutput, "output", "o", "table", "output format: ['json', 'table']")
 	return cmd
 }
 
-func printTeamMemberships(memberships []*team.TeamMembership, output string) {
-	switch output {
-	case "table":
-		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-		fmt.Fprintf(w, "Team Name\tEmail\tRole\tStatus\n")
+func printTeamMemberships(cmd *cobra.Command, memberships []*team.TeamMembership, output string) {
+	if isQuiet, _ := cmd.Flags().GetBool(QuietModeFlag); isQuiet {
+		out := ""
 		for _, m := range memberships {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.TeamName, m.User, m.Role, m.UserStatus)
+			switch cmd.Name() {
+			case "list-members":
+				out += fmt.Sprintf("%s ", m.User)
+			case "list":
+				out += fmt.Sprintf("%s ", m.TeamName)
+			}
 		}
-		w.Flush()
-	case "json":
-		b, err := json.MarshalIndent(memberships, "", "    ")
-		if err != nil {
-			log.Fatalf("unable to print team memberships: %v", err)
+		out = strings.TrimSpace(out)
+		printLinef(cmd, "%s", out)
+	} else {
+		switch output {
+		case "table":
+			w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+			_, _ = fmt.Fprintf(w, "Team Name\tEmail\tRole\tStatus\n")
+			for _, m := range memberships {
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", m.TeamName, m.User, m.Role, m.UserStatus)
+			}
+			_ = w.Flush()
+		case "json":
+			b, err := json.MarshalIndent(memberships, "", "    ")
+			if err != nil {
+				log.Fatalf("unable to print team memberships: %v", err)
+			}
+			fmt.Println(string(b))
+		default:
+			fmt.Printf("unknown output format: %s", output)
 		}
-		fmt.Println(string(b))
-	default:
-		fmt.Printf("unknown output format: %s", output)
 	}
 }

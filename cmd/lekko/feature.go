@@ -20,12 +20,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
+
+	"github.com/lekkodev/cli/pkg/metadata"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/logging"
-	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
@@ -36,23 +36,28 @@ import (
 func featureCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "feature",
-		Short: "feature management",
+		Short: "Feature management",
 	}
 	cmd.AddCommand(
-		featureList(),
-		featureAdd(),
-		featureRemove(),
+		featureListCmd(),
+		featureAddCmd(),
+		featureRemoveCmd(),
 		featureEval(),
 	)
 	return cmd
 }
 
-func featureList() *cobra.Command {
+func featureListCmd() *cobra.Command {
+	var isQuiet bool
 	var ns string
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "list all features",
+		Short:                 "List all features",
+		Use:                   formCmdUse("list", "[namespace]"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := errIfMoreArgs([]string{"namespace"}, args); err != nil {
+				return err
+			}
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
@@ -61,39 +66,60 @@ func featureList() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if len(args) == 1 {
+				ns = args[0]
+			}
+
 			nss, err := r.ListNamespaces(cmd.Context())
 			if err != nil {
 				return errors.Wrap(err, "list namespaces")
 			}
 			if len(ns) > 0 {
+				found := false
 				for _, namespaceMD := range nss {
 					if namespaceMD.Name == ns {
 						nss = []*metadata.NamespaceConfigRepoMetadata{namespaceMD}
+						found = true
 						break
 					}
 				}
+				if !found {
+					return fmt.Errorf("namespace %s not found", ns)
+				}
 			}
+
+			s := ""
 			for _, namespaceMD := range nss {
 				ffs, err := r.GetFeatureFiles(cmd.Context(), namespaceMD.Name)
 				if err != nil {
 					return errors.Wrapf(err, "get feature files for ns %s", namespaceMD.Name)
 				}
 				for _, ff := range ffs {
-					fmt.Printf("%s/%s\n", ff.NamespaceName, ff.Name)
+					if !isQuiet {
+						s += fmt.Sprintf("%s/%s\n", ff.NamespaceName, ff.Name)
+					} else {
+						s += fmt.Sprintf("%s/%s ", ff.NamespaceName, ff.Name)
+					}
 				}
 			}
+			if isQuiet {
+				s = strings.TrimSpace(s)
+			}
+			printLinef(cmd, s)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "name of namespace to filter by")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
 	return cmd
 }
 
-func featureAdd() *cobra.Command {
-	var ns, featureName, fType, fProtoMessage string
+func featureAddCmd() *cobra.Command {
+	var isDryRun, isQuiet, isCompile bool
+	var ns, featureName, fType, path, fProtoMessage string
 	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "add feature",
+		Short:                 "Add feature, requires namespace/feature_name and the new feature type",
+		Use:                   formCmdUse("add", "namespace/feature", "type"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -103,6 +129,35 @@ func featureAdd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			rArgs, n := getNArgs(2, args)
+
+			if !IsInteractive && n != 2 {
+				return errors.New("New feature namespace/name and type are required arguments")
+			}
+
+			sArgs, err := splitStrIntoFixedSlice(rArgs[0], "/", 2)
+			if err != nil && !IsInteractive {
+				return errors.Wrap(err, "wrong format for the namespace/feature arguments")
+			}
+			if len(sArgs) > 0 {
+				ns = sArgs[0]
+			} else if !IsInteractive {
+				return errors.Wrap(err, "namespace cannot be empty")
+			}
+
+			if len(sArgs) > 1 {
+				featureName = sArgs[1]
+			} else if !IsInteractive {
+				return errors.Wrap(err, "feature name cannot be empty")
+			}
+
+			if n > 1 {
+				fType = rArgs[1]
+			} else if !IsInteractive {
+				return errors.Wrap(err, "feature type cannot be empty")
+			}
+
 			if len(ns) == 0 {
 				nss, err := r.ListNamespaces(cmd.Context())
 				if err != nil {
@@ -113,7 +168,7 @@ func featureAdd() *cobra.Command {
 					options = append(options, ns.Name)
 				}
 				if err := survey.AskOne(&survey.Select{
-					Message: "Namespace:",
+					Message: "*Namespace:",
 					Options: options,
 				}, &ns); err != nil {
 					return errors.Wrap(err, "prompt")
@@ -135,7 +190,7 @@ func featureAdd() *cobra.Command {
 				}
 			}
 
-			if fType == string(feature.FeatureTypeProto) && len(fProtoMessage) == 0 {
+			if fType == string(feature.FeatureTypeProto) && len(fProtoMessage) == 0 && IsInteractive {
 				protos, err := r.GetProtoMessages(cmd.Context())
 				if err != nil {
 					return errors.Wrap(err, "unable to get proto messages")
@@ -148,29 +203,54 @@ func featureAdd() *cobra.Command {
 				}
 			}
 
-			ctx := cmd.Context()
-			if path, err := r.AddFeature(ctx, ns, featureName, feature.FeatureType(fType), fProtoMessage); err != nil {
-				return errors.Wrap(err, "add feature")
+			if !isDryRun {
+				if path, err = r.AddFeature(cmd.Context(), ns, featureName, feature.FeatureType(fType), fProtoMessage); err != nil {
+					return errors.Wrap(err, "add feature")
+				}
 			} else {
-				fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
-				fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
+				path = ns + "/" + featureName + ".star"
 			}
-			_, err = r.Compile(ctx, &repo.CompileRequest{})
+
+			if !isQuiet {
+				printLinef(cmd, "Added feature %s/%s at path %s\n", ns, featureName, path)
+			} else {
+				printLinef(cmd, "%s/%s", ns, featureName)
+			}
+			if !isQuiet && !isDryRun && !isCompile {
+				fmt.Printf("Modify the feature, and then run `lekko compile`\n")
+			}
+
+			if isCompile {
+				if isQuiet {
+					r.ConfigureLogger(nil)
+				}
+				if _, err := r.Compile(cmd.Context(), &repo.CompileRequest{
+					NamespaceFilter: ns,
+					FeatureFilter:   featureName,
+					DryRun:          isDryRun,
+					// don't verify file structure, since we may have not yet generated
+					// the DSLs for newly added Flags().
+				}); err != nil {
+					return errors.Wrap(err, "compile")
+				}
+			}
 			return err
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add feature in")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to add")
-	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of feature to create")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of feature to create")
+	cmd.Flags().BoolVarP(&isCompile, "compile", "c", false, "compile feature after creation")
 	return cmd
 }
 
-func featureRemove() *cobra.Command {
-	var ns, featureName string
+func featureRemoveCmd() *cobra.Command {
+	var isDryRun, isQuiet, isForce bool
+	var ns, featureName, nsFeature string
 	cmd := &cobra.Command{
-		Use:   "remove",
-		Short: "remove feature",
+		Short:                 "Remove feature",
+		Use:                   formCmdUse("remove", "namespace/feature"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -180,35 +260,74 @@ func featureRemove() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			nsf, err := featureSelect(cmd.Context(), r, ns, featureName)
-			if err != nil {
-				return err
+
+			rArgs, n := getNArgs(1, args)
+			if n == 1 {
+				_, err := splitStrIntoFixedSlice(rArgs[0], "/", 2)
+				if err != nil {
+					return errors.Wrap(err, "wrong format for the namespace/feature arguments")
+				}
+
+				nsFeature = rArgs[0]
+				nsfs, err := getNamespaceFeatures(cmd.Context(), r, "", "")
+				if err != nil {
+					return err
+				}
+				found := false
+				for _, nsf := range nsfs {
+					if nsFeature == nsf.String() {
+						ns = nsf.namespace()
+						featureName = nsf.featureName
+						found = true
+						break
+					}
+				}
+				if !found {
+					return fmt.Errorf("the %s does not exist", nsFeature)
+				}
+			} else {
+				nsf, err := featureSelect(cmd.Context(), r, ns, featureName)
+				if err != nil {
+					return err
+				}
+				ns, featureName = nsf.namespace(), nsf.feature()
 			}
-			ns, featureName = nsf.namespace(), nsf.feature()
-			// Confirm
-			featurePair := fmt.Sprintf("%s/%s", ns, featureName)
-			fmt.Printf("Deleting feature %s...\n", featurePair)
-			if err := confirmInput(featurePair); err != nil {
-				return err
+
+			if !isForce {
+				featurePair := fmt.Sprintf("%s/%s", ns, featureName)
+				fmt.Printf("Deleting feature %s...\n", featurePair)
+				if err := confirmInput(featurePair); err != nil {
+					return err
+				}
 			}
-			if err := r.RemoveFeature(cmd.Context(), ns, featureName); err != nil {
-				return errors.Wrap(err, "remove feature")
+
+			if !isDryRun {
+				if err := r.RemoveFeature(cmd.Context(), ns, featureName); err != nil {
+					return errors.Wrap(err, "remove feature")
+				}
 			}
-			fmt.Printf("Successfully removed feature %s/%s\n", ns, featureName)
+
+			if !isQuiet {
+				printLinef(cmd, "Removed feature %s/%s\n", ns, featureName)
+			} else {
+				printLinef(cmd, "%s/%s", ns, featureName)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
+	cmd.Flags().BoolVarP(&isForce, ForceFlag, ForceFlagShort, ForceFlagDVal, ForceFlagDescription)
 	return cmd
 }
 
 func featureEval() *cobra.Command {
-	var ns, featureName, jsonContext string
-	var verbose bool
+	var ns, featureName, nsFeature, jsonContext string
+	var isQuiet, isVerbose bool
 	cmd := &cobra.Command{
-		Use:   "eval",
-		Short: "evaluate feature",
+		Short:                 "Evaluate feature",
+		Use:                   formCmdUse("eval", "namespace/feature", "context"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -219,6 +338,48 @@ func featureEval() *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
+			rArgs, _ := getNArgs(2, args)
+
+			jsonContext = rArgs[1]
+			sArgs, err := splitStrIntoFixedSlice(rArgs[0], "/", 2)
+			if err != nil {
+				if !IsInteractive {
+					return errors.Wrap(err, "wrong format for the namespace/feature arguments")
+				} else {
+					ns = ""
+					featureName = ""
+				}
+			} else {
+				ns = sArgs[0]
+				featureName = sArgs[1]
+			}
+
+			nsFeature = rArgs[0]
+
+			found := false
+			nsfs, err := getNamespaceFeatures(cmd.Context(), r, "", "")
+			if err != nil {
+				return err
+			}
+			for _, nsf := range nsfs {
+				if nsFeature == nsf.String() {
+					ns = nsf.namespace()
+					featureName = nsf.featureName
+					found = true
+					break
+				}
+			}
+			if !found {
+				if !IsInteractive {
+					return fmt.Errorf("the %s does not exist", nsFeature)
+				} else {
+					//-- reset input
+					fmt.Printf("\nns:%s %s\n", ns, featureName)
+					ns = ""
+					featureName = ""
+				}
+			}
+
 			nsf, err := featureSelect(ctx, r, ns, featureName)
 			if err != nil {
 				return err
@@ -239,8 +400,10 @@ func featureEval() *cobra.Command {
 			if err := json.Unmarshal([]byte(jsonContext), &featureCtx); err != nil {
 				return err
 			}
-			fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
-			fmt.Printf("-------------------\n")
+			if !isQuiet {
+				fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
+				fmt.Printf("-------------------\n")
+			}
 			anyVal, fType, path, err := r.Eval(ctx, ns, featureName, featureCtx)
 			if err != nil {
 				return err
@@ -275,164 +438,20 @@ func featureEval() *cobra.Command {
 				res = string(jsonRes)
 			}
 
-			fmt.Printf("[%s] %s\n", fType, logging.Bold(res))
-			if verbose {
-				fmt.Printf("[path] %v\n", path)
-			}
-
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
-	cmd.Flags().StringVarP(&jsonContext, "context", "c", "", "context to evaluate with in json format")
-	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
-	return cmd
-}
-
-func namespaceCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "ns",
-		Short: "namespace management",
-	}
-	cmd.AddCommand(
-		nsList,
-		nsAdd(),
-		nsRemove(),
-	)
-	return cmd
-}
-
-var nsList = &cobra.Command{
-	Use:   "list",
-	Short: "list namespaces in the current repository",
-	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
-		if err != nil {
-			return err
-		}
-		nss, err := r.ListNamespaces(cmd.Context())
-		if err != nil {
-			return err
-		}
-		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-		fmt.Fprintf(w, "Namespace\tVersion\n")
-		for _, ns := range nss {
-			fmt.Fprintf(w, "%s\t%s\n", ns.Name, ns.Version)
-		}
-		w.Flush()
-		return nil
-	},
-}
-
-func nsAdd() *cobra.Command {
-	var name string
-	cmd := &cobra.Command{
-		Use:   "add",
-		Short: "add namespace",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
-			if err != nil {
-				return err
-			}
-			if len(name) == 0 {
-				if err := survey.AskOne(&survey.Input{
-					Message: "Namespace name:",
-				}, &name); err != nil {
-					return errors.Wrap(err, "prompt")
-				}
-			}
-			if err := r.AddNamespace(cmd.Context(), name); err != nil {
-				return errors.Wrap(err, "add namespace")
-			}
-			fmt.Printf("Successfully added namespace %s\n", name)
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
-	return cmd
-}
-
-func nsRemove() *cobra.Command {
-	var name string
-	cmd := &cobra.Command{
-		Use:   "remove",
-		Short: "remove namespace",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
-			if err != nil {
-				return err
-			}
-			nss, err := r.ListNamespaces(cmd.Context())
-			if err != nil {
-				return err
-			}
-			if len(name) == 0 {
-				var options []string
-				for _, ns := range nss {
-					options = append(options, ns.Name)
-				}
-				if err := survey.AskOne(&survey.Select{
-					Message: "Select namespace to remove:",
-					Options: options,
-				}, &name); err != nil {
-					return errors.Wrap(err, "prompt")
+			if !isQuiet {
+				printLinef(cmd, "[%s] %s\n", fType, logging.Bold(res))
+				if isVerbose {
+					fmt.Printf("[path] %v\n", path)
 				}
 			} else {
-				// let's verify that the input namespace actually exists
-				var exists bool
-				for _, ns := range nss {
-					if name == ns.Name {
-						exists = true
-						break
-					}
-				}
-				if !exists {
-					return errors.Errorf("Namespace %s does not exist", name)
-				}
+				printLinef(cmd, "%v", res)
 			}
-			// Confirm deletion
-			fmt.Printf("Deleting namespace %s...\n", name)
-			if err := confirmInput(name); err != nil {
-				return err
-			}
-			// actually delete
-			if err := r.RemoveNamespace(cmd.Context(), name); err != nil {
-				return errors.Wrap(err, "remove namespace")
-			}
-			fmt.Printf("Successfully deleted namespace %s\n", name)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isVerbose, VerboseFlag, VerboseFlagShort, VerboseFlagDVal, VerboseFlagDescription)
 	return cmd
-}
-
-// Helpful method to ask the user to enter a piece of text before
-// doing something irreversible, like deleting something.
-func confirmInput(text string) error {
-	var inputText string
-	if err := survey.AskOne(&survey.Input{
-		Message: fmt.Sprintf("Enter '%s' to continue:", text),
-	}, &inputText); err != nil {
-		return errors.Wrap(err, "prompt")
-	}
-	if text != inputText {
-		return errors.New("incorrect input")
-	}
-	return nil
 }
 
 type namespaceFeature struct {

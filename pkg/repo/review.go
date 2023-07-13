@@ -31,7 +31,7 @@ import (
 // TODO: generalize the arguments to this interface so that we're not just tied to github.
 type GitProvider interface {
 	Review(ctx context.Context, title string, ghCli *gh.GithubClient, ap AuthProvider) (string, error)
-	Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error
+	Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) (int, error)
 }
 
 // Review will open a pull request. It takes different actions depending on
@@ -88,23 +88,24 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 	return url, nil
 }
 
-func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) error {
+func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClient, ap AuthProvider) (int, error) {
+	prNumRet := -1
 	if err := credentialsExist(ap); err != nil {
-		return err
+		return prNumRet, err
 	}
 	owner, repo, err := r.getOwnerRepo()
 	if err != nil {
-		return errors.Wrap(err, "get owner repo")
+		return prNumRet, errors.Wrap(err, "get owner repo")
 	}
 	branchName, err := r.BranchName()
 	if err != nil {
-		return errors.Wrap(err, "branch name")
+		return prNumRet, errors.Wrap(err, "branch name")
 	}
 
 	if prNum == nil {
 		pr, err := r.getPRForBranch(ctx, owner, repo, branchName, ghCli)
 		if err != nil {
-			return errors.Wrap(err, "get pr for branch")
+			return prNumRet, errors.Wrap(err, "get pr for branch")
 		}
 		prNum = pr.Number
 	}
@@ -113,17 +114,20 @@ func (r *repository) Merge(ctx context.Context, prNum *int, ghCli *gh.GithubClie
 		MergeMethod: "squash",
 	})
 	if err != nil {
-		return fmt.Errorf("ghCli merge pr %v: %w", resp.Status, err)
+		return prNumRet, fmt.Errorf("ghCli merge pr %v: %w", resp.Status, err)
 	}
+
+	prNumRet = *prNum
+
 	if result.GetMerged() {
-		r.Logf("PR #%d: %s\n", prNum, result.GetMessage())
+		r.Logf("PR #%d: %s\n", *prNum, result.GetMessage())
 	} else {
-		return errors.New("Failed to merge pull request.")
+		return prNumRet, errors.New("Failed to merge pull request.")
 	}
 	if err := r.Cleanup(ctx, &branchName, ap); err != nil {
-		return errors.Wrap(err, "cleanup")
+		return prNumRet, errors.Wrap(err, "cleanup")
 	}
-	return nil
+	return prNumRet, nil
 }
 
 // Generates a branch name based on the given github username,

@@ -17,6 +17,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -32,7 +33,7 @@ import (
 func apikeyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "apikey",
-		Short: "api key management",
+		Short: "Api key management",
 	}
 	cmd.AddCommand(
 		createAPIKeyCmd(),
@@ -44,40 +45,62 @@ func apikeyCmd() *cobra.Command {
 }
 
 func createAPIKeyCmd() *cobra.Command {
-	var name string
+	var name, key string
+	var isQuiet, isDryRun bool
+	var err error
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Create an api key",
+		Short:                 "Create an api key",
+		Use:                   formCmdUse("create", "apikey-name"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			rArgs, n := getNArgs(1, args)
+			name = rArgs[0]
+			if n < 1 && !IsInteractive {
+				return errors.New("ApiKey name is required in non-interactive mode")
+			}
+
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
-				if err := survey.AskOne(&survey.Input{
+				if err = survey.AskOne(&survey.Input{
 					Message: "Name:",
 					Help:    "Name to give the api key",
 				}, &name); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			fmt.Printf("Generating api key named '%s' for team '%s'...\n", name, rs.GetLekkoTeam())
-			key, err := a.Create(cmd.Context(), name)
-			if err != nil {
-				return err
+			if !isQuiet {
+				printLinef(cmd, "Generating api key named '%s' for team '%s'...\n", name, rs.GetLekkoTeam())
 			}
-			fmt.Printf("Generated api key:\n\t%s\n", logging.Bold(key))
-			fmt.Printf("Please save the key somewhere safe, as you will not be able to access it again.\n")
-			fmt.Printf("Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
+
+			if !isDryRun {
+				if key, err = a.Create(cmd.Context(), name); err != nil {
+					return err
+				}
+			} else {
+				key = "xxxxxxxxxxx"
+			}
+
+			if !isQuiet {
+				printLinef(cmd, "Generated api key:\n\t%s\n", logging.Bold(key))
+				printLinef(cmd, "Please save the key somewhere safe, as you will not be able to access it again.\n")
+				printLinef(cmd, "Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
+			} else {
+				printLinef(cmd, "%s", key)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "Name to give the new api key")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
 	return cmd
 }
 
 func listAPIKeysCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List all api keys for the currently active team",
+		Short:                 "List all api keys for the currently active team",
+		Use:                   formCmdUse("list"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
@@ -85,30 +108,49 @@ func listAPIKeysCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "list")
 			}
-			printAPIKeys(keys...)
+			printAPIKeys(cmd, keys...)
 			return nil
 		},
 	}
+	cmd.Flags().BoolP(QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
 	return cmd
 }
 
-func printAPIKeys(keys ...*bffv1beta1.APIKey) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
-	fmt.Fprintf(w, "Team\tName\tCreated By\tCreated At\n")
-	for _, key := range keys {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", key.TeamName, key.Nickname, key.CreatedBy, key.CreatedAt.AsTime())
+func printAPIKeys(cmd *cobra.Command, keys ...*bffv1beta1.APIKey) {
+	if isQuiet, _ := cmd.Flags().GetBool(QuietModeFlag); isQuiet {
+		keysStr := ""
+		for _, key := range keys {
+			keysStr += fmt.Sprintf("%s ", key.Nickname)
+		}
+		printLinef(cmd, "%s", strings.TrimSpace(keysStr))
+	} else {
+		w := tabwriter.NewWriter(os.Stdout, 0, 2, 2, ' ', 0)
+		fmt.Fprintf(w, "Team\tName\tCreated By\tCreated At\n")
+		for _, key := range keys {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", key.TeamName, key.Nickname, key.CreatedBy, key.CreatedAt.AsTime())
+		}
+		w.Flush()
 	}
-	w.Flush()
 }
 
 func checkAPIKeyCmd() *cobra.Command {
 	var key string
+	var isQuiet bool
 	cmd := &cobra.Command{
-		Use:   "check",
-		Short: "Check an api key to ensure it can be used to authenticate with lekko",
+		Short:                 "Check an api key to ensure it can be used to authenticate with lekko",
+		Use:                   formCmdUse("check", "apikey"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
+			if len(args) < 1 {
+				if !IsInteractive {
+					return errors.New("ApiKey is required.")
+				}
+			} else {
+				key = args[0]
+			}
+
 			if len(key) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "API Key:",
@@ -123,21 +165,32 @@ func checkAPIKeyCmd() *cobra.Command {
 				fmt.Printf("Lekko: Unauthenticated %s\n", logging.Red("✖"))
 				return errors.Wrap(err, "check")
 			}
-			fmt.Printf("Lekko: Authenticated %s\n", logging.Green("✔"))
-			printAPIKeys(lekkoKey)
+			if !isQuiet {
+				fmt.Printf("Lekko: Authenticated %s\n", logging.Green("✔"))
+				printAPIKeys(cmd, lekkoKey)
+			} else {
+				printLinef(cmd, "OK")
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&key, "key", "k", "", "api key to check authentication for")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
 	return cmd
 }
 
 func deleteAPIKeyCmd() *cobra.Command {
 	var name string
+	var isDryRun, isQuiet, isForce bool
 	cmd := &cobra.Command{
-		Use:   "delete",
-		Short: "Delete an api key",
+		Short:                 "Delete an api key",
+		Use:                   formCmdUse("delete", "apikey-name"),
+		DisableFlagsInUseLine: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			rArgs, n := getNArgs(1, args)
+			name = rArgs[0]
+			if n < 1 && !IsInteractive {
+				return errors.New("ApiKey is required in a non-interactive mode")
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
@@ -157,17 +210,29 @@ func deleteAPIKeyCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			fmt.Printf("Deleting api key '%s' in team '%s'...\n", name, rs.GetLekkoTeam())
-			if err := confirmInput(name); err != nil {
-				return err
+			if !isQuiet {
+				fmt.Printf("Deleting api key '%s' in team '%s'...\n", name, rs.GetLekkoTeam())
 			}
-			if err := a.Delete(cmd.Context(), name); err != nil {
-				return err
+			if !isForce {
+				if err := confirmInput(name); err != nil {
+					return err
+				}
 			}
-			fmt.Printf("Deleted api key.\n")
+			if !isDryRun {
+				if err := a.Delete(cmd.Context(), name); err != nil {
+					return err
+				}
+			}
+			if !isQuiet {
+				printLinef(cmd, "Deleted '%s' api key.\n", name)
+			} else {
+				printLinef(cmd, "%s", name)
+			}
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "Name of api key to delete")
+	cmd.Flags().BoolVarP(&isQuiet, QuietModeFlag, QuietModeFlagShort, QuietModeFlagDVal, QuietModeFlagDescription)
+	cmd.Flags().BoolVarP(&isDryRun, DryRunFlag, DryRunFlagShort, DryRunFlagDVal, DryRunFlagDescription)
+	cmd.Flags().BoolVarP(&isForce, ForceFlag, ForceFlagShort, ForceFlagDVal, ForceFlagDescription)
 	return cmd
 }
