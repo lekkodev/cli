@@ -25,7 +25,9 @@ import (
 	"strconv"
 	"strings"
 
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/bufbuild/connect-go"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
@@ -355,14 +357,27 @@ var mergeCmd = &cobra.Command{
 			if err != nil {
 				return errors.Wrap(err, "parse owner repo")
 			}
-			fmt.Printf("Visit %s to monitor your rollout.\n", rolloutsURL(rs.GetLekkoTeam(), owner, repo))
+			repos, err := lekko.NewBFFClient(rs).ListRepositories(ctx, connect.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
+			if err != nil {
+				return errors.Wrap(err, "repository fetch failed")
+			}
+			defaultBranch := ""
+			for _, r := range repos.Msg.GetRepositories() {
+				if r.OwnerName == owner && r.RepoName == repo {
+					defaultBranch = r.BranchName
+				}
+			}
+			if len(defaultBranch) == 0 {
+				return errors.New("repository not found when rolling out")
+			}
+			fmt.Printf("Visit %s to monitor your rollout.\n", rolloutsURL(rs.GetLekkoTeam(), owner, repo, defaultBranch))
 		}
 		return nil
 	},
 }
 
-func rolloutsURL(team, owner, repo string) string {
-	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/commits", team, owner, repo)
+func rolloutsURL(team, owner, repo, branch string) string {
+	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/branches/%s/commits", team, owner, repo, branch)
 }
 
 type provider string
