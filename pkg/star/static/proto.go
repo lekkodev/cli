@@ -202,11 +202,12 @@ func ReflectValueToExpr(imports []*featurev1beta1.ImportStatement, fieldDesc pro
 func ExprToProto(expr build.Expr, f *featurev1beta1.StaticFeature, registry *protoregistry.Types) (proto.Message, error) {
 	thread := &starlark.Thread{Name: "parse_proto"}
 	protoModule := protomodule.NewModule(registry)
-	globals, err := starlark.ExecFile(thread, "", genMiniStar(f.Imports, expr), starlark.StringDict{
+	ministar := genMiniStar(f.Imports, expr)
+	globals, err := starlark.ExecFile(thread, "", ministar, starlark.StringDict{
 		"proto": protoModule,
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "compile ministar")
 	}
 	proto, ok := skycfg.AsProtoMessage(globals["res"])
 	if !ok {

@@ -22,6 +22,7 @@ import "google/protobuf/timestamp.proto";
 import "google/rpc/error_details.proto";
 import "lekko/client/v1beta1/configuration_service.proto";
 import "lekko/feature/v1beta1/feature.proto";
+import "lekko/feature/v1beta1/static.proto";
 import "lekko/rules/v1beta3/rules.proto";
 
 // BFFService exposes functionality needed for the lekko UI.
@@ -414,6 +415,7 @@ message Feature {
   lekko.feature.v1beta1.Feature static_feature = 5;
   // the blob sha of the proto bin file according to git
   string sha = 6;
+  lekko.feature.v1beta1.StaticFeature static_feature_new = 7;
 }
 
 message FeatureHistoryItem {
@@ -676,6 +678,7 @@ message SaveRequest {
   // If true, you are allowed to change the type of a feature
   // as part of this save
   bool ignore_backwards_compatibility = 7;
+  lekko.feature.v1beta1.StaticFeature feature_new = 8;
 }
 
 message SaveResponse {
@@ -693,6 +696,7 @@ message SaveStarlarkRequest {
   // If true, you are allowed to change the type of a feature
   // as part of this save
   bool ignore_backwards_compatibility = 5;
+  lekko.feature.v1beta1.StaticFeature feature_new = 6;
 }
 
 message SaveStarlarkResponse {

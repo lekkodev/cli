@@ -18,5 +18,9 @@ result = feature(
             tpb.TestEnum.TEST_ENUM_A,
             tpb.TestEnum.TEST_ENUM_B,
         ],
+        strings = [
+            gpb.StringValue(value = "a"),
+            gpb.StringValue(value = "b"),
+        ],
     ),
 )
