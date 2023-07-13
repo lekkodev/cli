@@ -362,7 +362,7 @@ var mergeCmd = &cobra.Command{
 }
 
 func rolloutsURL(team, owner, repo string) string {
-	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/commits", team, owner, repo)
+	return fmt.Sprintf("https://app.lekko.com/teams/%s/repositories/%s/%s/branches/main/commits", team, owner, repo)
 }
 
 type provider string
