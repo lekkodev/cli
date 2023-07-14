@@ -44,11 +44,11 @@ import (
 // This interface should make no assumptions about where the configuration is stored.
 type ConfigurationStore interface {
 	Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error)
-	Verify(ctx context.Context, req *VerifyRequest) error
+	Verify(ctx context.Context, req *VerifyRequest) ([]*FeatureCompilationResult, error)
 	BuildDynamicTypeRegistry(ctx context.Context, protoDirPath string) (*protoregistry.Types, error)
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
-	Format(ctx context.Context, verbose bool) error
+	Format(ctx context.Context, verbose bool) (string, error)
 	AddFeature(ctx context.Context, ns, featureName string, fType feature.FeatureType, protoMessageName string) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
@@ -265,7 +265,7 @@ func (fcrs FeatureCompilationResults) Err() error {
 	return nil
 }
 
-func (r *repository) Verify(ctx context.Context, req *VerifyRequest) error {
+func (r *repository) Verify(ctx context.Context, req *VerifyRequest) ([]*FeatureCompilationResult, error) {
 	fcrs, err := r.Compile(ctx, &CompileRequest{
 		Registry:        req.Registry,
 		NamespaceFilter: req.NamespaceFilter,
@@ -278,7 +278,7 @@ func (r *repository) Verify(ctx context.Context, req *VerifyRequest) error {
 		Verbose:                      false,
 	})
 	if err != nil {
-		return errors.Wrap(err, "compile")
+		return fcrs, errors.Wrap(err, "compile")
 	}
 
 	var hasDiff bool
@@ -293,9 +293,9 @@ func (r *repository) Verify(ctx context.Context, req *VerifyRequest) error {
 		}
 	}
 	if hasDiff {
-		return errors.New("Found feature(s) with compilation or formatting diffs")
+		return fcrs, errors.New("Found feature(s) with compilation or formatting diffs")
 	}
-	return nil
+	return fcrs, nil
 }
 
 func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*FeatureCompilationResult, error) {
@@ -404,8 +404,9 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			r.Logf("Generated diff for %s/%s\n", fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
 		}
 	}
-
-	results.RenderSummary(r)
+	if r.log != nil {
+		results.RenderSummary(r)
+	}
 
 	if req.Upgrade && !req.DryRun {
 		for ns := range namespaces {
@@ -528,29 +529,32 @@ func (r *repository) GetFileDescriptorSet(ctx context.Context, protoDirPath stri
 	return sTypes.FileDescriptorSet, nil
 }
 
-func (r *repository) Format(ctx context.Context, verbose bool) error {
+func (r *repository) Format(ctx context.Context, verbose bool) (string, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
+	formattedFeatures := ""
 	if err != nil {
-		return errors.Wrap(err, "parse metadata")
+		return formattedFeatures, errors.Wrap(err, "parse metadata")
 	}
 	for ns := range nsMDs {
 		ffs, err := r.GetFeatureFiles(ctx, ns)
 		if err != nil {
-			return errors.Wrap(err, "get feature files")
+			return formattedFeatures, errors.Wrap(err, "get feature files")
 		}
 
 		for _, ff := range ffs {
 			ff := ff
 			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, false, verbose)
 			if err != nil {
-				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
+				return formattedFeatures, errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
 			if formatted {
 				r.Logf("Formatted and rewrote %s/%s\n", ff.NamespaceName, ff.Name)
+				formattedFeatures += fmt.Sprintf("%s/%s ", ff.NamespaceName, ff.Name)
 			}
 		}
+		formattedFeatures = strings.TrimSpace(formattedFeatures)
 	}
-	return nil
+	return formattedFeatures, nil
 }
 
 func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, dryRun, verbose bool) (persisted, diffExists bool, err error) {
