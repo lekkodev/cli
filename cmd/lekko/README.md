@@ -45,7 +45,9 @@ essential info, in the simplest, practical format should be produced as output.
 - discussing potential changes to some features
   - auth commands
     - should there be a non-interactive mode implemented there. ANSWER: will look into it later
-  - upgrade (key is not needed). DECISION: remove
+  - upgrade (key is not needed). DECISION: remove. DONE
+  - k8s functionality. DECISION: remove. DONE
+  - auto-complete, DECISION: remove for the time being. DONE 
   - adding team delete be implemented(?). DECISION: work on it later
   - auth commands: DECISION: no changes planned for the time being
 - more info needed regarding:

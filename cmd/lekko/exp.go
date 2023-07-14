@@ -40,7 +40,6 @@ func expCmd() *cobra.Command {
 		expParseCmd(),
 		expCleanupCmd(),
 		expFormatCmd(),
-		k8sCmd(),
 	)
 
 	return cmd

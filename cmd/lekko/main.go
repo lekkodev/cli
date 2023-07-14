@@ -43,7 +43,6 @@ func main() {
 	rootCmd.AddCommand(featureCmd())
 	rootCmd.AddCommand(namespaceCmd())
 	rootCmd.AddCommand(apikeyCmd())
-	rootCmd.AddCommand(upgradeCmd())
 	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(expCmd())
 	rootCmd.AddCommand(generateCmd())
