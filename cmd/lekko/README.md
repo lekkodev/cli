@@ -38,19 +38,16 @@ essential info, in the simplest, practical format should be produced as output.
 - refactoring the code
 
 ### Pending changes
-- more informative 
+- more informative helps
 - deciding/implementing more consistent formats for output (in addition to the quite mode/format) - text, lists, tables, json
-- impl changes caused by 
-- removing non-essential commands
-- k8s
 
 - ### More info needed
 - discussing potential changes to some features
   - auth commands
-    - should there be a non-interactive mode implemented there 
-  - upgrade (no key is taken) 
-  - adding team delete (?)
+    - should there be a non-interactive mode implemented there. ANSWER: will look into it later
+  - upgrade (key is not needed). DECISION: remove
+  - adding team delete be implemented(?). DECISION: work on it later
+  - auth commands: DECISION: no changes planned for the time being
 - more info needed regarding:
-  - repo init (not sure what is the purpose)
-  - auth commands
+  - repo init
   - should --no-colors flags be added
