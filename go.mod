@@ -13,7 +13,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/google/go-github/v52 v52.0.0
-	github.com/lekkodev/rules v1.5.2
+	github.com/lekkodev/rules v1.5.3-0.20230717233724-b197b0d5dc39
 	github.com/migueleliasweb/go-github-mock v0.0.16
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/olekukonko/tablewriter v0.0.5

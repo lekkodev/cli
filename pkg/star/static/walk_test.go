@@ -531,3 +531,12 @@ func TestWalkerMapProto(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, string(star), string(newStar))
 }
+
+func TestWalkerFormatCtxKey(t *testing.T) {
+	star, err := os.ReadFile("testdata/ctxkey.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	_, err = w.Build()
+	require.Error(t, err) // periods in context keys not allowed
+}
