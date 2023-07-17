@@ -537,12 +537,6 @@ func TestWalkerFormatCtxKey(t *testing.T) {
 	require.NoError(t, err)
 
 	w := testWalker(t, star)
-	f, err := w.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	fmt.Printf("%v\n", f)
-
-	newStar, err := w.Mutate(f)
-	require.NoError(t, err)
-	assert.EqualValues(t, string(star), string(newStar))
+	_, err = w.Build()
+	require.Error(t, err) // periods in context keys not allowed
 }
