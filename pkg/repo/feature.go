@@ -348,6 +348,15 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 					if !ok {
 						return
 					}
+					ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.FeatureName)
+					// format starlark file
+					_, fmtDiffExists, err := r.FormatFeature(ctx, &ff, registry, req.DryRun, req.Verbose)
+					if err != nil {
+						fcr.CompilationError = errors.Wrap(err, "format")
+						return
+					}
+					fcr.FormattingDiffExists = fmtDiffExists
+					// compile feature
 					cf, err := r.CompileFeature(ctx, registry, fcr.NamespaceName, fcr.FeatureName, fcr.NamespaceVersion)
 					fcr.CompiledFeature = cf
 					fcr.CompilationError = err
@@ -387,20 +396,15 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		if err != nil {
 			return nil, err
 		}
-		ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
+		ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.FeatureName)
 		compilePersisted, compileDiffExists, err := star.NewCompiler(registry, &ff, r).Persist(ctx, fcr.CompiledFeature.Feature, fcr.NamespaceVersion, req.IgnoreBackwardsCompatibility, req.DryRun)
 		if err != nil {
 			fcr.PersistenceError = err
 			continue
 		}
-
 		fcr.CompilationDiffExists = compileDiffExists
-		fmtPersisted, fmtDiffExists, err := r.FormatFeature(ctx, &ff, fcr.CompiledFeature.Feature.FeatureType, registry, req.DryRun, req.Verbose)
-		if err != nil {
-			return nil, errors.Wrap(err, "format")
-		}
-		fcr.FormattingDiffExists = fmtDiffExists
-		if compilePersisted || fmtPersisted {
+
+		if compilePersisted {
 			r.Logf("Generated diff for %s/%s\n", fcr.NamespaceName, fcr.CompiledFeature.Feature.Key)
 		}
 	}
@@ -541,7 +545,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 
 		for _, ff := range ffs {
 			ff := ff
-			formatted, _, err := r.FormatFeature(ctx, &ff, feature.FeatureType("unknown"), nil, false, verbose)
+			formatted, _, err := r.FormatFeature(ctx, &ff, nil, false, verbose)
 			if err != nil {
 				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
 			}
@@ -553,7 +557,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 	return nil
 }
 
-func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, fType feature.FeatureType, registry *protoregistry.Types, dryRun, verbose bool) (persisted, diffExists bool, err error) {
+func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, registry *protoregistry.Types, dryRun, verbose bool) (persisted, diffExists bool, err error) {
 	registry, err = r.registry(ctx, registry)
 	if err != nil {
 		return false, false, err
