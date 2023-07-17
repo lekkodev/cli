@@ -531,3 +531,18 @@ func TestWalkerMapProto(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, string(star), string(newStar))
 }
+
+func TestWalkerFormatCtxKey(t *testing.T) {
+	star, err := os.ReadFile("testdata/ctxkey.star")
+	require.NoError(t, err)
+
+	w := testWalker(t, star)
+	f, err := w.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+	fmt.Printf("%v\n", f)
+
+	newStar, err := w.Mutate(f)
+	require.NoError(t, err)
+	assert.EqualValues(t, string(star), string(newStar))
+}
