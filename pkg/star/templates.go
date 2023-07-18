@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 )
 
 const starFmt = `result=feature(
@@ -63,17 +63,17 @@ func RenderExistingProtoTemplate(inputs ProtoStarInputs) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func GetTemplate(fType feature.FeatureType) ([]byte, error) {
+func GetTemplate(fType eval.FeatureType) ([]byte, error) {
 	switch fType {
-	case feature.FeatureTypeBool:
+	case eval.FeatureTypeBool:
 		return []byte(fmt.Sprintf(starFmt, "False")), nil
-	case feature.FeatureTypeInt:
+	case eval.FeatureTypeInt:
 		return []byte(fmt.Sprintf(starFmt, "1")), nil
-	case feature.FeatureTypeFloat:
+	case eval.FeatureTypeFloat:
 		return []byte(fmt.Sprintf(starFmt, "1.0")), nil
-	case feature.FeatureTypeString:
+	case eval.FeatureTypeString:
 		return []byte(fmt.Sprintf(starFmt, "''")), nil
-	case feature.FeatureTypeJSON:
+	case eval.FeatureTypeJSON:
 		return []byte(fmt.Sprintf(starFmt, "{}")), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)

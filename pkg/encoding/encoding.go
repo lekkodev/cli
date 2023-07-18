@@ -23,6 +23,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
 
 	"google.golang.org/protobuf/proto"
@@ -30,7 +31,7 @@ import (
 
 // Takes a version number and parses file contents into the corresponding
 // type.
-func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (feature.EvaluableFeature, error) {
+func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (eval.EvaluableFeature, error) {
 	switch nsMD.Version {
 	case feature.NamespaceVersionV1Beta3.String():
 		fallthrough
@@ -45,7 +46,7 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 		if err := proto.Unmarshal(contents, &f); err != nil {
 			return nil, err
 		}
-		return feature.NewV1Beta3(&f, nsMD.Name), nil
+		return eval.NewV1Beta3(&f, nsMD.Name), nil
 	default:
 		return nil, fmt.Errorf("unknown version when parsing feature: %s", nsMD.Version)
 	}
