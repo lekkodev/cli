@@ -756,12 +756,7 @@ message EvalResponse {
 
 message GetFlagEvaluationMetricsRequest {
   RepositoryKey repo_key = 1;
-  // if empty, picks the latest sha. We will find the blob
-  // sha of the feature under this commit, and retrieve metrics
-  // for flag evaluations against that feature sha. This ensures
-  // that we obtain metrics for a feature that remains unchanged
-  // across multiple commits.
-  string commit_sha = 2;
+  string commit_sha = 2; // deprecated
   string namespace_name = 3;
   string feature_name = 4;
   // Defaults to T-7 days
@@ -771,8 +766,7 @@ message GetFlagEvaluationMetricsRequest {
 }
 
 message GetFlagEvaluationMetricsResponse {
-  // commit sha that was picked (same as request unless empty)
-  string commit_sha = 1;
+  string commit_sha = 1; // deprecated
   google.protobuf.Timestamp start_time = 2;
   google.protobuf.Timestamp end_time = 3;
   // total number of times the given feature was evaluated
@@ -794,8 +788,17 @@ message GetFlagEvaluationMetricsResponse {
 
   // Which paths successfully evaluated, and how frequently
   repeated PathCount path_counts = 6;
-  // feature sha that we queried metrics for
-  string feature_sha = 7;
+  string feature_sha = 7; // deprecated
+
+  message Measurement {
+    google.protobuf.Timestamp time = 1;
+    int64 value = 2;
+  }
+  message TimeSeries {
+    repeated int64 path = 1;
+    repeated Measurement measurements = 2;
+  }
+  repeated TimeSeries evaluation_counts = 8;
 }
 
 // Restore will start a new session, with all
