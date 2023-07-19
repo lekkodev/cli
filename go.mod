@@ -13,7 +13,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.3.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/google/go-github/v52 v52.0.0
-	github.com/lekkodev/go-sdk v0.1.1-0.20230718232848-fae9a0e2904f
+	github.com/lekkodev/go-sdk v0.1.1-0.20230719184729-7d72bdf39c04
 	github.com/lekkodev/rules v1.5.3-0.20230717233724-b197b0d5dc39
 	github.com/migueleliasweb/go-github-mock v0.0.16
 	github.com/mitchellh/go-homedir v1.1.0
