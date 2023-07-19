@@ -16,12 +16,18 @@ package feature
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/lekkodev/cli/pkg/fs"
+	"github.com/lekkodev/cli/pkg/metadata"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
 	"github.com/stripe/skycfg"
 	"go.starlark.net/starlark"
@@ -35,80 +41,163 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// Indicates the lekko-specific types that are allowed in feature flags.
-type FeatureType string
-
-const (
-	FeatureTypeBool   FeatureType = "bool"
-	FeatureTypeInt    FeatureType = "int"
-	FeatureTypeFloat  FeatureType = "float"
-	FeatureTypeString FeatureType = "string"
-	FeatureTypeProto  FeatureType = "proto"
-	FeatureTypeJSON   FeatureType = "json"
-)
-
-func FeatureTypes() []string {
-	var ret []string
-	for _, ftype := range []FeatureType{
-		FeatureTypeBool,
-		FeatureTypeString,
-		FeatureTypeInt,
-		FeatureTypeFloat,
-		FeatureTypeJSON,
-		FeatureTypeProto,
-	} {
-		ret = append(ret, string(ftype))
-	}
-	return ret
+// FeatureFile is a parsed feature from an on desk representation.
+// This is intended to remain stable across feature versions.
+type FeatureFile struct {
+	Name string
+	// Filename of the featureName.star file.
+	StarlarkFileName string
+	// Filename of an featureName.proto file.
+	// This is optional.
+	ProtoFileName string
+	// Filename of a compiled .json file.
+	CompiledJSONFileName string
+	// Filename of a compiled .proto.bin file.
+	CompiledProtoBinFileName string
+	// name of the namespace directory
+	NamespaceName string
 }
 
-func (ft FeatureType) ToProto() featurev1beta1.FeatureType {
-	switch ft {
-	case FeatureTypeBool:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_BOOL
-	case FeatureTypeInt:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_INT
-	case FeatureTypeFloat:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT
-	case FeatureTypeString:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_STRING
-	case FeatureTypeJSON:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_JSON
-	case FeatureTypeProto:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
-	default:
-		return featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED
+type FeatureContents struct {
+	File *FeatureFile
+
+	Star  []byte
+	JSON  []byte
+	Proto []byte
+	SHA   string
+}
+
+func (ff FeatureFile) Verify() error {
+	if ff.Name == "" {
+		return fmt.Errorf("feature file has no name")
+	}
+	if ff.StarlarkFileName == "" {
+		return fmt.Errorf("feature file %s has no .star file", ff.Name)
+	}
+	if ff.CompiledJSONFileName == "" {
+		return fmt.Errorf("feature file %s has no .json file", ff.Name)
+	}
+	if ff.CompiledProtoBinFileName == "" {
+		return fmt.Errorf("feature file %s has no .proto.bin file", ff.Name)
+	}
+	return nil
+}
+
+func (ff FeatureFile) RootPath(filename string) string {
+	return filepath.Join(ff.NamespaceName, filename)
+}
+
+func NewFeatureFile(nsName, featureName string) FeatureFile {
+	return FeatureFile{
+		Name:                     featureName,
+		NamespaceName:            nsName,
+		StarlarkFileName:         fmt.Sprintf("%s.star", featureName),
+		CompiledJSONFileName:     filepath.Join(metadata.GenFolderPathJSON, fmt.Sprintf("%s.json", featureName)),
+		CompiledProtoBinFileName: filepath.Join(metadata.GenFolderPathProto, fmt.Sprintf("%s.proto.bin", featureName)),
 	}
 }
 
-func (ft FeatureType) IsPrimitive() bool {
-	primitiveTypes := map[FeatureType]struct{}{
-		FeatureTypeBool:   {},
-		FeatureTypeString: {},
-		FeatureTypeInt:    {},
-		FeatureTypeFloat:  {},
+func walkNamespace(ctx context.Context, nsName, path, nsRelativePath string, featureToFile map[string]FeatureFile, fsProvider fs.Provider) error {
+	files, err := fsProvider.GetDirContents(ctx, path)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("get dir contents for %s", path))
 	}
-	_, ok := primitiveTypes[ft]
-	return ok
+	for _, file := range files {
+		if strings.HasSuffix(file.Name, ".json") {
+			featureName := strings.TrimSuffix(file.Name, ".json")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledJSONFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
+			} else {
+				f.CompiledJSONFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".star") {
+			featureName := strings.TrimSuffix(file.Name, ".star")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, StarlarkFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
+			} else {
+				f.StarlarkFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".proto") {
+			featureName := strings.TrimSuffix(file.Name, ".proto")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, ProtoFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
+			} else {
+				f.ProtoFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if strings.HasSuffix(file.Name, ".proto.bin") {
+			featureName := strings.TrimSuffix(file.Name, ".proto.bin")
+			f, ok := featureToFile[featureName]
+			if !ok {
+				featureToFile[featureName] = FeatureFile{Name: featureName, CompiledProtoBinFileName: filepath.Join(nsRelativePath, file.Name), NamespaceName: nsName}
+			} else {
+				f.CompiledProtoBinFileName = filepath.Join(nsRelativePath, file.Name)
+				featureToFile[featureName] = f
+			}
+		} else if file.IsDir {
+			if err := walkNamespace(ctx, nsName, file.Path, filepath.Join(nsRelativePath, file.Name), featureToFile, fsProvider); err != nil {
+				return errors.Wrap(err, "walkNamespace")
+			}
+		}
+	}
+	return nil
 }
 
-func FeatureTypeFromProto(ft featurev1beta1.FeatureType) FeatureType {
-	switch ft {
-	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
-		return FeatureTypeBool
-	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
-		return FeatureTypeInt
-	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
-		return FeatureTypeFloat
-	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
-		return FeatureTypeString
-	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
-		return FeatureTypeJSON
-	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-		return FeatureTypeProto
-	default:
-		return ""
+// This groups feature files in a way that is
+// governed by the namespace metadata.
+// TODO naming conventions.
+func GroupFeatureFiles(
+	ctx context.Context,
+	pathToNamespace string,
+	fsProvider fs.Provider,
+) ([]FeatureFile, error) {
+	featureToFile := make(map[string]FeatureFile)
+	if err := walkNamespace(ctx, filepath.Base(pathToNamespace), pathToNamespace, "", featureToFile, fsProvider); err != nil {
+		return nil, errors.Wrap(err, "walk namespace")
 	}
+	featureFiles := make([]FeatureFile, len(featureToFile))
+	i := 0
+	for _, feature := range featureToFile {
+		featureFiles[i] = feature
+		i = i + 1
+	}
+	return featureFiles, nil
+}
+
+func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
+	switch nsMD.Version {
+	case "v1beta5":
+		fallthrough
+	case "v1beta4":
+		fallthrough
+	case "v1beta3":
+		if len(f.CompiledJSONFileName) == 0 {
+			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
+		}
+		if len(f.CompiledProtoBinFileName) == 0 {
+			return fmt.Errorf("empty compiled proto for feature: %s", f.Name)
+		}
+		if len(f.StarlarkFileName) == 0 {
+			return fmt.Errorf("empty starlark file for feature: %s", f.Name)
+		}
+	}
+	return nil
+}
+
+func ParseFeaturePath(featurePath string) (namespaceName string, featureName string, err error) {
+	splits := strings.SplitN(featurePath, "/", 2)
+	if len(splits) == 1 {
+		return splits[0], "", nil
+	}
+	if len(splits) == 2 {
+		return splits[0], splits[1], nil
+	}
+	return "", "", fmt.Errorf("invalid featurepath: %s, should be of format namespace[/feature]", featurePath)
 }
 
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
@@ -121,7 +210,7 @@ type Rule struct {
 
 type UnitTest interface {
 	// Run runs the unit test
-	Run(idx int, eval EvaluableFeature) *TestResult
+	Run(idx int, eval eval.EvaluableFeature) *TestResult
 }
 
 // ValueUnitTest is a unit test that does an equality check
@@ -148,10 +237,10 @@ type CallableUnitTest struct {
 	Registry    *protoregistry.Types
 	TestFunc    starlark.Callable
 	ContextStar string
-	FeatureType FeatureType
+	FeatureType eval.FeatureType
 }
 
-func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string, ft FeatureType) *CallableUnitTest {
+func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string, ft eval.FeatureType) *CallableUnitTest {
 	return &CallableUnitTest{
 		Context:     ctx,
 		Registry:    r,
@@ -193,7 +282,7 @@ func valToStarValue(c any) (starlark.Value, error) {
 	return sv, nil
 }
 
-func (c *CallableUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+func (c *CallableUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
 	tr := NewTestResult(c.ContextStar, idx)
 	a, _, err := eval.Evaluate(c.Context)
 	if err != nil {
@@ -242,7 +331,7 @@ func (vr *testReporter) toErr() error {
 	return fmt.Errorf("%v", vr.args...)
 }
 
-func (ut ValueUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
+func (ut ValueUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
 	tr := NewTestResult(ut.ContextStar, idx)
 	a, _, err := eval.Evaluate(ut.Context)
 	if err != nil {
@@ -268,7 +357,7 @@ func (ut ValueUnitTest) Run(idx int, eval EvaluableFeature) *TestResult {
 type Feature struct {
 	Key, Description string
 	Value            interface{}
-	FeatureType      FeatureType
+	FeatureType      eval.FeatureType
 	Namespace        string
 
 	Rules     []*Rule
@@ -278,35 +367,35 @@ type Feature struct {
 func NewBoolFeature(value bool) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeBool,
+		FeatureType: eval.FeatureTypeBool,
 	}
 }
 
 func NewStringFeature(value string) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeString,
+		FeatureType: eval.FeatureTypeString,
 	}
 }
 
 func NewIntFeature(value int64) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeInt,
+		FeatureType: eval.FeatureTypeInt,
 	}
 }
 
 func NewFloatFeature(value float64) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeFloat,
+		FeatureType: eval.FeatureTypeFloat,
 	}
 }
 
 func NewProtoFeature(value protoreflect.ProtoMessage) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeProto,
+		FeatureType: eval.FeatureTypeProto,
 	}
 }
 
@@ -321,45 +410,45 @@ func NewEncodedJSONFeature(encodedJSON []byte) (*Feature, error) {
 func NewJSONFeature(value *structpb.Value) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: FeatureTypeJSON,
+		FeatureType: eval.FeatureTypeJSON,
 	}
 }
 
 // Takes a go value and an associated type, and converts the
 // value to a language-agnostic protobuf any type.
-func ValToAny(value interface{}, ft FeatureType) (*anypb.Any, error) {
+func ValToAny(value interface{}, ft eval.FeatureType) (*anypb.Any, error) {
 	switch ft {
-	case FeatureTypeBool:
+	case eval.FeatureTypeBool:
 		v, ok := value.(bool)
 		if !ok {
 			return nil, errors.Errorf("expecting bool, got %T", value)
 		}
 		return newAny(wrapperspb.Bool(v))
-	case FeatureTypeInt:
+	case eval.FeatureTypeInt:
 		v, ok := value.(int64)
 		if !ok {
 			return nil, errors.Errorf("expecting int64, got %T", value)
 		}
 		return newAny(wrapperspb.Int64(v))
-	case FeatureTypeFloat:
+	case eval.FeatureTypeFloat:
 		v, ok := value.(float64)
 		if !ok {
 			return nil, errors.Errorf("expecting float64, got %T", value)
 		}
 		return newAny(wrapperspb.Double(v))
-	case FeatureTypeString:
+	case eval.FeatureTypeString:
 		v, ok := value.(string)
 		if !ok {
 			return nil, errors.Errorf("expecting string, got %T", value)
 		}
 		return newAny(wrapperspb.String(v))
-	case FeatureTypeJSON:
+	case eval.FeatureTypeJSON:
 		v, ok := value.(*structpb.Value)
 		if !ok {
 			return nil, errors.Errorf("expecting *structpb.Value, got %T", value)
 		}
 		return newAny(v)
-	case FeatureTypeProto:
+	case eval.FeatureTypeProto:
 		v, ok := value.(protoreflect.ProtoMessage)
 		if !ok {
 			return nil, errors.Errorf("expecting protoreflect.ProtoMessage, got %T", value)
@@ -381,39 +470,39 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 // Translates the pb any object to a go-native object based on the
 // given type. Also takes an optional protbuf type registry, in case the
 // value depends on a user-defined protobuf type.
-func AnyToVal(a *anypb.Any, fType FeatureType, registry *protoregistry.Types) (interface{}, error) {
+func AnyToVal(a *anypb.Any, fType eval.FeatureType, registry *protoregistry.Types) (interface{}, error) {
 	switch fType {
-	case FeatureTypeBool:
+	case eval.FeatureTypeBool:
 		b := wrapperspb.BoolValue{}
 		if err := a.UnmarshalTo(&b); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to bool")
 		}
 		return b.Value, nil
-	case FeatureTypeInt:
+	case eval.FeatureTypeInt:
 		i := wrapperspb.Int64Value{}
 		if err := a.UnmarshalTo(&i); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to int")
 		}
 		return i.Value, nil
-	case FeatureTypeFloat:
+	case eval.FeatureTypeFloat:
 		f := wrapperspb.DoubleValue{}
 		if err := a.UnmarshalTo(&f); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to float")
 		}
 		return f.Value, nil
-	case FeatureTypeString:
+	case eval.FeatureTypeString:
 		s := wrapperspb.StringValue{}
 		if err := a.UnmarshalTo(&s); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to string")
 		}
 		return s.Value, nil
-	case FeatureTypeJSON:
+	case eval.FeatureTypeJSON:
 		v := structpb.Value{}
 		if err := a.UnmarshalTo(&v); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to json")
 		}
 		return &v, nil
-	case FeatureTypeProto:
+	case eval.FeatureTypeProto:
 		p, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
 			Resolver: registry,
 		})
@@ -435,8 +524,8 @@ func valFromJSON(encoded []byte) (*structpb.Value, error) {
 }
 
 func (f *Feature) AddBoolRule(rule string, astNew *rulesv1beta3.Rule, val bool) error {
-	if f.FeatureType != FeatureTypeBool {
-		return newTypeMismatchErr(FeatureTypeBool, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeBool {
+		return newTypeMismatchErr(eval.FeatureTypeBool, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
@@ -447,8 +536,8 @@ func (f *Feature) AddBoolRule(rule string, astNew *rulesv1beta3.Rule, val bool) 
 }
 
 func (f *Feature) AddStringRule(rule string, astNew *rulesv1beta3.Rule, val string) error {
-	if f.FeatureType != FeatureTypeString {
-		return newTypeMismatchErr(FeatureTypeString, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeString {
+		return newTypeMismatchErr(eval.FeatureTypeString, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
@@ -459,8 +548,8 @@ func (f *Feature) AddStringRule(rule string, astNew *rulesv1beta3.Rule, val stri
 }
 
 func (f *Feature) AddIntRule(rule string, astNew *rulesv1beta3.Rule, val int64) error {
-	if f.FeatureType != FeatureTypeInt {
-		return newTypeMismatchErr(FeatureTypeInt, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeInt {
+		return newTypeMismatchErr(eval.FeatureTypeInt, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
@@ -471,8 +560,8 @@ func (f *Feature) AddIntRule(rule string, astNew *rulesv1beta3.Rule, val int64) 
 }
 
 func (f *Feature) AddFloatRule(rule string, astNew *rulesv1beta3.Rule, val float64) error {
-	if f.FeatureType != FeatureTypeFloat {
-		return newTypeMismatchErr(FeatureTypeFloat, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeFloat {
+		return newTypeMismatchErr(eval.FeatureTypeFloat, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
@@ -483,8 +572,8 @@ func (f *Feature) AddFloatRule(rule string, astNew *rulesv1beta3.Rule, val float
 }
 
 func (f *Feature) AddJSONRule(rule string, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
-	if f.FeatureType != FeatureTypeJSON {
-		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeJSON {
+		return newTypeMismatchErr(eval.FeatureTypeJSON, f.FeatureType)
 	}
 	f.Rules = append(f.Rules, &Rule{
 		Condition:      rule,
@@ -495,8 +584,8 @@ func (f *Feature) AddJSONRule(rule string, astNew *rulesv1beta3.Rule, val *struc
 }
 
 func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value, starCtx, starVal string) error {
-	if f.FeatureType != FeatureTypeJSON {
-		return newTypeMismatchErr(FeatureTypeJSON, f.FeatureType)
+	if f.FeatureType != eval.FeatureTypeJSON {
+		return newTypeMismatchErr(eval.FeatureTypeJSON, f.FeatureType)
 	}
 	f.UnitTests = append(f.UnitTests, NewValueUnitTest(context, val, starCtx, starVal))
 	return nil
@@ -539,7 +628,7 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		Key:         fProto.Key,
 		Description: fProto.Description,
 	}
-	ret.FeatureType = FeatureTypeFromProto(fProto.GetType())
+	ret.FeatureType = eval.FeatureTypeFromProto(fProto.GetType())
 	var err error
 	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
@@ -591,12 +680,12 @@ func (f *Feature) PrintJSON(registry *protoregistry.Types) {
 	fmt.Println(string(jBytes))
 }
 
-func (f *Feature) ToEvaluableFeature() (EvaluableFeature, error) {
+func (f *Feature) ToEvaluableFeature() (eval.EvaluableFeature, error) {
 	res, err := f.ToProto()
 	if err != nil {
 		return nil, err
 	}
-	return &v1beta3{res, f.Namespace}, nil
+	return eval.NewV1Beta3(res, f.Namespace), nil
 }
 
 // Contains the compiled feature model, along with any
@@ -660,7 +749,7 @@ func (f *Feature) RunUnitTests() ([]*TestResult, error) {
 	return results, nil
 }
 
-func newTypeMismatchErr(expected, got FeatureType) error {
+func newTypeMismatchErr(expected, got eval.FeatureType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
 }
 

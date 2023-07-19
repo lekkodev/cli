@@ -27,9 +27,9 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/star/static"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,12 +110,12 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	getFeatureName := func(ft string) string {
 		return fmt.Sprintf("integration_test_%s", ft)
 	}
-	for _, fType := range feature.FeatureTypes() {
+	for _, fType := range eval.FeatureTypes() {
 		var protoMessageName string
-		if feature.FeatureType(fType) == feature.FeatureTypeProto {
+		if eval.FeatureType(fType) == eval.FeatureTypeProto {
 			protoMessageName = "google.protobuf.BoolValue"
 		}
-		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), feature.FeatureType(fType), protoMessageName)
+		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.FeatureType(fType), protoMessageName)
 		require.NoError(t, err)
 		t.Logf("wrote feature to path %s\n", path)
 	}
@@ -138,7 +138,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	}
 	assert.NotEmpty(t, b.String())
 	// Eval
-	for _, fType := range feature.FeatureTypes() {
+	for _, fType := range eval.FeatureTypes() {
 		evalResult, evalType, resultPath, err := r.Eval(ctx, namespace, getFeatureName(fType), nil)
 		require.NoError(t, err)
 		require.NotNil(t, evalResult)

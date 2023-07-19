@@ -19,6 +19,7 @@ import (
 
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/lekkodev/rules/pkg/parser"
 
 	"github.com/pkg/errors"
@@ -307,7 +308,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		ruleVal := tuple.Index(1)
 		ruleVals = append(ruleVals, ruleVal)
 		switch f.FeatureType {
-		case feature.FeatureTypeProto:
+		case eval.FeatureTypeProto:
 			message, ok := protomodule.AsProtoMessage(ruleVal)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, ruleVal)
@@ -317,7 +318,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 				ConditionASTV3: ruleASTv3,
 				Value:          message,
 			})
-		case feature.FeatureTypeBool:
+		case eval.FeatureTypeBool:
 			typedRuleVal, ok := ruleVal.(starlark.Bool)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, ruleVal)
@@ -325,7 +326,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if err := f.AddBoolRule(conditionStr.GoString(), ruleASTv3, bool(typedRuleVal)); err != nil {
 				return nil, err
 			}
-		case feature.FeatureTypeString:
+		case eval.FeatureTypeString:
 			typedRuleVal, ok := ruleVal.(starlark.String)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, ruleVal)
@@ -333,7 +334,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if err := f.AddStringRule(conditionStr.GoString(), ruleASTv3, typedRuleVal.GoString()); err != nil {
 				return nil, err
 			}
-		case feature.FeatureTypeInt:
+		case eval.FeatureTypeInt:
 			typedRuleVal, ok := ruleVal.(starlark.Int)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, ruleVal)
@@ -345,7 +346,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if err := f.AddIntRule(conditionStr.GoString(), ruleASTv3, intVal); err != nil {
 				return nil, err
 			}
-		case feature.FeatureTypeFloat:
+		case eval.FeatureTypeFloat:
 			typedRuleVal, ok := ruleVal.(starlark.Float)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, ruleVal)
@@ -353,7 +354,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 			if err := f.AddFloatRule(conditionStr.GoString(), ruleASTv3, float64(typedRuleVal)); err != nil {
 				return nil, err
 			}
-		case feature.FeatureTypeJSON:
+		case eval.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(ruleVal)
 			if err != nil {
 				return nil, errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
@@ -420,25 +421,25 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			return errors.Wrap(vr.Error, "test value validate")
 		}
 		switch f.FeatureType {
-		case feature.FeatureTypeProto:
+		case eval.FeatureTypeProto:
 			message, ok := protomodule.AsProtoMessage(expectedVal)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, message, starCtx.String(), expectedVal.String()))
-		case feature.FeatureTypeBool:
+		case eval.FeatureTypeBool:
 			typedUnitTestVal, ok := expectedVal.(starlark.Bool)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, bool(typedUnitTestVal), starCtx.String(), expectedVal.String()))
-		case feature.FeatureTypeString:
+		case eval.FeatureTypeString:
 			typedUnitTestVal, ok := expectedVal.(starlark.String)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, typedUnitTestVal.GoString(), starCtx.String(), expectedVal.String()))
-		case feature.FeatureTypeInt:
+		case eval.FeatureTypeInt:
 			typedUnitTestVal, ok := expectedVal.(starlark.Int)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
@@ -448,13 +449,13 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 				return errors.Wrapf(typeError(f.FeatureType, i, expectedVal), "%T not representable as int64", intVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, intVal, starCtx.String(), expectedVal.String()))
-		case feature.FeatureTypeFloat:
+		case eval.FeatureTypeFloat:
 			typedUnitTestVal, ok := expectedVal.(starlark.Float)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, float64(typedUnitTestVal), starCtx.String(), expectedVal.String()))
-		case feature.FeatureTypeJSON:
+		case eval.FeatureTypeJSON:
 			encoded, err := fb.extractJSON(expectedVal)
 			if err != nil {
 				return errors.Wrap(err, typeError(f.FeatureType, i, expectedVal).Error())
@@ -519,21 +520,21 @@ func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func typeError(expectedType feature.FeatureType, ruleIdx int, value starlark.Value) error {
+func typeError(expectedType eval.FeatureType, ruleIdx int, value starlark.Value) error {
 	return fmt.Errorf("expecting %s for rule idx #%d, instead got %T", starType(expectedType), ruleIdx, value)
 }
 
-func starType(ft feature.FeatureType) string {
+func starType(ft eval.FeatureType) string {
 	switch ft {
-	case feature.FeatureTypeProto:
+	case eval.FeatureTypeProto:
 		return "protoMessage"
-	case feature.FeatureTypeBool:
+	case eval.FeatureTypeBool:
 		return fmt.Sprintf("%T", starlark.False)
-	case feature.FeatureTypeString:
+	case eval.FeatureTypeString:
 		return fmt.Sprintf("%T", starlark.String(""))
-	case feature.FeatureTypeInt:
+	case eval.FeatureTypeInt:
 		return fmt.Sprintf("%T", starlark.MakeInt64(0))
-	case feature.FeatureTypeFloat:
+	case eval.FeatureTypeFloat:
 		return fmt.Sprintf("%T", starlark.Float(0))
 	default:
 		return "unknown"

@@ -19,13 +19,13 @@ import (
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
-	"github.com/lekkodev/cli/pkg/feature"
+	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func testFile(t *testing.T) *build.File {
-	_, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, eval.FeatureTypeBool)
 	p := butils.GetParser(InputTypeAuto)
 	file, err := p("test.star", starBytes)
 	require.NoError(t, err, "failed to parse test star file")
@@ -33,7 +33,7 @@ func testFile(t *testing.T) *build.File {
 }
 
 func TestTraverseNoop(t *testing.T) {
-	_, starBytes := testStar(t, feature.FeatureTypeBool)
+	_, starBytes := testStar(t, eval.FeatureTypeBool)
 	f := testFile(t)
 	tvs := newTraverser(f)
 	err := tvs.traverse()
