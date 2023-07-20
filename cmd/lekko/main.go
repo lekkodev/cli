@@ -23,10 +23,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const (
-	AppName = "lekko"
-)
-
 // Updated at build time using ldflags
 var version = "development"
 
@@ -45,7 +41,7 @@ func main() {
 	rootCmd.AddCommand(apikeyCmd())
 	rootCmd.AddCommand(authCmd())
 	rootCmd.AddCommand(expCmd())
-	rootCmd.AddCommand(generateCmd())
+	//rootCmd.AddCommand(generateCmd())
 
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		printErr(rootCmd, err)

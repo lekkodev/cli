@@ -54,11 +54,6 @@ func printLinef(cmd *cobra.Command, format string, params ...interface{}) {
 	fmt.Printf(format, params...)
 }
 
-// printDelimiterLine prints delimiter line in bold
-func printDelimiterLine() {
-	fmt.Printf("%s\n", logging.Bold(strings.Repeat("-", 80)))
-}
-
 // printErr prints error message on stderr, using in bold and red (on Mac OS).
 // In non-quiet mode, newline is added.
 func printErr(cmd *cobra.Command, err error) {
@@ -102,15 +97,6 @@ func splitStrIntoFixedSlice(str string, tDel string, num int) (rs []string, err 
 		rs[i] = ss[j]
 	}
 	return rs, err
-}
-
-func containsInSlice(s []string, str string) bool {
-	for _, v := range s {
-		if v == str {
-			return true
-		}
-	}
-	return false
 }
 
 func errIfMoreArgs(eArgs, args []string) error {
