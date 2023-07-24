@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package lekko.backend.v1beta1;
 
+import "google/protobuf/timestamp.proto";
 import "lekko/feature/v1beta1/feature.proto";
 
 // Initial implementation of a config distribution service. Clients should begin by
@@ -93,6 +94,7 @@ message FlagEvaluationEvent {
   repeated ContextKey context_keys = 6;
   // The node in the tree that contained the final return value of the feature.
   repeated int32 result_path = 7;
+  google.protobuf.Timestamp client_event_time = 8;
 }
 
 message SendFlagEvaluationMetricsRequest {
