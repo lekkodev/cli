@@ -77,11 +77,11 @@ func TestFeatureProtoRoundTripJSON(t *testing.T) {
 	})
 	require.NoError(t, err)
 	f := NewJSONFeature(defaultVal)
-	ruleVal, err := structpb.NewValue(map[string]interface{}{
+	overrideVal, err := structpb.NewValue(map[string]interface{}{
 		"a": 1,
 	})
 	require.NoError(t, err)
-	require.NoError(t, f.AddJSONOverride("foo", nil, ruleVal))
+	require.NoError(t, f.AddJSONOverride("foo", nil, overrideVal))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)

@@ -238,32 +238,32 @@ func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) description
 }
 
 func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) overridesFn {
-	return func(rulesW *overridesWrapper) error {
-		for i, r := range rulesW.overrides {
-			rulesLang := r.ruleV.Value
+	return func(overridesW *overridesWrapper) error {
+		for i, o := range overridesW.overrides {
+			rulesLang := o.ruleV.Value
 			astNew, err := parser.BuildASTV3(rulesLang)
 			if err != nil {
 				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
 			}
-			rule := &featurev1beta1.Constraint{
+			override := &featurev1beta1.Constraint{
 				Rule:       rulesLang,
 				RuleAstNew: astNew,
 			}
-			protoVal, featureType, err := w.extractValue(&r.v, f)
+			protoVal, featureType, err := w.extractValue(&o.v, f)
 			if err != nil {
 				return errors.Wrapf(err, "rule #%d: extract value", i)
 			}
-			ruleVal, err := w.toAny(protoVal)
+			overrideVal, err := w.toAny(protoVal)
 			if err != nil {
 				return errors.Wrapf(err, "extracted proto val to any for feature type %v", featureType)
 			}
-			rule.Value = ruleVal
-			f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, rule)
+			override.Value = overrideVal
+			f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, override)
 			f.Feature.Rules.Rules = append(f.Feature.Rules.Rules, &featurev1beta1.Rule{
 				Condition: rulesLang,
 				Value: &featurev1beta1.StarExpr{
-					Meta:       buildMeta(r.v),
-					Expression: build.FormatString(r.v),
+					Meta:       buildMeta(o.v),
+					Expression: build.FormatString(o.v),
 				},
 			})
 		}

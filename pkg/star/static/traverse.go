@@ -173,7 +173,7 @@ func (ast *starFeatureAST) unset(key string) {
 }
 
 func (ast *starFeatureAST) parseRules(fn overridesFn) error {
-	rulesW := &overridesWrapper{}
+	overridesW := &overridesWrapper{}
 	usedOverrides := true
 	overridesExprPtr, err := ast.get(OverridesAttrName)
 	if err != nil {
@@ -198,20 +198,20 @@ func (ast *starFeatureAST) parseRules(fn overridesFn) error {
 			if err != nil {
 				return errors.Wrapf(err, "rule %d", i)
 			}
-			rulesW.overrides = append(rulesW.overrides, *o)
+			overridesW.overrides = append(overridesW.overrides, *o)
 		}
 	}
-	if err := fn(rulesW); err != nil {
+	if err := fn(overridesW); err != nil {
 		return err
 	}
-	if len(rulesW.overrides) == 0 {
+	if len(overridesW.overrides) == 0 {
 		ast.unset(OverridesAttrName)
 		ast.unset(RulesAttrName)
 		return nil
 	}
 	var newList []build.Expr
-	for _, rule := range rulesW.overrides {
-		newList = append(newList, rule.toExpr())
+	for _, override := range overridesW.overrides {
+		newList = append(newList, override.toExpr())
 	}
 	// Updated attribute name determined by which was used
 	if usedOverrides {

@@ -635,14 +635,14 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		return nil, errors.Wrap(err, "any to val")
 	}
 	for _, constraint := range fProto.GetTree().GetConstraints() {
-		ruleVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType, registry)
+		overrideVal, err := AnyToVal(constraint.GetValue(), ret.FeatureType, registry)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule any to val")
 		}
 		ret.Overrides = append(ret.Overrides, &Override{
 			Rule:      constraint.Rule,
 			RuleASTV3: constraint.RuleAstNew,
-			Value:     ruleVal,
+			Value:     overrideVal,
 		})
 	}
 	return ret, nil
