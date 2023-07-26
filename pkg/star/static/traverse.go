@@ -114,7 +114,7 @@ func (t *traverser) traverse() error {
 		return errors.Wrap(err, "description fn")
 	}
 	// rules
-	if err := ast.parseRules(t.overridesFn); err != nil {
+	if err := ast.parseOverrides(t.overridesFn); err != nil {
 		return err
 	}
 	return nil
@@ -172,7 +172,7 @@ func (ast *starFeatureAST) unset(key string) {
 	ast.List = newAssignmentList
 }
 
-func (ast *starFeatureAST) parseRules(fn overridesFn) error {
+func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 	overridesW := &overridesWrapper{}
 	usedOverrides := true
 	overridesExprPtr, err := ast.get(OverridesAttrName)
