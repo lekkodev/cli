@@ -202,10 +202,10 @@ func ParseFeaturePath(featurePath string) (namespaceName string, featureName str
 
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
 
-type Rule struct {
-	Condition      string // source of truth
-	ConditionASTV3 *rulesv1beta3.Rule
-	Value          interface{}
+type Override struct {
+	Rule      string // source of truth
+	RuleASTV3 *rulesv1beta3.Rule
+	Value     interface{}
 }
 
 type UnitTest interface {
@@ -360,7 +360,7 @@ type Feature struct {
 	FeatureType      eval.FeatureType
 	Namespace        string
 
-	Rules     []*Rule
+	Overrides []*Override
 	UnitTests []UnitTest
 }
 
@@ -523,62 +523,62 @@ func valFromJSON(encoded []byte) (*structpb.Value, error) {
 	return val, nil
 }
 
-func (f *Feature) AddBoolRule(rule string, astNew *rulesv1beta3.Rule, val bool) error {
+func (f *Feature) AddBoolOverride(rule string, astNew *rulesv1beta3.Rule, val bool) error {
 	if f.FeatureType != eval.FeatureTypeBool {
 		return newTypeMismatchErr(eval.FeatureTypeBool, f.FeatureType)
 	}
-	f.Rules = append(f.Rules, &Rule{
-		Condition:      rule,
-		ConditionASTV3: astNew,
-		Value:          val,
+	f.Overrides = append(f.Overrides, &Override{
+		Rule:      rule,
+		RuleASTV3: astNew,
+		Value:     val,
 	})
 	return nil
 }
 
-func (f *Feature) AddStringRule(rule string, astNew *rulesv1beta3.Rule, val string) error {
+func (f *Feature) AddStringOverride(rule string, astNew *rulesv1beta3.Rule, val string) error {
 	if f.FeatureType != eval.FeatureTypeString {
 		return newTypeMismatchErr(eval.FeatureTypeString, f.FeatureType)
 	}
-	f.Rules = append(f.Rules, &Rule{
-		Condition:      rule,
-		ConditionASTV3: astNew,
-		Value:          val,
+	f.Overrides = append(f.Overrides, &Override{
+		Rule:      rule,
+		RuleASTV3: astNew,
+		Value:     val,
 	})
 	return nil
 }
 
-func (f *Feature) AddIntRule(rule string, astNew *rulesv1beta3.Rule, val int64) error {
+func (f *Feature) AddIntOverride(rule string, astNew *rulesv1beta3.Rule, val int64) error {
 	if f.FeatureType != eval.FeatureTypeInt {
 		return newTypeMismatchErr(eval.FeatureTypeInt, f.FeatureType)
 	}
-	f.Rules = append(f.Rules, &Rule{
-		Condition:      rule,
-		ConditionASTV3: astNew,
-		Value:          val,
+	f.Overrides = append(f.Overrides, &Override{
+		Rule:      rule,
+		RuleASTV3: astNew,
+		Value:     val,
 	})
 	return nil
 }
 
-func (f *Feature) AddFloatRule(rule string, astNew *rulesv1beta3.Rule, val float64) error {
+func (f *Feature) AddFloatOverride(rule string, astNew *rulesv1beta3.Rule, val float64) error {
 	if f.FeatureType != eval.FeatureTypeFloat {
 		return newTypeMismatchErr(eval.FeatureTypeFloat, f.FeatureType)
 	}
-	f.Rules = append(f.Rules, &Rule{
-		Condition:      rule,
-		ConditionASTV3: astNew,
-		Value:          val,
+	f.Overrides = append(f.Overrides, &Override{
+		Rule:      rule,
+		RuleASTV3: astNew,
+		Value:     val,
 	})
 	return nil
 }
 
-func (f *Feature) AddJSONRule(rule string, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
+func (f *Feature) AddJSONOverride(rule string, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
 	if f.FeatureType != eval.FeatureTypeJSON {
 		return newTypeMismatchErr(eval.FeatureTypeJSON, f.FeatureType)
 	}
-	f.Rules = append(f.Rules, &Rule{
-		Condition:      rule,
-		ConditionASTV3: astNew,
-		Value:          val,
+	f.Overrides = append(f.Overrides, &Override{
+		Rule:      rule,
+		RuleASTV3: astNew,
+		Value:     val,
 	})
 	return nil
 }
@@ -605,14 +605,14 @@ func (f *Feature) ToProto() (*featurev1beta1.Feature, error) {
 		Default: defaultAny,
 	}
 	// for now, our tree only has 1 level, (it's effectievly a list)
-	for _, rule := range f.Rules {
-		ruleAny, err := ValToAny(rule.Value, f.FeatureType)
+	for _, override := range f.Overrides {
+		ruleAny, err := ValToAny(override.Value, f.FeatureType)
 		if err != nil {
 			return nil, errors.Wrap(err, "rule value to any")
 		}
 		tree.Constraints = append(tree.Constraints, &featurev1beta1.Constraint{
-			Rule:       rule.Condition,
-			RuleAstNew: rule.ConditionASTV3,
+			Rule:       override.Rule,
+			RuleAstNew: override.RuleASTV3,
 			Value:      ruleAny,
 		})
 	}
@@ -639,10 +639,10 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		if err != nil {
 			return nil, errors.Wrap(err, "rule any to val")
 		}
-		ret.Rules = append(ret.Rules, &Rule{
-			Condition:      constraint.Rule,
-			ConditionASTV3: constraint.RuleAstNew,
-			Value:          ruleVal,
+		ret.Overrides = append(ret.Overrides, &Override{
+			Rule:      constraint.Rule,
+			RuleASTV3: constraint.RuleAstNew,
+			Value:     ruleVal,
 		})
 	}
 	return ret, nil

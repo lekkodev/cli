@@ -37,9 +37,11 @@ const (
 	FeatureVariableName  string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
-	RulesAttrName        string          = "rules"
-	validatorAttrName    string          = "validator"
-	unitTestsAttrName    string          = "tests"
+	// TODO: Fully migrate to overrides over rules
+	RulesAttrName     string = "rules"
+	OverridesAttrName string = "overrides"
+	validatorAttrName string = "validator"
+	unitTestsAttrName string = "tests"
 )
 
 var (
@@ -47,6 +49,7 @@ var (
 		DefaultValueAttrName: {},
 		DescriptionAttrName:  {},
 		RulesAttrName:        {},
+		OverridesAttrName:    {},
 		validatorAttrName:    {},
 		unitTestsAttrName:    {},
 	}
@@ -127,9 +130,9 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	}
 	f.Namespace = fb.namespace
 
-	ruleVals, err := fb.addRules(f, featureVal)
+	overrideVals, err := fb.addOverrides(f, featureVal)
 	if err != nil {
-		return nil, errors.Wrap(err, "add rules")
+		return nil, errors.Wrap(err, "add overrides")
 	}
 
 	if err := fb.addUnitTests(f, featureVal); err != nil {
@@ -140,8 +143,8 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	var validatorResults []*feature.ValidatorResult
 	if fb.validator != nil {
 		validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeDefault, 0, defaultVal))
-		for idx, rv := range ruleVals {
-			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeRule, idx, rv))
+		for idx, ov := range overrideVals {
+			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeRule, idx, ov))
 		}
 	}
 
@@ -268,21 +271,31 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 	return dsc.GoString(), nil
 }
 
-func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {
-	rulesVal, err := featureVal.Attr(RulesAttrName)
+func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {
+	overridesVal, err := featureVal.Attr(OverridesAttrName)
 	if err != nil {
-		//lint:ignore nilerr Attr returns nil, err when not present, which is terrible.
-		return nil, nil
+		// If "overrides" is not set, check if "rules" is
+		// TODO: Migrate fully to overrides
+		overridesVal, err = featureVal.Attr(RulesAttrName)
+		if err != nil {
+			//lint:ignore nilerr Attr returns nil, err when not present, which is terrible.
+			return nil, nil
+		}
+	} else {
+		// Overrides and rules should not be set at the same time
+		if _, err := featureVal.Attr(RulesAttrName); err == nil {
+			return nil, errors.New("overrides and rules should not both be present")
+		}
 	}
-	seq, ok := rulesVal.(starlark.Sequence)
+	seq, ok := overridesVal.(starlark.Sequence)
 	if !ok {
-		return nil, fmt.Errorf("rules: did not get back a starlark sequence: %v", rulesVal)
+		return nil, fmt.Errorf("overrides: did not get back a starlark sequence: %v", overridesVal)
 	}
 	it := seq.Iterate()
 	defer it.Done()
 	var val starlark.Value
 	var i int
-	var ruleVals []starlark.Value
+	var overrideVals []starlark.Value
 	for it.Next(&val) {
 		if val == starlark.None {
 			return nil, fmt.Errorf("type error: [%v] %v", val.Type(), val.String())
@@ -294,76 +307,76 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		if tuple.Len() != 2 {
 			return nil, fmt.Errorf("expecting tuple of length 2, got length %d: %v", tuple.Len(), tuple)
 		}
-		conditionStr, ok := tuple.Index(0).(starlark.String)
+		ruleStr, ok := tuple.Index(0).(starlark.String)
 		if !ok {
 			return nil, fmt.Errorf("type error: expecting string, got %v: %v", tuple.Index(0).Type(), tuple.Index(0))
 		}
-		if conditionStr.GoString() == "" {
-			return nil, fmt.Errorf("expecting valid ruleslang, got %s", conditionStr.GoString())
+		if ruleStr.GoString() == "" {
+			return nil, fmt.Errorf("expecting valid ruleslang, got %s", ruleStr.GoString())
 		}
-		ruleASTv3, err := parseRulesLangV3(conditionStr.GoString())
+		ruleASTv3, err := parseRulesLangV3(ruleStr.GoString())
 		if err != nil {
 			return nil, err
 		}
-		ruleVal := tuple.Index(1)
-		ruleVals = append(ruleVals, ruleVal)
+		overrideVal := tuple.Index(1)
+		overrideVals = append(overrideVals, overrideVal)
 		switch f.FeatureType {
 		case eval.FeatureTypeProto:
-			message, ok := protomodule.AsProtoMessage(ruleVal)
+			message, ok := protomodule.AsProtoMessage(overrideVal)
 			if !ok {
-				return nil, typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, overrideVal)
 			}
-			f.Rules = append(f.Rules, &feature.Rule{
-				Condition:      conditionStr.GoString(),
-				ConditionASTV3: ruleASTv3,
-				Value:          message,
+			f.Overrides = append(f.Overrides, &feature.Override{
+				Rule:      ruleStr.GoString(),
+				RuleASTV3: ruleASTv3,
+				Value:     message,
 			})
 		case eval.FeatureTypeBool:
-			typedRuleVal, ok := ruleVal.(starlark.Bool)
+			typedOverrideVal, ok := overrideVal.(starlark.Bool)
 			if !ok {
-				return nil, typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, overrideVal)
 			}
-			if err := f.AddBoolRule(conditionStr.GoString(), ruleASTv3, bool(typedRuleVal)); err != nil {
+			if err := f.AddBoolOverride(ruleStr.GoString(), ruleASTv3, bool(typedOverrideVal)); err != nil {
 				return nil, err
 			}
 		case eval.FeatureTypeString:
-			typedRuleVal, ok := ruleVal.(starlark.String)
+			typedOverrideVal, ok := overrideVal.(starlark.String)
 			if !ok {
-				return nil, typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, overrideVal)
 			}
-			if err := f.AddStringRule(conditionStr.GoString(), ruleASTv3, typedRuleVal.GoString()); err != nil {
+			if err := f.AddStringOverride(ruleStr.GoString(), ruleASTv3, typedOverrideVal.GoString()); err != nil {
 				return nil, err
 			}
 		case eval.FeatureTypeInt:
-			typedRuleVal, ok := ruleVal.(starlark.Int)
+			typedOverrideVal, ok := overrideVal.(starlark.Int)
 			if !ok {
-				return nil, typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, overrideVal)
 			}
-			intVal, ok := typedRuleVal.Int64()
+			intVal, ok := typedOverrideVal.Int64()
 			if !ok {
-				return nil, errors.Wrapf(typeError(f.FeatureType, i, ruleVal), "%T not representable as int64", typedRuleVal)
+				return nil, errors.Wrapf(typeError(f.FeatureType, i, overrideVal), "%T not representable as int64", typedOverrideVal)
 			}
-			if err := f.AddIntRule(conditionStr.GoString(), ruleASTv3, intVal); err != nil {
+			if err := f.AddIntOverride(ruleStr.GoString(), ruleASTv3, intVal); err != nil {
 				return nil, err
 			}
 		case eval.FeatureTypeFloat:
-			typedRuleVal, ok := ruleVal.(starlark.Float)
+			typedOverrideVal, ok := overrideVal.(starlark.Float)
 			if !ok {
-				return nil, typeError(f.FeatureType, i, ruleVal)
+				return nil, typeError(f.FeatureType, i, overrideVal)
 			}
-			if err := f.AddFloatRule(conditionStr.GoString(), ruleASTv3, float64(typedRuleVal)); err != nil {
+			if err := f.AddFloatOverride(ruleStr.GoString(), ruleASTv3, float64(typedOverrideVal)); err != nil {
 				return nil, err
 			}
 		case eval.FeatureTypeJSON:
-			encoded, err := fb.extractJSON(ruleVal)
+			encoded, err := fb.extractJSON(overrideVal)
 			if err != nil {
-				return nil, errors.Wrap(err, typeError(f.FeatureType, i, ruleVal).Error())
+				return nil, errors.Wrap(err, typeError(f.FeatureType, i, overrideVal).Error())
 			}
 			structVal := &structpb.Value{}
 			if err := structVal.UnmarshalJSON(encoded); err != nil {
 				return nil, errors.Wrapf(err, "failed to unmarshal encoded json '%s'", string(encoded))
 			}
-			if err := f.AddJSONRule(conditionStr.GoString(), ruleASTv3, structVal); err != nil {
+			if err := f.AddJSONOverride(ruleStr.GoString(), ruleASTv3, structVal); err != nil {
 				return nil, errors.Wrap(err, "failed to add json rule")
 			}
 		default:
@@ -372,7 +385,7 @@ func (fb *featureBuilder) addRules(f *feature.Feature, featureVal *starlarkstruc
 		i++
 	}
 
-	return ruleVals, nil
+	return overrideVals, nil
 }
 
 func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarkstruct.Struct) error {

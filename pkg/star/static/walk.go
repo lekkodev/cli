@@ -81,7 +81,7 @@ func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 	t := newTraverser(ast).
 		withDefaultFn(w.buildDefaultFn(ret)).
 		withDescriptionFn(w.buildDescriptionFn(ret)).
-		withRulesFn(w.buildRulesFn(ret)).
+		withOverridesFn(w.buildRulesFn(ret)).
 		withProtoImportsFn(w.buildProtoImportsFn(ret))
 
 	if err := t.traverse(); err != nil {
@@ -98,7 +98,7 @@ func (w *walker) Mutate(f *featurev1beta1.StaticFeature) ([]byte, error) {
 	t := newTraverser(ast).
 		withDefaultFn(w.mutateDefaultFn(f)).
 		withDescriptionFn(w.mutateDescriptionFn(f)).
-		withRulesFn(w.mutateRulesFn(f))
+		withOverridesFn(w.mutateOverridesFn(f))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -237,10 +237,10 @@ func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) description
 	}
 }
 
-func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
-	return func(rulesW *rulesWrapper) error {
-		for i, r := range rulesW.rules {
-			rulesLang := r.conditionV.Value
+func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) overridesFn {
+	return func(rulesW *overridesWrapper) error {
+		for i, r := range rulesW.overrides {
+			rulesLang := r.ruleV.Value
 			astNew, err := parser.BuildASTV3(rulesLang)
 			if err != nil {
 				return errors.Wrapf(err, "build ast for rule '%s'", rulesLang)
@@ -482,9 +482,9 @@ func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptio
 	}
 }
 
-func (w *walker) mutateRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
-	return func(rulesW *rulesWrapper) error {
-		var newRules []rule
+func (w *walker) mutateOverridesFn(f *featurev1beta1.StaticFeature) overridesFn {
+	return func(overridesW *overridesWrapper) error {
+		var newOverrides []override
 		for i, r := range f.FeatureOld.Tree.GetConstraints() {
 			var meta *featurev1beta1.StarMeta
 			rules := f.GetFeature().GetRules().GetRules()
@@ -502,15 +502,15 @@ func (w *walker) mutateRulesFn(f *featurev1beta1.StaticFeature) rulesFn {
 					return errors.Wrap(err, "error attempting to parse v3 rule ast to string")
 				}
 			}
-			newRule := rule{
-				conditionV: &build.StringExpr{
+			newOverride := override{
+				ruleV: &build.StringExpr{
 					Value: newRuleString,
 				},
 				v: gen,
 			}
-			newRules = append(newRules, newRule)
+			newOverrides = append(newOverrides, newOverride)
 		}
-		rulesW.rules = newRules
+		overridesW.overrides = newOverrides
 		return nil
 	}
 }
