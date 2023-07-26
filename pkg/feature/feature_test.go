@@ -24,7 +24,7 @@ import (
 
 func TestFeatureProtoRoundTripBool(t *testing.T) {
 	f := NewBoolFeature(false)
-	require.NoError(t, f.AddBoolRule("foo", nil, true))
+	require.NoError(t, f.AddBoolOverride("foo", nil, true))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -36,7 +36,7 @@ func TestFeatureProtoRoundTripBool(t *testing.T) {
 
 func TestFeatureProtoRoundTripString(t *testing.T) {
 	f := NewStringFeature("a")
-	require.NoError(t, f.AddStringRule("foo", nil, "b"))
+	require.NoError(t, f.AddStringOverride("foo", nil, "b"))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -48,7 +48,7 @@ func TestFeatureProtoRoundTripString(t *testing.T) {
 
 func TestFeatureProtoRoundTripInt(t *testing.T) {
 	f := NewIntFeature(1)
-	require.NoError(t, f.AddIntRule("foo", nil, 2))
+	require.NoError(t, f.AddIntOverride("foo", nil, 2))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -60,7 +60,7 @@ func TestFeatureProtoRoundTripInt(t *testing.T) {
 
 func TestFeatureProtoRoundTripFloat(t *testing.T) {
 	f := NewFloatFeature(1.2)
-	require.NoError(t, f.AddFloatRule("foo", nil, 3.0))
+	require.NoError(t, f.AddFloatOverride("foo", nil, 3.0))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -77,11 +77,11 @@ func TestFeatureProtoRoundTripJSON(t *testing.T) {
 	})
 	require.NoError(t, err)
 	f := NewJSONFeature(defaultVal)
-	ruleVal, err := structpb.NewValue(map[string]interface{}{
+	overrideVal, err := structpb.NewValue(map[string]interface{}{
 		"a": 1,
 	})
 	require.NoError(t, err)
-	require.NoError(t, f.AddJSONRule("foo", nil, ruleVal))
+	require.NoError(t, f.AddJSONOverride("foo", nil, overrideVal))
 	proto, err := f.ToProto()
 	require.NoError(t, err)
 	require.NotNil(t, proto)
@@ -113,14 +113,14 @@ func compareJSONFeatures(t *testing.T, expected, actual *Feature) {
 	require.NotNil(t, actDef)
 	compareStructVal(t, expDef, actDef)
 
-	require.Equal(t, len(expected.Rules), len(actual.Rules))
-	for i, expRule := range expected.Rules {
-		actRule := actual.Rules[i]
-		assert.EqualValues(t, expRule.ConditionASTV3, actRule.ConditionASTV3)
-		expVal, ok := expRule.Value.(*structpb.Value)
+	require.Equal(t, len(expected.Overrides), len(actual.Overrides))
+	for i, expOverride := range expected.Overrides {
+		actOverride := actual.Overrides[i]
+		assert.EqualValues(t, expOverride.RuleASTV3, actOverride.RuleASTV3)
+		expVal, ok := expOverride.Value.(*structpb.Value)
 		require.True(t, ok)
 		require.NotNil(t, expVal)
-		actVal, ok := actRule.Value.(*structpb.Value)
+		actVal, ok := actOverride.Value.(*structpb.Value)
 		require.True(t, ok)
 		require.NotNil(t, actVal)
 		compareStructVal(t, expVal, actVal)

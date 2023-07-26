@@ -161,14 +161,14 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	assert.Contains(t, string(bytes), "age == 12")
 }
 
-func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
+func TestWalkerMutateModifyOverrideRuleV3(t *testing.T) {
 	_, starBytes := testStar(t, eval.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
 	require.NoError(t, err)
 	require.NotNil(t, f)
 
-	// the AST takes precedence over the condition string
+	// the AST takes precedence over the rule string
 	f.FeatureOld.Tree.Constraints[0].RuleAstNew.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
 
 	bytes, err := b.Mutate(f)
@@ -176,7 +176,7 @@ func TestWalkerMutateModifyRuleConditionV3(t *testing.T) {
 	assert.Contains(t, string(bytes), "age == 12")
 }
 
-func TestWalkerMutateAddRule(t *testing.T) {
+func TestWalkerMutateAddOverride(t *testing.T) {
 	_, starBytes := testStar(t, eval.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
@@ -205,7 +205,7 @@ func TestWalkerMutateAddRule(t *testing.T) {
 	assert.Contains(t, string(bytes), "(\"age == 12\", False)")
 }
 
-func TestWalkerMutateAddFirstRule(t *testing.T) {
+func TestWalkerMutateAddFirstOverride(t *testing.T) {
 	val, _ := typedVals(t, eval.FeatureTypeBool)
 	starBytes := []byte(fmt.Sprintf(`result = feature(
     description = "this is a simple feature",
@@ -239,7 +239,7 @@ func TestWalkerMutateAddFirstRule(t *testing.T) {
 	assert.Contains(t, string(bytes), "(\"age == 12\", False)")
 }
 
-func TestWalkerMutateRemoveRule(t *testing.T) {
+func TestWalkerMutateRemoveOverride(t *testing.T) {
 	_, starBytes := testStar(t, eval.FeatureTypeBool)
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
@@ -253,7 +253,7 @@ func TestWalkerMutateRemoveRule(t *testing.T) {
 	assert.NotContains(t, string(bytes), "(\"age == 10\", False)")
 }
 
-func TestWalkerMutateRemoveOnlyRule(t *testing.T) {
+func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
 	val, ruleVal := typedVals(t, eval.FeatureTypeBool)
 	starBytes := []byte(fmt.Sprintf(`result = feature(
     description = "this is a simple feature",

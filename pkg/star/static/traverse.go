@@ -27,18 +27,20 @@ const (
 	FeatureVariableName  string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
-	RulesAttrName        string          = "rules"
-	InputTypeAuto        string          = "auto"
+	// TODO: Fully migrate to overrides over rules
+	RulesAttrName     string = "rules"
+	OverridesAttrName string = "overrides"
+	InputTypeAuto     string = "auto"
 )
 
 func defaultNoop(v *build.Expr) error           { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
-func rulesNoop(rules *rulesWrapper) error       { return nil }
+func rulesNoop(rules *overridesWrapper) error   { return nil }
 func importsNoop(imports *importsWrapper) error { return nil }
 
 type defaultFn func(v *build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
-type rulesFn func(rules *rulesWrapper) error
+type overridesFn func(rules *overridesWrapper) error
 type importsFn func(imports *importsWrapper) error
 
 // Traverses a lekko starlark file, running methods on various
@@ -49,7 +51,7 @@ type traverser struct {
 
 	defaultFn      defaultFn
 	descriptionFn  descriptionFn
-	rulesFn        rulesFn
+	overridesFn    overridesFn
 	protoImportsFn importsFn
 }
 
@@ -58,7 +60,7 @@ func newTraverser(f *build.File) *traverser {
 		f:              f,
 		defaultFn:      defaultNoop,
 		descriptionFn:  descriptionNoop,
-		rulesFn:        rulesNoop,
+		overridesFn:    rulesNoop,
 		protoImportsFn: importsNoop,
 	}
 }
@@ -73,8 +75,8 @@ func (t *traverser) withDescriptionFn(fn descriptionFn) *traverser {
 	return t
 }
 
-func (t *traverser) withRulesFn(fn rulesFn) *traverser {
-	t.rulesFn = fn
+func (t *traverser) withOverridesFn(fn overridesFn) *traverser {
+	t.overridesFn = fn
 	return t
 }
 
@@ -112,7 +114,7 @@ func (t *traverser) traverse() error {
 		return errors.Wrap(err, "description fn")
 	}
 	// rules
-	if err := ast.parseRules(t.rulesFn); err != nil {
+	if err := ast.parseOverrides(t.overridesFn); err != nil {
 		return err
 	}
 	return nil
@@ -170,38 +172,59 @@ func (ast *starFeatureAST) unset(key string) {
 	ast.List = newAssignmentList
 }
 
-func (ast *starFeatureAST) parseRules(fn rulesFn) error {
-	rulesW := &rulesWrapper{}
-	rulesExprPtr, err := ast.get(RulesAttrName)
+func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
+	overridesW := &overridesWrapper{}
+	usedOverrides := true
+	overridesExprPtr, err := ast.get(OverridesAttrName)
+	if err != nil {
+		// Fall back to rules
+		// TODO: fully migrate to overrides instead of rules
+		usedOverrides = false
+		overridesExprPtr, err = ast.get(RulesAttrName)
+	} else {
+		// Overrides and rules should not be set at the same time
+		if _, err := ast.get(RulesAttrName); err == nil {
+			return errors.New("overrides and rules should not both be present")
+		}
+	}
 	if err == nil { // extract existing rules
-		v := *rulesExprPtr
+		v := *overridesExprPtr
 		listV, ok := v.(*build.ListExpr)
 		if !ok {
 			return errors.Wrapf(ErrUnsupportedStaticParsing, "expecting list, got %T", v)
 		}
 		for i, elemV := range listV.List {
-			r, err := newRule(elemV)
+			o, err := newOverride(elemV)
 			if err != nil {
 				return errors.Wrapf(err, "rule %d", i)
 			}
-			rulesW.rules = append(rulesW.rules, *r)
+			overridesW.overrides = append(overridesW.overrides, *o)
 		}
 	}
-	if err := fn(rulesW); err != nil {
+	if err := fn(overridesW); err != nil {
 		return err
 	}
-	if len(rulesW.rules) == 0 {
+	if len(overridesW.overrides) == 0 {
+		ast.unset(OverridesAttrName)
 		ast.unset(RulesAttrName)
 		return nil
 	}
 	var newList []build.Expr
-	for _, rule := range rulesW.rules {
-		newList = append(newList, rule.toExpr())
+	for _, override := range overridesW.overrides {
+		newList = append(newList, override.toExpr())
 	}
-	ast.set(RulesAttrName, &build.ListExpr{
-		List:           newList,
-		ForceMultiLine: true,
-	})
+	// Updated attribute name determined by which was used
+	if usedOverrides {
+		ast.set(OverridesAttrName, &build.ListExpr{
+			List:           newList,
+			ForceMultiLine: true,
+		})
+	} else {
+		ast.set(RulesAttrName, &build.ListExpr{
+			List:           newList,
+			ForceMultiLine: true,
+		})
+	}
 	return nil
 }
 
@@ -251,13 +274,13 @@ func (t *traverser) format() []byte {
 	return build.FormatWithoutRewriting(t.f)
 }
 
-type rulesWrapper struct {
-	rules []rule
+type overridesWrapper struct {
+	overrides []override
 }
 
-type rule struct {
-	conditionV *build.StringExpr
-	v          build.Expr
+type override struct {
+	ruleV *build.StringExpr
+	v     build.Expr
 }
 
 type importsWrapper struct {
@@ -268,7 +291,7 @@ type importVal struct {
 	assignExpr *build.AssignExpr
 }
 
-func newRule(li build.Expr) (*rule, error) {
+func newOverride(li build.Expr) (*override, error) {
 	tupleV, ok := li.(*build.TupleExpr)
 	if !ok {
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting tuple, got %T", li)
@@ -276,20 +299,20 @@ func newRule(li build.Expr) (*rule, error) {
 	if len(tupleV.List) != 2 {
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting tuple of length 2, got length %d", len(tupleV.List))
 	}
-	conditionV := tupleV.List[0]
-	conditionStringV, ok := conditionV.(*build.StringExpr)
+	ruleV := tupleV.List[0]
+	ruleStringV, ok := ruleV.(*build.StringExpr)
 	if !ok {
-		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting condition string, got %T", conditionV)
+		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "expecting rule string, got %T", ruleV)
 	}
-	return &rule{
-		conditionV: conditionStringV,
-		v:          tupleV.List[1],
+	return &override{
+		ruleV: ruleStringV,
+		v:     tupleV.List[1],
 	}, nil
 }
 
-func (r *rule) toExpr() build.Expr {
+func (r *override) toExpr() build.Expr {
 	return &build.TupleExpr{
-		List: []build.Expr{r.conditionV, r.v},
+		List: []build.Expr{r.ruleV, r.v},
 		// TODO: expose the following fields in the mutator to make them round-trip safe
 		Comments: build.Comments{
 			Before: nil,
@@ -302,6 +325,6 @@ func (r *rule) toExpr() build.Expr {
 	}
 }
 
-func (r *rule) String() string {
-	return fmt.Sprintf("c: '%s', v: '%v'", r.conditionV.Value, r.v)
+func (r *override) String() string {
+	return fmt.Sprintf("r: '%s', v: '%v'", r.ruleV.Value, r.v)
 }
