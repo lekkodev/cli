@@ -94,16 +94,16 @@ func (t *traverser) traverse() error {
 	if err != nil {
 		return err
 	}
-	defaultExpr, err := ast.get(DefaultValueAttrName)
-	if err != nil {
-		return err
+	defaultExpr, found := ast.get(DefaultValueAttrName)
+	if !found {
+		return errors.New("missing config default value")
 	}
 	if err := t.defaultFn(defaultExpr); err != nil {
 		return errors.Wrap(err, "default fn")
 	}
-	descriptionExprPtr, err := ast.get(DescriptionAttrName)
-	if err != nil {
-		return err
+	descriptionExprPtr, found := ast.get(DescriptionAttrName)
+	if !found {
+		return errors.New("missing config description")
 	}
 	descriptionExpr := *descriptionExprPtr
 	descriptionStr, ok := descriptionExpr.(*build.StringExpr)
@@ -126,23 +126,24 @@ type starFeatureAST struct {
 	*build.CallExpr
 }
 
-func (ast *starFeatureAST) get(key string) (*build.Expr, error) {
+// Returns true as the second value if key is in AST, false otherwise
+func (ast *starFeatureAST) get(key string) (*build.Expr, bool) {
 	for _, expr := range ast.List {
 		assignExpr, ok := expr.(*build.AssignExpr)
 		if ok {
 			kwargName, ok := assignExpr.LHS.(*build.Ident)
 			if ok {
 				if kwargName.Name == key {
-					return &assignExpr.RHS, nil
+					return &assignExpr.RHS, true
 				}
 			}
 		}
 	}
-	return nil, errors.Errorf("could not find '%s' attribute in feature", key)
+	return nil, false
 }
 
 func (ast *starFeatureAST) set(key string, value build.Expr) {
-	if existing, err := ast.get(key); err == nil {
+	if existing, found := ast.get(key); found {
 		*existing = value
 		return
 	}
@@ -175,19 +176,19 @@ func (ast *starFeatureAST) unset(key string) {
 func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 	overridesW := &overridesWrapper{}
 	usedOverrides := true
-	overridesExprPtr, err := ast.get(OverridesAttrName)
-	if err != nil {
+	overridesExprPtr, overridesFound := ast.get(OverridesAttrName)
+	if !overridesFound {
 		// Fall back to rules
 		// TODO: fully migrate to overrides instead of rules
 		usedOverrides = false
-		overridesExprPtr, err = ast.get(RulesAttrName)
+		overridesExprPtr, overridesFound = ast.get(RulesAttrName)
 	} else {
 		// Overrides and rules should not be set at the same time
-		if _, err := ast.get(RulesAttrName); err == nil {
+		if _, rulesFound := ast.get(RulesAttrName); rulesFound {
 			return errors.New("overrides and rules should not both be present")
 		}
 	}
-	if err == nil { // extract existing rules
+	if overridesFound { // extract existing rules
 		v := *overridesExprPtr
 		listV, ok := v.(*build.ListExpr)
 		if !ok {
