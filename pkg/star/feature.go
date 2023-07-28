@@ -35,7 +35,7 @@ import (
 const (
 	FeatureConstructor   starlark.String = "feature"
 	ExportConstructor    starlark.String = "export"
-	FeatureVariableName  string          = "result"
+	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
 	// TODO: Fully migrate to overrides over rules
@@ -80,7 +80,7 @@ func makeExport(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tupl
 	if len(args) > 0 {
 		return nil, fmt.Errorf("feature: unexpected positional arguments")
 	}
-	thread.SetLocal("result", starlarkstruct.FromKeywords(ExportConstructor, kwargs))
+	thread.SetLocal(ResultVariableName, starlarkstruct.FromKeywords(ExportConstructor, kwargs))
 	return starlark.None, nil
 }
 
@@ -108,9 +108,9 @@ func newFeatureBuilder(featureName string, namespace string, globals starlark.St
 }
 
 func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
-	resultVal, ok := fb.globals[FeatureVariableName]
+	resultVal, ok := fb.globals[ResultVariableName]
 	if !ok {
-		return nil, fmt.Errorf("required variable %s is not found", FeatureVariableName)
+		return nil, fmt.Errorf("required variable %s is not found", ResultVariableName)
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {

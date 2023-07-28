@@ -25,7 +25,7 @@ import (
 const (
 	FeatureConstructor   starlark.String = "feature"
 	ExportConstructor    starlark.String = "export"
-	FeatureVariableName  string          = "result"
+	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
 	// TODO: Fully migrate to overrides over rules
@@ -243,7 +243,7 @@ func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 			}
 		case *build.AssignExpr:
 			lhs, ok := t.LHS.(*build.Ident)
-			if ok && lhs.Name == FeatureVariableName {
+			if ok && lhs.Name == ResultVariableName {
 				rhs, ok := t.RHS.(*build.CallExpr)
 				if ok && len(rhs.List) > 0 {
 					structName, ok := rhs.X.(*build.Ident)
