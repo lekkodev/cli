@@ -770,6 +770,11 @@ message Measurement {
   int64 value = 2;
 }
 
+message MetricsTimeSeries {
+  string name = 1;
+  repeated Measurement measurements = 2;
+}
+
 message GetFlagEvaluationMetricsResponse {
   string commit_sha = 1; // deprecated
   google.protobuf.Timestamp start_time = 2;
@@ -799,7 +804,10 @@ message GetFlagEvaluationMetricsResponse {
     repeated int64 path = 1;
     repeated Measurement measurements = 2;
   }
-  repeated TimeSeries evaluation_counts = 8;
+  repeated GetFlagEvaluationMetricsResponse.TimeSeries evaluation_counts = 8;
+
+  repeated MetricsTimeSeries time_series_by_api_key = 9;
+  repeated MetricsTimeSeries time_series_by_config_sha = 10;
 }
 
 // Restore will start a new session, with all

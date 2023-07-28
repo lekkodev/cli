@@ -1,4 +1,4 @@
-result = feature(
+export(
     description = "test config for context keys",
     default = "foo",
     rules = [

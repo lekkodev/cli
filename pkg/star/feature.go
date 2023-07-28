@@ -34,6 +34,7 @@ import (
 
 const (
 	FeatureConstructor   starlark.String = "feature"
+	ExportConstructor    starlark.String = "export"
 	FeatureVariableName  string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
@@ -73,6 +74,14 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 		return nil, fmt.Errorf("feature: unexpected positional arguments")
 	}
 	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
+}
+
+func makeExport(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) > 0 {
+		return nil, fmt.Errorf("feature: unexpected positional arguments")
+	}
+	thread.SetLocal("result", starlarkstruct.FromKeywords(ExportConstructor, kwargs))
+	return starlark.None, nil
 }
 
 type Builder interface {

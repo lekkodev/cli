@@ -73,6 +73,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	globals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
 		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
+		"export":  starlark.NewBuiltin("export", makeExport),
 		"proto":   protoModule,
 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"math":    math.Module,

@@ -1,6 +1,6 @@
 tpb = proto.package("testproto.v1beta1")
 
-result = feature(
+export(
     description = "Configuration for lekko's OAuth 2.0 device authorization process",
     default = tpb.OAuthDeviceConfig(
         verification_uri = "https://app.lekko.com/login/device",

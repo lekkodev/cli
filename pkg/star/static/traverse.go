@@ -24,6 +24,7 @@ import (
 
 const (
 	FeatureConstructor   starlark.String = "feature"
+	ExportConstructor    starlark.String = "export"
 	FeatureVariableName  string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
@@ -120,8 +121,8 @@ func (t *traverser) traverse() error {
 	return nil
 }
 
-// A wrapper type around the feature AST, e.g.
-// `feature(description="foo", default=False)`
+// A wrapper type around the config AST, e.g.
+// `export(description="foo", default=False)`
 type starFeatureAST struct {
 	*build.CallExpr
 }
@@ -233,6 +234,13 @@ func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 	for _, expr := range t.f.Stmt {
 		switch t := expr.(type) {
+		case *build.CallExpr:
+			if len(t.List) > 0 {
+				structName, ok := t.X.(*build.Ident)
+				if ok && structName.Name == ExportConstructor.GoString() {
+					return &starFeatureAST{t}, nil
+				}
+			}
 		case *build.AssignExpr:
 			lhs, ok := t.LHS.(*build.Ident)
 			if ok && lhs.Name == FeatureVariableName {

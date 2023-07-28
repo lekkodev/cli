@@ -1,7 +1,7 @@
 gpb = proto.package("google.protobuf")
 tpb = proto.package("testproto.v1beta1")
 
-result = feature(
+export(
     description = "nested feature for testing",
     default = tpb.MultiLevel(
         primitive = "foo",

@@ -2,7 +2,7 @@
 google_protobuf = proto.package("google.protobuf")
 internal_config_v1beta1 = proto.package("internal.config.v1beta1")
 
-result = feature(
+export(
     description = "my feature description",
     default = internal_config_v1beta1.ProductMetadata(
         state = internal_config_v1beta1.ProductState.PRODUCT_STATE_UNSPECIFIED,

@@ -75,7 +75,7 @@ func typedVals(t *testing.T, ft eval.FeatureType) (defaultVal testVal, ruleVal t
 
 func testStar(t *testing.T, ft eval.FeatureType) (testVal, []byte) {
 	val, ruleVal := typedVals(t, ft)
-	return val, []byte(fmt.Sprintf(`result = feature(
+	return val, []byte(fmt.Sprintf(`export(
     description = "this is a simple feature",
     default = %s,
     rules = [
@@ -207,7 +207,7 @@ func TestWalkerMutateAddOverride(t *testing.T) {
 
 func TestWalkerMutateAddFirstOverride(t *testing.T) {
 	val, _ := typedVals(t, eval.FeatureTypeBool)
-	starBytes := []byte(fmt.Sprintf(`result = feature(
+	starBytes := []byte(fmt.Sprintf(`export(
     description = "this is a simple feature",
     default = %s,
 	)
@@ -255,7 +255,7 @@ func TestWalkerMutateRemoveOverride(t *testing.T) {
 
 func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
 	val, ruleVal := typedVals(t, eval.FeatureTypeBool)
-	starBytes := []byte(fmt.Sprintf(`result = feature(
+	starBytes := []byte(fmt.Sprintf(`export(
     description = "this is a simple feature",
     default = %s,
 	rules = [
@@ -442,7 +442,7 @@ func TestWalkerProto(t *testing.T) {
 			star := []byte(fmt.Sprintf(`
 			pb = proto.package("google.protobuf")
 			tpb = proto.package("testproto.v1beta1")
-			result = feature(
+			export(
 				description = "proto feature",
 				default = %s,
 				rules = [("age > 1", %s)]
