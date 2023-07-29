@@ -6,7 +6,6 @@ require (
 	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230713234042-fbaaf4924427.1
 	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230713234042-fbaaf4924427.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
-	github.com/OneOfOne/xxhash v1.2.8
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/bufbuild/connect-go v1.9.0
 	github.com/cli/browser v1.0.0
@@ -30,6 +29,7 @@ require (
 require (
 	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230620172853-31a82baf7ccf.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
+	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230518184743-7afd39499903 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
