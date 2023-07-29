@@ -76,12 +76,15 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
 }
 
-func makeExport(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	if len(args) > 0 {
-		return nil, fmt.Errorf("feature: unexpected positional arguments")
+func makeExport(lekkoGlobals starlark.StringDict) func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	f := func(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(args) > 0 {
+			return nil, fmt.Errorf("feature: unexpected positional arguments")
+		}
+		lekkoGlobals[ResultVariableName] = starlarkstruct.FromKeywords(ExportConstructor, kwargs)
+		return starlark.None, nil
 	}
-	thread.SetLocal(ResultVariableName, starlarkstruct.FromKeywords(ExportConstructor, kwargs))
-	return starlark.None, nil
+	return f
 }
 
 type Builder interface {

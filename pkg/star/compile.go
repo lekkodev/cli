@@ -70,10 +70,15 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	if err != nil {
 		return nil, errors.Wrap(err, "new assert module")
 	}
-	globals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
+
+	// starlark doesn't have a good way to access globals from builtins
+	// so any builtin that needs to pass something back should use lekkoGlobals
+	// see `makeExport` 
+	lekkoGlobals := starlark.StringDict{}
+	starlarkGlobals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
 		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
-		"export":  starlark.NewBuiltin("export", makeExport),
+		"export":  starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
 		"proto":   protoModule,
 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"math":    math.Module,
@@ -81,7 +86,12 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	if err != nil {
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
-	cf, err := newFeatureBuilder(c.ff.Name, c.ff.NamespaceName, globals, nv, c.registry).Build()
+	lekkoGlobals.Freeze()
+	for k, v := range lekkoGlobals {
+		starlarkGlobals[k] = v
+	}
+
+	cf, err := newFeatureBuilder(c.ff.Name, c.ff.NamespaceName, starlarkGlobals, nv, c.registry).Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
 	}
