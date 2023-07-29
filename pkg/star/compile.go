@@ -73,7 +73,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 
 	// starlark doesn't have a good way to access globals from builtins
 	// so any builtin that needs to pass something back should use lekkoGlobals
-	// see `makeExport` 
+	// see `makeExport`
 	lekkoGlobals := starlark.StringDict{}
 	starlarkGlobals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
 		"assert":  assertModule,
