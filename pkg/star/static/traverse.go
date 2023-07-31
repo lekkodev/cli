@@ -197,7 +197,7 @@ func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 		for i, elemV := range listV.List {
 			o, err := newOverride(elemV)
 			if err != nil {
-				return errors.Wrapf(err, "rule %d", i)
+				return errors.Wrapf(err, "override %d", i)
 			}
 			overridesW.overrides = append(overridesW.overrides, *o)
 		}

@@ -144,7 +144,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	if fb.validator != nil {
 		validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeDefault, 0, defaultVal))
 		for idx, ov := range overrideVals {
-			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeRule, idx, ov))
+			validatorResults = append(validatorResults, fb.validate(feature.ValidatorResultTypeOverride, idx, ov))
 		}
 	}
 
@@ -534,7 +534,7 @@ func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 }
 
 func typeError(expectedType eval.FeatureType, ruleIdx int, value starlark.Value) error {
-	return fmt.Errorf("expecting %s for rule idx #%d, instead got %T", starType(expectedType), ruleIdx, value)
+	return fmt.Errorf("expecting %s for value of override idx #%d, instead got %T", starType(expectedType), ruleIdx, value)
 }
 
 func starType(ft eval.FeatureType) string {
