@@ -47,7 +47,7 @@ type testVal struct {
 	starRepr string
 }
 
-func typedVals(t *testing.T, ft eval.FeatureType, ident string) (defaultVal testVal, ruleVal testVal) {
+func typedVals(t *testing.T, ft eval.FeatureType, indent string) (defaultVal testVal, ruleVal testVal) {
 	switch ft {
 	case eval.FeatureTypeBool:
 		return testVal{true, "True"}, testVal{false, "False"}
@@ -66,7 +66,7 @@ func typedVals(t *testing.T, ft eval.FeatureType, ident string) (defaultVal test
             %[1]s"a": 1,
             %[1]s"b": False,
             %[1]s"c": [99, "bar"],
-        %[1]s}`, ident)
+        %[1]s}`, indent)
 		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
@@ -74,11 +74,11 @@ func typedVals(t *testing.T, ft eval.FeatureType, ident string) (defaultVal test
 }
 
 func testStar(t *testing.T, ft eval.FeatureType, useExport bool) (testVal, []byte) {
-	ident := ""
+	indent := ""
 	if useExport && ft == eval.FeatureTypeJSON {
-		ident = "    "
+		indent = "    "
 	}
-	val, ruleVal := typedVals(t, ft, ident)
+	val, ruleVal := typedVals(t, ft, indent)
 	if useExport {
 		return val, []byte(fmt.Sprintf(`export(
     Config(

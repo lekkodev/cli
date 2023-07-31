@@ -129,7 +129,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
-		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", FeatureConstructor.GoString(), featureVal)
+		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", ConfigConstructor.GoString(), featureVal)
 	}
 	if err := fb.validateFeature(featureVal); err != nil {
 		return nil, errors.Wrap(err, "validate feature")
