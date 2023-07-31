@@ -79,6 +79,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 		"export":  starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
+		"Config":  starlark.NewBuiltin("Config", makeConfig),
 		"proto":   protoModule,
 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"math":    math.Module,

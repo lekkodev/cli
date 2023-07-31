@@ -35,6 +35,7 @@ import (
 const (
 	FeatureConstructor   starlark.String = "feature"
 	ExportConstructor    starlark.String = "export"
+	ConfigConstructor    starlark.String = "Config"
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
@@ -76,12 +77,23 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
 }
 
+func makeConfig(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) > 0 {
+		return nil, fmt.Errorf("feature: unexpected positional arguments")
+	}
+	return starlarkstruct.FromKeywords(ConfigConstructor, kwargs), nil
+}
+
 func makeExport(lekkoGlobals starlark.StringDict) func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	f := func(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-		if len(args) > 0 {
-			return nil, fmt.Errorf("feature: unexpected positional arguments")
+		if len(args) != 1 {
+			return nil, fmt.Errorf("export: exactly one possitional argument is required")
 		}
-		lekkoGlobals[ResultVariableName] = starlarkstruct.FromKeywords(ExportConstructor, kwargs)
+		config, ok := args[0].(*starlarkstruct.Struct)
+		if !ok || config.Constructor() != ConfigConstructor {
+			return nil, fmt.Errorf("export: argument is not Config")
+		}
+		lekkoGlobals[ResultVariableName] = config
 		return starlark.None, nil
 	}
 	return f
