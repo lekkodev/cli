@@ -1,3 +1,17 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package star
 
 import (
@@ -33,7 +47,7 @@ func (fs *testFS) RemoveIfExists(path string) (bool, error) {
 	return false, fmt.Errorf("not supported")
 }
 
-func (fs *testFS) GetFileContents(ctx context.Context, path string) ([]byte, error){
+func (fs *testFS) GetFileContents(ctx context.Context, path string) ([]byte, error) {
 	contents, ok := fs.files[path]
 	if !ok {
 		return nil, fmt.Errorf("file does not exist: %s", path)
@@ -41,7 +55,7 @@ func (fs *testFS) GetFileContents(ctx context.Context, path string) ([]byte, err
 	return []byte(contents), nil
 }
 
-func (fs *testFS) GetDirContents(ctx context.Context, path string) ([]fs.ProviderFile, error){
+func (fs *testFS) GetDirContents(ctx context.Context, path string) ([]fs.ProviderFile, error) {
 	return nil, fmt.Errorf("not supported")
 }
 
@@ -54,7 +68,7 @@ func getRegistry(t *testing.T) *protoregistry.Types {
 	if err != nil {
 		t.Error()
 	}
-	return sTypes.Types	
+	return sTypes.Types
 }
 
 func TestCompile_exportConfig(t *testing.T) {
