@@ -22,9 +22,11 @@ import (
 	"github.com/lekkodev/go-sdk/pkg/eval"
 )
 
-const starFmt = `result=feature(
-	description="my feature description",
-	default=%s
+const starFmt = `export(
+    Config(
+        description="my feature description",
+        default=%s
+    ),
 )
 `
 
@@ -32,12 +34,14 @@ const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
 {{$alias}} = proto.package("{{$name}}")
 {{- end}}
 
-result = feature(
-    description = "my feature description",
-    default = {{.Message}}(
-        {{- range .Fields}}
-        {{. -}},
-        {{- end}}
+export(
+    Config(
+        description = "my feature description",
+        default = {{.Message}}(
+            {{- range .Fields}}
+            {{. -}},
+            {{- end}}
+        ),
     ),
 )
 `

@@ -34,7 +34,9 @@ import (
 
 const (
 	FeatureConstructor   starlark.String = "feature"
-	FeatureVariableName  string          = "result"
+	ExportConstructor    starlark.String = "export"
+	ConfigConstructor    starlark.String = "Config"
+	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
 	// TODO: Fully migrate to overrides over rules
@@ -75,6 +77,28 @@ func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, k
 	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
 }
 
+func makeConfig(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) > 0 {
+		return nil, fmt.Errorf("feature: unexpected positional arguments")
+	}
+	return starlarkstruct.FromKeywords(ConfigConstructor, kwargs), nil
+}
+
+func makeExport(lekkoGlobals starlark.StringDict) func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	f := func(thread *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("export: exactly one possitional argument is required")
+		}
+		config, ok := args[0].(*starlarkstruct.Struct)
+		if !ok || config.Constructor() != ConfigConstructor {
+			return nil, fmt.Errorf("export: argument is not Config")
+		}
+		lekkoGlobals[ResultVariableName] = config
+		return starlark.None, nil
+	}
+	return f
+}
+
 type Builder interface {
 	Build() (*feature.CompiledFeature, error)
 }
@@ -99,13 +123,13 @@ func newFeatureBuilder(featureName string, namespace string, globals starlark.St
 }
 
 func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
-	resultVal, ok := fb.globals[FeatureVariableName]
+	resultVal, ok := fb.globals[ResultVariableName]
 	if !ok {
-		return nil, fmt.Errorf("required variable %s is not found", FeatureVariableName)
+		return nil, fmt.Errorf("required variable %s is not found", ResultVariableName)
 	}
 	featureVal, ok := resultVal.(*starlarkstruct.Struct)
 	if !ok {
-		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", FeatureConstructor.GoString(), featureVal)
+		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", ConfigConstructor.GoString(), featureVal)
 	}
 	if err := fb.validateFeature(featureVal); err != nil {
 		return nil, errors.Wrap(err, "validate feature")

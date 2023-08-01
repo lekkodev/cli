@@ -47,7 +47,7 @@ type testVal struct {
 	starRepr string
 }
 
-func typedVals(t *testing.T, ft eval.FeatureType) (defaultVal testVal, ruleVal testVal) {
+func typedVals(t *testing.T, ft eval.FeatureType, indent string) (defaultVal testVal, ruleVal testVal) {
 	switch ft {
 	case eval.FeatureTypeBool:
 		return testVal{true, "True"}, testVal{false, "False"}
@@ -62,20 +62,37 @@ func typedVals(t *testing.T, ft eval.FeatureType) (defaultVal testVal, ruleVal t
 		require.NoError(t, err)
 		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
 		require.NoError(t, err)
-		ruleStarVal := `{
-            "a": 1,
-            "b": False,
-            "c": [99, "bar"],
-        }`
+		ruleStarVal := fmt.Sprintf(`{
+            %[1]s"a": 1,
+            %[1]s"b": False,
+            %[1]s"c": [99, "bar"],
+        %[1]s}`, indent)
 		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
 	t.Fatalf("unsupported feature type %s", ft)
 	return
 }
 
-func testStar(t *testing.T, ft eval.FeatureType) (testVal, []byte) {
-	val, ruleVal := typedVals(t, ft)
-	return val, []byte(fmt.Sprintf(`result = feature(
+func testStar(t *testing.T, ft eval.FeatureType, useExport bool) (testVal, []byte) {
+	indent := ""
+	if useExport && ft == eval.FeatureTypeJSON {
+		indent = "    "
+	}
+	val, ruleVal := typedVals(t, ft, indent)
+	if useExport {
+		return val, []byte(fmt.Sprintf(`export(
+    Config(
+        description = "this is a simple feature",
+        default = %s,
+        rules = [
+            ("age == 10", %s),
+            ("city in [\"Rome\",\"Milan\"]", %s),
+        ],
+    ),
+)
+`, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
+	} else {
+		return val, []byte(fmt.Sprintf(`result = feature(
     description = "this is a simple feature",
     default = %s,
     rules = [
@@ -84,6 +101,7 @@ func testStar(t *testing.T, ft eval.FeatureType) (testVal, []byte) {
     ],
 )
 `, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
+	}
 }
 
 func testWalker(t *testing.T, testStar []byte) *walker {
@@ -98,119 +116,136 @@ func testWalker(t *testing.T, testStar []byte) *walker {
 }
 
 func TestWalkerBuild(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+	}
 }
 
 func TestWalkerBuildJSON(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeJSON)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeJSON, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+	}
 }
 
 func TestWalkerMutateNoop(t *testing.T) {
-	for _, fType := range parsableFeatureTypes {
-		t.Run(string(fType), func(t *testing.T) {
-			_, starBytes := testStar(t, fType)
-			b := testWalker(t, starBytes)
-			f, err := b.Build()
-			require.NoError(t, err)
-			require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		for _, fType := range parsableFeatureTypes {
+			t.Run(string(fType), func(t *testing.T) {
+				_, starBytes := testStar(t, fType, useExport)
+				b := testWalker(t, starBytes)
+				f, err := b.Build()
+				require.NoError(t, err)
+				require.NotNil(t, f)
 
-			bytes, err := b.Mutate(f)
-			require.NoError(t, err)
-			assert.EqualValues(t, string(starBytes), string(bytes))
-		})
+				bytes, err := b.Mutate(f)
+				require.NoError(t, err)
+				assert.EqualValues(t, string(starBytes), string(bytes))
+			})
+		}
 	}
 }
 
 func TestWalkerMutateDefault(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	bv := &wrapperspb.BoolValue{}
-	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(bv))
-	require.True(t, bv.Value)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+		bv := &wrapperspb.BoolValue{}
+		require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(bv))
+		require.True(t, bv.Value)
 
-	f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Bool(false))
-	require.NoError(t, err)
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotEqualValues(t, starBytes, bytes)
+		f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Bool(false))
+		require.NoError(t, err)
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotEqualValues(t, starBytes, bytes)
+	}
 }
 
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
 
-	f.FeatureOld.Tree.Constraints[0].RuleAstNew = nil // set to nil so that mutation favors the raw string
-	f.FeatureOld.Tree.Constraints[0].Rule = "age == 12"
+		f.FeatureOld.Tree.Constraints[0].RuleAstNew = nil // set to nil so that mutation favors the raw string
+		f.FeatureOld.Tree.Constraints[0].Rule = "age == 12"
 
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.Contains(t, string(bytes), "age == 12")
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.Contains(t, string(bytes), "age == 12")
+	}
 }
 
 func TestWalkerMutateModifyOverrideRuleV3(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
 
-	// the AST takes precedence over the rule string
-	f.FeatureOld.Tree.Constraints[0].RuleAstNew.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
+		// the AST takes precedence over the rule string
+		f.FeatureOld.Tree.Constraints[0].RuleAstNew.GetAtom().ComparisonValue = structpb.NewNumberValue(12)
 
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.Contains(t, string(bytes), "age == 12")
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.Contains(t, string(bytes), "age == 12")
+	}
 }
 
 func TestWalkerMutateAddOverride(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
 
-	falseAny, err := b.toAny(wrapperspb.Bool(false))
-	require.NoError(t, err)
+		falseAny, err := b.toAny(wrapperspb.Bool(false))
+		require.NoError(t, err)
 
-	f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
-		Rule: "age == 12",
-		RuleAstNew: &rulesv1beta3.Rule{
-			Rule: &rulesv1beta3.Rule_Atom{
-				Atom: &rulesv1beta3.Atom{
-					ContextKey:         "age",
-					ComparisonValue:    structpb.NewNumberValue(12),
-					ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+		f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, &featurev1beta1.Constraint{
+			Rule: "age == 12",
+			RuleAstNew: &rulesv1beta3.Rule{
+				Rule: &rulesv1beta3.Rule_Atom{
+					Atom: &rulesv1beta3.Atom{
+						ContextKey:         "age",
+						ComparisonValue:    structpb.NewNumberValue(12),
+						ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
+					},
 				},
 			},
-		},
-		Value: falseAny,
-	})
+			Value: falseAny,
+		})
 
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.Contains(t, string(bytes), "(\"age == 12\", False)")
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.Contains(t, string(bytes), "(\"age == 12\", False)")
+	}
 }
 
 func TestWalkerMutateAddFirstOverride(t *testing.T) {
-	val, _ := typedVals(t, eval.FeatureTypeBool)
-	starBytes := []byte(fmt.Sprintf(`result = feature(
-    description = "this is a simple feature",
-    default = %s,
-	)
+	val, _ := typedVals(t, eval.FeatureTypeBool, "")
+	starBytes := []byte(fmt.Sprintf(`
+		export(
+			Config(
+				description = "this is a simple feature",
+				default = %s,
+			),
+		)
 	`, val.starRepr))
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
@@ -240,28 +275,33 @@ func TestWalkerMutateAddFirstOverride(t *testing.T) {
 }
 
 func TestWalkerMutateRemoveOverride(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
 
-	f.FeatureOld.Tree.Constraints = f.FeatureOld.Tree.Constraints[1:]
+		f.FeatureOld.Tree.Constraints = f.FeatureOld.Tree.Constraints[1:]
 
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotContains(t, string(bytes), "(\"age == 10\", False)")
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotContains(t, string(bytes), "(\"age == 10\", False)")
+	}
 }
 
 func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
-	val, ruleVal := typedVals(t, eval.FeatureTypeBool)
-	starBytes := []byte(fmt.Sprintf(`result = feature(
-    description = "this is a simple feature",
-    default = %s,
-	rules = [
-		("age == 10", %s),
-	],
-)
+	val, ruleVal := typedVals(t, eval.FeatureTypeBool, "")
+	starBytes := []byte(fmt.Sprintf(`
+		export(
+			Config(
+				description = "this is a simple feature",
+				default = %s,
+				rules = [
+					("age == 10", %s),
+				],
+			),
+		)
 	`, val.starRepr, ruleVal.starRepr))
 	b := testWalker(t, starBytes)
 	f, err := b.Build()
@@ -278,107 +318,119 @@ func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
 func TestWalkerMutateDescription(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {
-			_, starBytes := testStar(t, fType)
-			b := testWalker(t, starBytes)
-			f, err := b.Build()
-			require.NoError(t, err)
-			require.NotNil(t, f)
+			for _, useExport := range []bool{true, false} {
+				_, starBytes := testStar(t, fType, useExport)
+				b := testWalker(t, starBytes)
+				f, err := b.Build()
+				require.NoError(t, err)
+				require.NotNil(t, f)
 
-			f.FeatureOld.Description = "a NEW way to describe this feature."
+				f.FeatureOld.Description = "a NEW way to describe this feature."
 
-			bytes, err := b.Mutate(f)
-			require.NoError(t, err)
-			assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+				bytes, err := b.Mutate(f)
+				require.NoError(t, err)
+				assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+			}
 		})
 	}
 }
 
 func TestWalkerMutateTypeMismatch(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeFloat)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeFloat, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
 
-	// change from float to int
-	f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Int64(29))
-	require.NoError(t, err)
-	_, err = b.Mutate(f)
-	require.Error(t, err)
+		// change from float to int
+		f.FeatureOld.Tree.Default, err = b.toAny(wrapperspb.Int64(29))
+		require.NoError(t, err)
+		_, err = b.Mutate(f)
+		require.Error(t, err)
+	}
 }
 
 func TestWalkerMutateDefaultFloat(t *testing.T) {
-	val, starBytes := testStar(t, eval.FeatureTypeFloat)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	dv := &wrapperspb.DoubleValue{}
-	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(dv))
-	require.EqualValues(t, dv.Value, val.goVal)
+	for _, useExport := range []bool{true, false} {
+		val, starBytes := testStar(t, eval.FeatureTypeFloat, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+		dv := &wrapperspb.DoubleValue{}
+		require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(dv))
+		require.EqualValues(t, dv.Value, val.goVal)
 
-	newFloatAny, err := b.toAny(wrapperspb.Double(99.99))
-	require.NoError(t, err)
-	f.FeatureOld.Tree.Default = newFloatAny
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotEqualValues(t, starBytes, bytes)
+		newFloatAny, err := b.toAny(wrapperspb.Double(99.99))
+		require.NoError(t, err)
+		f.FeatureOld.Tree.Default = newFloatAny
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotEqualValues(t, starBytes, bytes)
+	}
 }
 
 func TestWalkerMutateDefaultInt(t *testing.T) {
-	val, starBytes := testStar(t, eval.FeatureTypeInt)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	iv := &wrapperspb.Int64Value{}
-	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(iv))
-	require.EqualValues(t, iv.Value, val.goVal)
+	for _, useExport := range []bool{true, false} {
+		val, starBytes := testStar(t, eval.FeatureTypeInt, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+		iv := &wrapperspb.Int64Value{}
+		require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(iv))
+		require.EqualValues(t, iv.Value, val.goVal)
 
-	newIntAny, err := b.toAny(wrapperspb.Int64(99))
-	require.NoError(t, err)
-	f.FeatureOld.Tree.Default = newIntAny
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotEqualValues(t, starBytes, bytes)
+		newIntAny, err := b.toAny(wrapperspb.Int64(99))
+		require.NoError(t, err)
+		f.FeatureOld.Tree.Default = newIntAny
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotEqualValues(t, starBytes, bytes)
+	}
 }
 
 func TestWalkerMutateDefaultString(t *testing.T) {
-	val, starBytes := testStar(t, eval.FeatureTypeString)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	sv := &wrapperspb.StringValue{}
-	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
-	require.EqualValues(t, sv.Value, val.goVal)
+	for _, useExport := range []bool{true, false} {
+		val, starBytes := testStar(t, eval.FeatureTypeString, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+		sv := &wrapperspb.StringValue{}
+		require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
+		require.EqualValues(t, sv.Value, val.goVal)
 
-	newStringAny, err := b.toAny(wrapperspb.String("hello"))
-	require.NoError(t, err)
-	f.FeatureOld.Tree.Default = newStringAny
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotEqualValues(t, starBytes, bytes)
-	assert.Contains(t, string(bytes), "hello")
+		newStringAny, err := b.toAny(wrapperspb.String("hello"))
+		require.NoError(t, err)
+		f.FeatureOld.Tree.Default = newStringAny
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotEqualValues(t, starBytes, bytes)
+		assert.Contains(t, string(bytes), "hello")
+	}
 }
 
 func TestWalkerMutateDefaultJSON(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeJSON)
-	b := testWalker(t, starBytes)
-	f, err := b.Build()
-	require.NoError(t, err)
-	require.NotNil(t, f)
-	sv := &structpb.Value{}
-	require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
-	require.NotEmpty(t, sv.GetListValue().Values)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeJSON, useExport)
+		b := testWalker(t, starBytes)
+		f, err := b.Build()
+		require.NoError(t, err)
+		require.NotNil(t, f)
+		sv := &structpb.Value{}
+		require.NoError(t, f.FeatureOld.Tree.Default.UnmarshalTo(sv))
+		require.NotEmpty(t, sv.GetListValue().Values)
 
-	sv.GetListValue().Values = append(sv.GetListValue().Values, structpb.NewStringValue("foobar"))
-	f.FeatureOld.Tree.Default, err = b.toAny(sv)
-	require.NoError(t, err)
-	bytes, err := b.Mutate(f)
-	require.NoError(t, err)
-	assert.NotEqualValues(t, starBytes, bytes)
-	assert.Contains(t, string(bytes), "foobar")
+		sv.GetListValue().Values = append(sv.GetListValue().Values, structpb.NewStringValue("foobar"))
+		f.FeatureOld.Tree.Default, err = b.toAny(sv)
+		require.NoError(t, err)
+		bytes, err := b.Mutate(f)
+		require.NoError(t, err)
+		assert.NotEqualValues(t, starBytes, bytes)
+		assert.Contains(t, string(bytes), "foobar")
+	}
 }
 
 func TestWalkerProto(t *testing.T) {
@@ -442,10 +494,12 @@ func TestWalkerProto(t *testing.T) {
 			star := []byte(fmt.Sprintf(`
 			pb = proto.package("google.protobuf")
 			tpb = proto.package("testproto.v1beta1")
-			result = feature(
-				description = "proto feature",
-				default = %s,
-				rules = [("age > 1", %s)]
+			export(
+				Config(
+					description = "proto feature",
+					default = %s,
+					rules = [("age > 1", %s)]
+				),
 			)
 			`, tc.starVal, tc.starVal))
 			b := testWalker(t, star)
