@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testFile(t *testing.T) *build.File {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
+func testFile(t *testing.T, useExport bool) *build.File {
+	_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
 	p := butils.GetParser(InputTypeAuto)
 	file, err := p("test.star", starBytes)
 	require.NoError(t, err, "failed to parse test star file")
@@ -33,12 +33,14 @@ func testFile(t *testing.T) *build.File {
 }
 
 func TestTraverseNoop(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	f := testFile(t)
-	tvs := newTraverser(f)
-	err := tvs.traverse()
-	require.NoError(t, err)
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		f := testFile(t, useExport)
+		tvs := newTraverser(f)
+		err := tvs.traverse()
+		require.NoError(t, err)
 
-	// after noop traversal, the round trip bytes should be the same.
-	assert.EqualValues(t, string(starBytes), string(tvs.format()))
+		// after noop traversal, the round trip bytes should be the same.
+		assert.EqualValues(t, string(starBytes), string(tvs.format()))
+	}
 }
