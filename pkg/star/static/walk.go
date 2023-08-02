@@ -493,7 +493,7 @@ func (w *walker) mutateOverridesFn(f *featurev1beta1.StaticFeature) overridesFn 
 			}
 			gen, err := w.genValue(r.Value, f, meta)
 			if err != nil {
-				return errors.Wrapf(err, "rule %d: gen value", i)
+				return errors.Wrapf(err, "override %d: gen value", i)
 			}
 			newRuleString := r.Rule
 			if r.RuleAstNew != nil {
