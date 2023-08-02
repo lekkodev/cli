@@ -100,7 +100,7 @@ service BFFService {
   // Evaluates the feature based on the given session.
   rpc Eval(EvalRequest) returns (EvalResponse) {}
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
-  rpc GetRepoFlagEvaluationMetrics(GetRepoFlagEvaluationMetricsRequest) returns (GetRepoFlagEvaluationMetricsResponse) {}
+  rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
@@ -811,13 +811,13 @@ message GetFlagEvaluationMetricsResponse {
   repeated MetricsTimeSeries time_series_by_config_sha = 10;
 }
 
-message GetRepoFlagEvaluationMetricsRequest {
+message GetRepoMetricsRequest {
   RepositoryKey repo_key = 1;
   google.protobuf.Timestamp start_time = 2;
   google.protobuf.Timestamp end_time = 3;
 }
 
-message GetRepoFlagEvaluationMetricsResponse {
+message GetRepoMetricsResponse {
   repeated MetricsTimeSeries time_series = 1;
 }
 
