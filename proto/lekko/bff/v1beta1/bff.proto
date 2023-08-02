@@ -818,7 +818,7 @@ message GetRepoFlagEvaluationMetricsRequest {
 }
 
 message GetRepoFlagEvaluationMetricsResponse {
-  repeated MetricsTimeSeries datapoints = 1;
+  repeated MetricsTimeSeries time_series = 1;
 }
 
 // Restore will start a new session, with all
