@@ -757,7 +757,7 @@ type ValidatorResultType int
 
 const (
 	ValidatorResultTypeDefault ValidatorResultType = iota
-	ValidatorResultTypeRule
+	ValidatorResultTypeOverride
 	ValidatorResultTypeTest
 )
 
@@ -791,8 +791,8 @@ func (vr *ValidatorResult) WithError(err error) *ValidatorResult {
 
 func (vr *ValidatorResult) Identifier() string {
 	prefix := "validate default"
-	if vr.Type == ValidatorResultTypeRule {
-		prefix = fmt.Sprintf("validate rule %d", vr.Index)
+	if vr.Type == ValidatorResultTypeOverride {
+		prefix = fmt.Sprintf("validate override %d", vr.Index)
 	}
 	end := 25
 	if len(vr.Value) < end {
