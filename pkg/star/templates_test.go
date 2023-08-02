@@ -39,7 +39,7 @@ func TestRenderExistingProtoTemplate(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	goldenFile, err := os.ReadFile("./testdata/TestRenderExistingProtoTemplate.star")
+	goldenFile, err := os.ReadFile("./testdata/test_render_existing_proto_template.star")
 	require.NoError(t, err)
 	require.Equal(t, string(goldenFile), string(template))
 }

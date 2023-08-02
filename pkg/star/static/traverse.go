@@ -24,7 +24,9 @@ import (
 
 const (
 	FeatureConstructor   starlark.String = "feature"
-	FeatureVariableName  string          = "result"
+	ExportConstructor    starlark.String = "export"
+	ConfigConstructor    starlark.String = "Config"
+	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
 	// TODO: Fully migrate to overrides over rules
@@ -120,8 +122,8 @@ func (t *traverser) traverse() error {
 	return nil
 }
 
-// A wrapper type around the feature AST, e.g.
-// `feature(description="foo", default=False)`
+// A wrapper type around the config AST, e.g.
+// `Config(description="foo", default=False)`
 type starFeatureAST struct {
 	*build.CallExpr
 }
@@ -229,18 +231,39 @@ func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 	return nil
 }
 
+func tryExtractConfigAST(expr build.Expr) (*starFeatureAST, bool) {
+	config, ok := expr.(*build.CallExpr)
+	if ok && len(config.List) > 0 {
+		structName, ok := config.X.(*build.Ident)
+		if ok && (structName.Name == ConfigConstructor.GoString() || structName.Name == FeatureConstructor.GoString()) {
+			return &starFeatureAST{config}, true
+		}
+	}
+	return nil, false
+}
+
 // extracts a pointer to the feature AST in starlark.
 func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 	for _, expr := range t.f.Stmt {
 		switch t := expr.(type) {
+		case *build.CallExpr:
+			if len(t.List) == 1 {
+				funcName, ok := t.X.(*build.Ident)
+				if ok && funcName.Name == ExportConstructor.GoString() {
+					config, ok := tryExtractConfigAST(t.List[0])
+					if ok {
+						return config, nil
+					}
+				}
+			}
 		case *build.AssignExpr:
 			lhs, ok := t.LHS.(*build.Ident)
-			if ok && lhs.Name == FeatureVariableName {
+			if ok && lhs.Name == ResultVariableName {
 				rhs, ok := t.RHS.(*build.CallExpr)
-				if ok && len(rhs.List) > 0 {
-					structName, ok := rhs.X.(*build.Ident)
-					if ok && structName.Name == FeatureConstructor.GoString() {
-						return &starFeatureAST{rhs}, nil
+				if ok {
+					config, ok := tryExtractConfigAST(rhs)
+					if ok {
+						return config, nil
 					}
 				}
 			}

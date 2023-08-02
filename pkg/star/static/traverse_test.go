@@ -24,21 +24,73 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func testFile(t *testing.T) *build.File {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
+func testFile(t *testing.T, useExport bool) *build.File {
+	_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+	return toFile(t, starBytes)
+}
+
+func toFile(t *testing.T, starBytes []byte) *build.File {
 	p := butils.GetParser(InputTypeAuto)
 	file, err := p("test.star", starBytes)
 	require.NoError(t, err, "failed to parse test star file")
 	return file
 }
 
-func TestTraverseNoop(t *testing.T) {
-	_, starBytes := testStar(t, eval.FeatureTypeBool)
-	f := testFile(t)
-	tvs := newTraverser(f)
-	err := tvs.traverse()
-	require.NoError(t, err)
+func strToFile(t *testing.T, contents string) *build.File {
+	return toFile(t, []byte(contents))
+}
 
-	// after noop traversal, the round trip bytes should be the same.
-	assert.EqualValues(t, string(starBytes), string(tvs.format()))
+func TestTraverse_noop(t *testing.T) {
+	for _, useExport := range []bool{true, false} {
+		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		f := testFile(t, useExport)
+		tvs := newTraverser(f)
+		err := tvs.traverse()
+		require.NoError(t, err)
+
+		// after noop traversal, the round trip bytes should be the same.
+		assert.EqualValues(t, string(starBytes), string(tvs.format()))
+	}
+}
+
+func TestTraverse_garbage(t *testing.T) {
+	traverser := newTraverser(strToFile(t, "foo"))
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_noExport(t *testing.T) {
+	traverser := newTraverser(strToFile(t, "Config()"))
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_noConfig(t *testing.T) {
+	traverser := newTraverser(strToFile(t, "export()"))
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_emptyConfig(t *testing.T) {
+	traverser := newTraverser(strToFile(t, `export(Config())`))
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_noDescription(t *testing.T) {
+	starBytes := []byte(`export(Config(default=1))`)
+	f := toFile(t, starBytes)
+	traverser := newTraverser(f)
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_noDefault(t *testing.T) {
+	starBytes := []byte(`export(Config(description="test"))`)
+	f := toFile(t, starBytes)
+	traverser := newTraverser(f)
+	err := traverser.traverse()
+	require.Error(t, err)
+}
+func TestTraverse_valid(t *testing.T) {
+	starBytes := []byte(`export(Config(description="test",default=1))`)
+	f := toFile(t, starBytes)
+	traverser := newTraverser(f)
+	err := traverser.traverse()
+	require.NoError(t, err)
 }
