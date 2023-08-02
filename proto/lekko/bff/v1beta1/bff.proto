@@ -100,6 +100,7 @@ service BFFService {
   // Evaluates the feature based on the given session.
   rpc Eval(EvalRequest) returns (EvalResponse) {}
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
+  rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
@@ -763,6 +764,16 @@ message EvalResponse {
   lekko.feature.v1beta1.Any result_new = 3;
 }
 
+message Measurement {
+  google.protobuf.Timestamp time = 1;
+  int64 value = 2;
+}
+
+message MetricsTimeSeries {
+  string name = 1;
+  repeated Measurement measurements = 2;
+}
+
 message GetFlagEvaluationMetricsRequest {
   RepositoryKey repo_key = 1;
   string commit_sha = 2; // deprecated
@@ -772,16 +783,6 @@ message GetFlagEvaluationMetricsRequest {
   google.protobuf.Timestamp start_time = 5;
   // Defaults to now
   google.protobuf.Timestamp end_time = 6;
-}
-
-message Measurement {
-  google.protobuf.Timestamp time = 1;
-  int64 value = 2;
-}
-
-message MetricsTimeSeries {
-  string name = 1;
-  repeated Measurement measurements = 2;
 }
 
 message GetFlagEvaluationMetricsResponse {
@@ -817,6 +818,16 @@ message GetFlagEvaluationMetricsResponse {
 
   repeated MetricsTimeSeries time_series_by_api_key = 9;
   repeated MetricsTimeSeries time_series_by_config_sha = 10;
+}
+
+message GetRepoMetricsRequest {
+  RepositoryKey repo_key = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message GetRepoMetricsResponse {
+  repeated MetricsTimeSeries time_series = 1;
 }
 
 // Restore will start a new session, with all
