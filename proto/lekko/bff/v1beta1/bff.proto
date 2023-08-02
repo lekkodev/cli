@@ -306,6 +306,14 @@ message DeleteRepositoryResponse {}
 
 message ListRepositoriesRequest {}
 
+enum GithubInstallationStatus {
+  GITHUB_INSTALLATION_STATUS_UNSPECIFIED = 0;
+  GITHUB_INSTALLATION_STATUS_ADDED = 1;
+  GITHUB_INSTALLATION_STATUS_REMOVED = 2;
+  GITHUB_INSTALLATION_STATUS_SUSPENDED = 3;
+  GITHUB_INSTALLATION_STATUS_ERROR = 4;
+}
+
 message Repository {
   string owner_name = 1;
   string repo_name = 2;
@@ -324,6 +332,7 @@ message Repository {
   // The branch name currently deployed in Lekko. This
   // is typically the default branch, e.g. 'main'.
   string branch_name = 10;
+  GithubInstallationStatus github_installation_status = 11;
 }
 
 // RepositoriesResponse contains either a
