@@ -36,8 +36,9 @@ import (
 
 func featureCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "feature",
-		Short: "feature management",
+		Use:     "config",
+		Aliases: []string{"feature"},
+		Short:   "config management",
 	}
 	cmd.AddCommand(
 		featureList(),
@@ -52,7 +53,7 @@ func featureList() *cobra.Command {
 	var ns string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "list all features",
+		Short: "list all configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -77,7 +78,7 @@ func featureList() *cobra.Command {
 			for _, namespaceMD := range nss {
 				ffs, err := r.GetFeatureFiles(cmd.Context(), namespaceMD.Name)
 				if err != nil {
-					return errors.Wrapf(err, "get feature files for ns %s", namespaceMD.Name)
+					return errors.Wrapf(err, "get config files for ns %s", namespaceMD.Name)
 				}
 				for _, ff := range ffs {
 					fmt.Printf("%s/%s\n", ff.NamespaceName, ff.Name)
@@ -94,7 +95,7 @@ func featureAdd() *cobra.Command {
 	var ns, featureName, fType, fProtoMessage string
 	cmd := &cobra.Command{
 		Use:   "add",
-		Short: "add feature",
+		Short: "add config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -122,14 +123,14 @@ func featureAdd() *cobra.Command {
 			}
 			if len(featureName) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Feature Name:",
+					Message: "Config Name:",
 				}, &featureName); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
 			}
 			if len(fType) == 0 {
 				if err := survey.AskOne(&survey.Select{
-					Message: "Feature Type:",
+					Message: "Config Type:",
 					Options: eval.FeatureTypes(),
 				}, &fType); err != nil {
 					return errors.Wrap(err, "prompt")
@@ -151,19 +152,19 @@ func featureAdd() *cobra.Command {
 
 			ctx := cmd.Context()
 			if path, err := r.AddFeature(ctx, ns, featureName, eval.FeatureType(fType), fProtoMessage); err != nil {
-				return errors.Wrap(err, "add feature")
+				return errors.Wrap(err, "add config")
 			} else {
-				fmt.Printf("Successfully added feature %s/%s at path %s\n", ns, featureName, path)
+				fmt.Printf("Successfully added config %s/%s at path %s\n", ns, featureName, path)
 				fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
 			}
 			_, err = r.Compile(ctx, &repo.CompileRequest{})
 			return err
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add feature in")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to add")
-	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of feature to create")
-	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of feature to create")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add config in")
+	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to add")
+	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of config to create")
+	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create")
 	return cmd
 }
 
@@ -171,7 +172,7 @@ func featureRemove() *cobra.Command {
 	var ns, featureName string
 	cmd := &cobra.Command{
 		Use:   "remove",
-		Short: "remove feature",
+		Short: "remove config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -188,19 +189,19 @@ func featureRemove() *cobra.Command {
 			ns, featureName = nsf.namespace(), nsf.feature()
 			// Confirm
 			featurePair := fmt.Sprintf("%s/%s", ns, featureName)
-			fmt.Printf("Deleting feature %s...\n", featurePair)
+			fmt.Printf("Deleting config %s...\n", featurePair)
 			if err := confirmInput(featurePair); err != nil {
 				return err
 			}
 			if err := r.RemoveFeature(cmd.Context(), ns, featureName); err != nil {
-				return errors.Wrap(err, "remove feature")
+				return errors.Wrap(err, "remove config")
 			}
-			fmt.Printf("Successfully removed feature %s/%s\n", ns, featureName)
+			fmt.Printf("Successfully removed config %s/%s\n", ns, featureName)
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
+	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
 	return cmd
 }
 
@@ -209,7 +210,7 @@ func featureEval() *cobra.Command {
 	var verbose bool
 	cmd := &cobra.Command{
 		Use:   "eval",
-		Short: "evaluate feature",
+		Short: "evaluate config",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -284,9 +285,9 @@ func featureEval() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
-	cmd.Flags().StringVarP(&jsonContext, "context", "c", "", "context to evaluate with in json format")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
+	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
+	cmd.Flags().StringVarP(&jsonContext, "context", "t", "", "context to evaluate with in json format")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
 	return cmd
 }
@@ -450,7 +451,7 @@ func newNSF(ns, featureName string) *namespaceFeature {
 func newNSFFromPair(nsfPair string) (*namespaceFeature, error) {
 	parts := strings.Split(nsfPair, "/")
 	if len(parts) != 2 {
-		return nil, errors.Errorf("invalid namespace/feature: %s", nsfPair)
+		return nil, errors.Errorf("invalid namespace/config: %s", nsfPair)
 	}
 	return newNSF(parts[0], parts[1]), nil
 }
@@ -513,7 +514,7 @@ func featureSelect(ctx context.Context, r repo.ConfigurationRepository, ns, feat
 	}
 	var fPath string
 	if err := survey.AskOne(&survey.Select{
-		Message: "Feature:",
+		Message: "Config:",
 		Options: options,
 	}, &fPath); err != nil {
 		return nil, errors.Wrap(err, "prompt")
