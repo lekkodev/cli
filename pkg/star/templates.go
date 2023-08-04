@@ -24,7 +24,7 @@ import (
 
 const starFmt = `export(
     Config(
-        description="my feature description",
+        description="my config description",
         default=%s
     ),
 )
@@ -36,7 +36,7 @@ const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
 
 export(
     Config(
-        description = "my feature description",
+        description = "my config description",
         default = {{.Message}}(
             {{- range .Fields}}
             {{. -}},
