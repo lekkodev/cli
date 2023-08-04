@@ -48,6 +48,6 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 		}
 		return eval.NewV1Beta3(&f, nsMD.Name), nil
 	default:
-		return nil, fmt.Errorf("unknown version when parsing feature: %s", nsMD.Version)
+		return nil, fmt.Errorf("unknown version when parsing config: %s", nsMD.Version)
 	}
 }

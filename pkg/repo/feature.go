@@ -128,7 +128,7 @@ type CompileRequest struct {
 
 func (cr CompileRequest) Validate() error {
 	if cr.Upgrade && len(cr.FeatureFilter) > 0 {
-		return errors.New("cannot provide a feature filter if upgrading an entire namespace")
+		return errors.New("cannot provide a config filter if upgrading an entire namespace")
 	}
 	return nil
 }
@@ -246,7 +246,7 @@ type FeatureCompilationResults []*FeatureCompilationResult
 
 func (fcrs FeatureCompilationResults) RenderSummary(r Logger) {
 	table := tablewriter.NewWriter(r.Writer())
-	table.SetHeader([]string{"Namespace", "Feature", "Compiled", "Type", "Tests", "Validators", "Persisted"})
+	table.SetHeader([]string{"Namespace", "Config", "Compiled", "Type", "Tests", "Validators", "Persisted"})
 	for _, fcr := range fcrs {
 		table.Append(fcr.Summary(r))
 	}
@@ -294,7 +294,7 @@ func (r *repository) Verify(ctx context.Context, req *VerifyRequest) error {
 		}
 	}
 	if hasDiff {
-		return errors.New("Found feature(s) with compilation or formatting diffs")
+		return errors.New("Found config(s) with compilation or formatting diffs")
 	}
 	return nil
 }
@@ -306,7 +306,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	// Step 1: collect. Find all features
 	vffs, numNamespaces, err := r.findVersionedFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
 	if err != nil {
-		return nil, errors.Wrap(err, "find features")
+		return nil, errors.Wrap(err, "find configs")
 	}
 	oldNamespaces := make(map[string]struct{})
 	var results FeatureCompilationResults
@@ -324,7 +324,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 		}
 		results = append(results, &FeatureCompilationResult{NamespaceName: vff.ff.NamespaceName, FeatureName: vff.ff.Name, NamespaceVersion: desiredVersion})
 	}
-	r.Logf("Found %d features across %d namespaces\n", len(results), numNamespaces)
+	r.Logf("Found %d configs across %d namespaces\n", len(results), numNamespaces)
 	r.Logf("Compiling...\n")
 	registry, err := r.registry(ctx, req.Registry)
 	if err != nil {
@@ -472,10 +472,10 @@ func (r *repository) findVersionedFeatureFiles(ctx context.Context, namespaceFil
 			}
 			if verify {
 				if err := ff.Verify(); err != nil {
-					return nil, 0, errors.Wrapf(err, "feature %s/%s verify", ff.NamespaceName, ff.Name)
+					return nil, 0, errors.Wrapf(err, "config %s/%s verify", ff.NamespaceName, ff.Name)
 				}
 				if err := feature.ComplianceCheck(ff, &nsMD); err != nil {
-					return nil, 0, errors.Wrapf(err, "feature %s/%s compliance check", ff.NamespaceName, ff.Name)
+					return nil, 0, errors.Wrapf(err, "config %s/%s compliance check", ff.NamespaceName, ff.Name)
 				}
 			}
 			results = append(results, &versionedFeatureFile{
@@ -541,14 +541,14 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 	for ns := range nsMDs {
 		ffs, err := r.GetFeatureFiles(ctx, ns)
 		if err != nil {
-			return errors.Wrap(err, "get feature files")
+			return errors.Wrap(err, "get config files")
 		}
 
 		for _, ff := range ffs {
 			ff := ff
 			formatted, _, err := r.FormatFeature(ctx, &ff, nil, false, verbose)
 			if err != nil {
-				return errors.Wrapf(err, "format feature '%s/%s", ff.NamespaceName, ff.Name)
+				return errors.Wrapf(err, "format config '%s/%s", ff.NamespaceName, ff.Name)
 			}
 			if formatted {
 				r.Logf("Formatted and rewrote %s/%s\n", ff.NamespaceName, ff.Name)
@@ -574,7 +574,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 	persisted, diffExists, err = formatter.StaticFormat(ctx)
 	if errors.Is(err, static.ErrUnsupportedStaticParsing) {
 		// show warning
-		r.Logf("%s\n", r.Yellow(fmt.Sprintf("[%s] Unable to statically parse feature. Web features may be limited.", fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))))
+		r.Logf("%s\n", r.Yellow(fmt.Sprintf("[%s] Unable to statically parse config. Web features may be limited.", fmt.Sprintf("%s/%s", ff.NamespaceName, ff.Name))))
 		if verbose {
 			r.Logf("\t%v\n", err)
 		}
@@ -594,15 +594,15 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 // Returns the path to the feature file that was written to disk.
 func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType eval.FeatureType, protoMessageName string) (string, error) {
 	if !isValidName(featureName) {
-		return "", errors.Wrap(ErrInvalidName, "feature")
+		return "", errors.Wrap(ErrInvalidName, "config")
 	}
 	ffs, err := r.GetFeatureFiles(ctx, ns) // returns err if ns doesn't exist
 	if err != nil {
-		return "", fmt.Errorf("failed to get feature files: %v", err)
+		return "", fmt.Errorf("failed to get config files: %v", err)
 	}
 	for _, ff := range ffs {
 		if ff.Name == featureName {
-			return "", fmt.Errorf("feature named %s already exists", featureName)
+			return "", fmt.Errorf("config named %s already exists", featureName)
 		}
 	}
 
@@ -610,7 +610,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 	if fType == eval.FeatureTypeProto {
 		template, err = addFeatureFromProto(r, ctx, protoMessageName)
 		if err != nil {
-			return "", errors.Wrap(err, "add feature from proto")
+			return "", errors.Wrap(err, "add config from proto")
 		}
 	} else {
 		template, err = star.GetTemplate(fType)
@@ -621,7 +621,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 
 	featurePath := filepath.Join(ns, fmt.Sprintf("%s.star", featureName))
 	if err := r.WriteFile(featurePath, template, 0600); err != nil {
-		return "", fmt.Errorf("failed to add feature: %v", err)
+		return "", fmt.Errorf("failed to add config: %v", err)
 	}
 	return featurePath, nil
 }
@@ -763,7 +763,7 @@ func (r *repository) RemoveFeature(ctx context.Context, ns, featureName string) 
 		}
 	}
 	if !removed {
-		return errors.Errorf("feature %s does not exist", featureName)
+		return errors.Errorf("config %s does not exist", featureName)
 	}
 	return nil
 }
@@ -828,7 +828,7 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCt
 
 	ff, err := r.GetFeatureFile(ctx, ns, featureName)
 	if err != nil {
-		return nil, "", nil, errors.Wrap(err, "get feature file")
+		return nil, "", nil, errors.Wrap(err, "get config file")
 	}
 
 	if err := feature.ComplianceCheck(*ff, nsMD); err != nil {
@@ -846,7 +846,7 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCt
 func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error) {
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
-		return nil, errors.Wrap(err, "get feature contents")
+		return nil, errors.Wrap(err, "get config contents")
 	}
 	registry, err = r.registry(ctx, registry)
 	if err != nil {
@@ -883,7 +883,7 @@ func (r *repository) GetContents(ctx context.Context) (map[metadata.NamespaceCon
 	for namespace, nsMD := range nsMDs {
 		ffs, err := r.GetFeatureFiles(ctx, namespace)
 		if err != nil {
-			return nil, errors.Wrap(err, "get feature files")
+			return nil, errors.Wrap(err, "get config files")
 		}
 		ret[*nsMD] = ffs
 	}
@@ -928,7 +928,7 @@ func isValidName(name string) bool {
 func (r *repository) GetFeatureFiles(ctx context.Context, namespace string) ([]feature.FeatureFile, error) {
 	ffs, err := feature.GroupFeatureFiles(ctx, namespace, r)
 	if err != nil {
-		return nil, errors.Wrap(err, "group feature files")
+		return nil, errors.Wrap(err, "group config files")
 	}
 	return ffs, nil
 }
@@ -936,7 +936,7 @@ func (r *repository) GetFeatureFiles(ctx context.Context, namespace string) ([]f
 func (r *repository) GetFeatureFile(ctx context.Context, namespace, featureName string) (*feature.FeatureFile, error) {
 	ffs, err := r.GetFeatureFiles(ctx, namespace)
 	if err != nil {
-		return nil, errors.Wrap(err, "get feature files")
+		return nil, errors.Wrap(err, "get config files")
 	}
 	var ff *feature.FeatureFile
 	for _, file := range ffs {
@@ -947,7 +947,7 @@ func (r *repository) GetFeatureFile(ctx context.Context, namespace, featureName 
 		}
 	}
 	if ff == nil {
-		return nil, fmt.Errorf("feature '%s' not found in namespace '%s'", featureName, namespace)
+		return nil, fmt.Errorf("config '%s' not found in namespace '%s'", featureName, namespace)
 	}
 	return ff, nil
 }
@@ -955,7 +955,7 @@ func (r *repository) GetFeatureFile(ctx context.Context, namespace, featureName 
 func (r *repository) GetFeatureContents(ctx context.Context, namespace, featureName string) (*feature.FeatureContents, error) {
 	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
 	if err != nil {
-		return nil, errors.Wrap(err, "get feature file")
+		return nil, errors.Wrap(err, "get config file")
 	}
 	star, err := r.Read(filepath.Join(namespace, ff.StarlarkFileName))
 	if err != nil {
@@ -985,7 +985,7 @@ func (r *repository) GetFeatureContents(ctx context.Context, namespace, featureN
 func (r *repository) GetFeatureHash(ctx context.Context, namespace, featureName string) (*plumbing.Hash, error) {
 	ff, err := r.GetFeatureFile(ctx, namespace, featureName)
 	if err != nil {
-		return nil, errors.Wrap(err, "get feature file")
+		return nil, errors.Wrap(err, "get config file")
 	}
 	hash, err := r.headHash()
 	if err != nil {

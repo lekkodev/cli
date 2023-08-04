@@ -80,6 +80,6 @@ func GetTemplate(fType eval.FeatureType) ([]byte, error) {
 	case eval.FeatureTypeJSON:
 		return []byte(fmt.Sprintf(starFmt, "{}")), nil
 	default:
-		return nil, fmt.Errorf("templating is not supported for feature type %s", fType)
+		return nil, fmt.Errorf("templating is not supported for config type %s", fType)
 	}
 }

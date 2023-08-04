@@ -3,7 +3,7 @@ tpb = proto.package("testproto.v1beta1")
 
 export(
     Config(
-        description = "nested feature for testing",
+        description = "nested config for testing",
         default = tpb.MultiLevel(
             primitive = "foo",
             sub_message = tpb.TestMessage(

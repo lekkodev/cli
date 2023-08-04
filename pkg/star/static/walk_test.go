@@ -69,7 +69,7 @@ func typedVals(t *testing.T, ft eval.FeatureType, indent string) (defaultVal tes
         %[1]s}`, indent)
 		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
 	}
-	t.Fatalf("unsupported feature type %s", ft)
+	t.Fatalf("unsupported config type %s", ft)
 	return
 }
 
@@ -82,7 +82,7 @@ func testStar(t *testing.T, ft eval.FeatureType, useExport bool) (testVal, []byt
 	if useExport {
 		return val, []byte(fmt.Sprintf(`export(
     Config(
-        description = "this is a simple feature",
+        description = "this is a simple config",
         default = %s,
         rules = [
             ("age == 10", %s),
@@ -93,7 +93,7 @@ func testStar(t *testing.T, ft eval.FeatureType, useExport bool) (testVal, []byt
 `, val.starRepr, ruleVal.starRepr, ruleVal.starRepr))
 	} else {
 		return val, []byte(fmt.Sprintf(`result = feature(
-    description = "this is a simple feature",
+    description = "this is a simple config",
     default = %s,
     rules = [
         ("age == 10", %s),
@@ -242,7 +242,7 @@ func TestWalkerMutateAddFirstOverride(t *testing.T) {
 	starBytes := []byte(fmt.Sprintf(`
 		export(
 			Config(
-				description = "this is a simple feature",
+				description = "this is a simple config",
 				default = %s,
 			),
 		)
@@ -295,7 +295,7 @@ func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
 	starBytes := []byte(fmt.Sprintf(`
 		export(
 			Config(
-				description = "this is a simple feature",
+				description = "this is a simple config",
 				default = %s,
 				rules = [
 					("age == 10", %s),
@@ -325,11 +325,11 @@ func TestWalkerMutateDescription(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, f)
 
-				f.FeatureOld.Description = "a NEW way to describe this feature."
+				f.FeatureOld.Description = "a NEW way to describe this config."
 
 				bytes, err := b.Mutate(f)
 				require.NoError(t, err)
-				assert.Contains(t, string(bytes), "a NEW way to describe this feature.")
+				assert.Contains(t, string(bytes), "a NEW way to describe this config.")
 			}
 		})
 	}
@@ -496,7 +496,7 @@ func TestWalkerProto(t *testing.T) {
 			tpb = proto.package("testproto.v1beta1")
 			export(
 				Config(
-					description = "proto feature",
+					description = "proto config",
 					default = %s,
 					rules = [("age > 1", %s)]
 				),

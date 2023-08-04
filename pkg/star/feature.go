@@ -72,14 +72,14 @@ func allowedAttrNames() []string {
 
 func makeFeature(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
-		return nil, fmt.Errorf("feature: unexpected positional arguments")
+		return nil, fmt.Errorf("config: unexpected positional arguments")
 	}
 	return starlarkstruct.FromKeywords(FeatureConstructor, kwargs), nil
 }
 
 func makeConfig(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
-		return nil, fmt.Errorf("feature: unexpected positional arguments")
+		return nil, fmt.Errorf("config: unexpected positional arguments")
 	}
 	return starlarkstruct.FromKeywords(ConfigConstructor, kwargs), nil
 }
@@ -132,7 +132,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 		return nil, fmt.Errorf("expecting variable of type %s, instead got %T", ConfigConstructor.GoString(), featureVal)
 	}
 	if err := fb.validateFeature(featureVal); err != nil {
-		return nil, errors.Wrap(err, "validate feature")
+		return nil, errors.Wrap(err, "validate config")
 	}
 	var err error
 	fb.validator, err = fb.getValidator(featureVal)
@@ -145,7 +145,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	}
 	f, err := fb.init(defaultVal)
 	if err != nil {
-		return nil, errors.Wrap(err, "initialize feature")
+		return nil, errors.Wrap(err, "initialize config")
 	}
 	f.Key = fb.featureName
 	f.Description, err = fb.getDescription(featureVal)

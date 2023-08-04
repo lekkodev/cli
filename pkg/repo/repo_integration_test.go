@@ -117,7 +117,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 		}
 		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.FeatureType(fType), protoMessageName)
 		require.NoError(t, err)
-		t.Logf("wrote feature to path %s\n", path)
+		t.Logf("wrote config to path %s\n", path)
 	}
 	// Compile
 	rootMD, _, err := r.ParseMetadata(ctx)
