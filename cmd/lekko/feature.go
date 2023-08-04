@@ -162,6 +162,8 @@ func featureAdd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add config in")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to add")
+	_ = cmd.Flags().MarkHidden("feature")
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to add")
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of config to create")
 	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create")
@@ -201,6 +203,8 @@ func featureRemove() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to remove")
+	_ = cmd.Flags().MarkHidden("feature")
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
 	return cmd
 }
@@ -285,8 +289,10 @@ func featureEval() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
-	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace of config to evaluate")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to evaluate")
+	_ = cmd.Flags().MarkHidden("feature")
+	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to evaluate")
 	cmd.Flags().StringVarP(&jsonContext, "context", "t", "", "context to evaluate with in json format")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
 	return cmd
