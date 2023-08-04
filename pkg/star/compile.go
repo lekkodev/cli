@@ -102,7 +102,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.NamespaceVersion, ignoreBackwardsCompatibility, dryRun bool) (bool, bool, error) {
 	fProto, err := f.ToProto()
 	if err != nil {
-		return false, false, errors.Wrap(err, "feature to proto")
+		return false, false, errors.Wrap(err, "config to proto")
 	}
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
@@ -157,11 +157,11 @@ func compareExistingProto(ctx context.Context, existingProtoFilePath string, new
 		return false, errors.Wrap(err, fmt.Sprintf("failed to unmarshal existing proto at path %s", existingProtoFilePath))
 	}
 	if existingProto.GetKey() != newProto.GetKey() {
-		return true, fmt.Errorf("cannot change key of feature flag: old %s, new %s", existingProto.GetKey(), newProto.GetKey())
+		return true, fmt.Errorf("cannot change key of config: old %s, new %s", existingProto.GetKey(), newProto.GetKey())
 	}
 	if existingProto.GetTree().GetDefault().GetTypeUrl() != newProto.GetTree().GetDefault().GetTypeUrl() {
 		return true, fmt.Errorf(
-			"cannot change feature flag type: old %s, new %s",
+			"cannot change config type: old %s, new %s",
 			existingProto.GetTree().GetDefault().GetTypeUrl(),
 			newProto.GetTree().GetDefault().GetTypeUrl(),
 		)

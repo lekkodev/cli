@@ -269,7 +269,7 @@ func (t *traverser) getFeatureAST() (*starFeatureAST, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("no feature found in star file")
+	return nil, fmt.Errorf("no config found in star file")
 }
 
 func (t *traverser) getProtoImports() *importsWrapper {

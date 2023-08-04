@@ -3,7 +3,7 @@ tpb = proto.package("testproto.v1beta1")
 
 export(
     Config(
-        description = "repeated feature for testing",
+        description = "repeated config for testing",
         default = tpb.RepeatedFields(
             vals = [
                 "d",

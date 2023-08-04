@@ -128,7 +128,7 @@ func (k *kubeClient) List(ctx context.Context) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
-	fmt.Fprintf(w, "k8s Namespace\tLekko Namespace\tFeature Name\tSize\n")
+	fmt.Fprintf(w, "k8s Namespace\tLekko Namespace\tConfig Name\tSize\n")
 	for _, item := range result.Items {
 		for featureName, featureBytes := range item.BinaryData {
 			fmt.Fprintf(w, "%s\t%s\t%s\t[%d bytes]\n", item.GetNamespace(), item.GetName(), featureName, len(featureBytes))
@@ -188,7 +188,7 @@ func (k *kubeClient) applyLekkoNamespace(
 	cm := corev1.ConfigMap(cmName, k.k8sNamespace)
 	ffs, err := k.r.GetFeatureFiles(ctx, namespaceName)
 	if err != nil {
-		return fmt.Errorf("get feature files: %w", err)
+		return fmt.Errorf("get config files: %w", err)
 	}
 	for _, ff := range ffs {
 		bytes, err := k.r.GetFileContents(ctx, ff.RootPath(ff.CompiledProtoBinFileName))
@@ -209,6 +209,6 @@ func (k *kubeClient) applyLekkoNamespace(
 	if err != nil {
 		return errors.Wrap(err, "cm apply")
 	}
-	fmt.Printf("successfully applied configmap '%s' with %d features\n", result.Name, len(result.BinaryData))
+	fmt.Printf("successfully applied configmap '%s' with %d configs\n", result.Name, len(result.BinaryData))
 	return nil
 }

@@ -69,16 +69,16 @@ type FeatureContents struct {
 
 func (ff FeatureFile) Verify() error {
 	if ff.Name == "" {
-		return fmt.Errorf("feature file has no name")
+		return fmt.Errorf("config file has no name")
 	}
 	if ff.StarlarkFileName == "" {
-		return fmt.Errorf("feature file %s has no .star file", ff.Name)
+		return fmt.Errorf("config file %s has no .star file", ff.Name)
 	}
 	if ff.CompiledJSONFileName == "" {
-		return fmt.Errorf("feature file %s has no .json file", ff.Name)
+		return fmt.Errorf("config file %s has no .json file", ff.Name)
 	}
 	if ff.CompiledProtoBinFileName == "" {
-		return fmt.Errorf("feature file %s has no .proto.bin file", ff.Name)
+		return fmt.Errorf("config file %s has no .proto.bin file", ff.Name)
 	}
 	return nil
 }
@@ -177,13 +177,13 @@ func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) 
 		fallthrough
 	case "v1beta3":
 		if len(f.CompiledJSONFileName) == 0 {
-			return fmt.Errorf("empty compiled JSON for feature: %s", f.Name)
+			return fmt.Errorf("empty compiled JSON for config: %s", f.Name)
 		}
 		if len(f.CompiledProtoBinFileName) == 0 {
-			return fmt.Errorf("empty compiled proto for feature: %s", f.Name)
+			return fmt.Errorf("empty compiled proto for config: %s", f.Name)
 		}
 		if len(f.StarlarkFileName) == 0 {
-			return fmt.Errorf("empty starlark file for feature: %s", f.Name)
+			return fmt.Errorf("empty starlark file for config: %s", f.Name)
 		}
 	}
 	return nil
@@ -197,7 +197,7 @@ func ParseFeaturePath(featurePath string) (namespaceName string, featureName str
 	if len(splits) == 2 {
 		return splits[0], splits[1], nil
 	}
-	return "", "", fmt.Errorf("invalid featurepath: %s, should be of format namespace[/feature]", featurePath)
+	return "", "", fmt.Errorf("invalid config path: %s, should be of format namespace[/config]", featurePath)
 }
 
 var ErrTypeMismatch = fmt.Errorf("type mismatch")
@@ -335,7 +335,7 @@ func (ut ValueUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
 	tr := NewTestResult(ut.ContextStar, idx)
 	a, _, err := eval.Evaluate(ut.Context)
 	if err != nil {
-		return tr.WithError(errors.Wrap(err, "evaluate feature"))
+		return tr.WithError(errors.Wrap(err, "evaluate config"))
 	}
 
 	val, err := ValToAny(ut.ExpectedValue, eval.Type())
@@ -455,7 +455,7 @@ func ValToAny(value interface{}, ft eval.FeatureType) (*anypb.Any, error) {
 		}
 		return newAny(v)
 	default:
-		return nil, fmt.Errorf("unsupported feature type %T", value)
+		return nil, fmt.Errorf("unsupported config type %T", value)
 	}
 }
 
@@ -511,7 +511,7 @@ func AnyToVal(a *anypb.Any, fType eval.FeatureType, registry *protoregistry.Type
 		}
 		return p.ProtoReflect(), nil
 	default:
-		return nil, fmt.Errorf("unsupported feature type %s", a.TypeUrl)
+		return nil, fmt.Errorf("unsupported config type %s", a.TypeUrl)
 	}
 }
 
@@ -667,7 +667,7 @@ func ProtoToJSON(fProto *featurev1beta1.Feature, registry *protoregistry.Types) 
 func (f *Feature) ToJSON(registry *protoregistry.Types) ([]byte, error) {
 	fProto, err := f.ToProto()
 	if err != nil {
-		return nil, errors.Wrap(err, "feature to proto")
+		return nil, errors.Wrap(err, "config to proto")
 	}
 	return ProtoToJSON(fProto, registry)
 }
@@ -675,7 +675,7 @@ func (f *Feature) ToJSON(registry *protoregistry.Types) ([]byte, error) {
 func (f *Feature) PrintJSON(registry *protoregistry.Types) {
 	jBytes, err := f.ToJSON(registry)
 	if err != nil {
-		fmt.Printf("failed to convert feature to json: %v\n", err)
+		fmt.Printf("failed to convert config to json: %v\n", err)
 	}
 	fmt.Println(string(jBytes))
 }
@@ -740,7 +740,7 @@ func (tr *TestResult) DebugString() string {
 func (f *Feature) RunUnitTests() ([]*TestResult, error) {
 	eval, err := f.ToEvaluableFeature()
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid feature")
+		return nil, errors.Wrap(err, "invalid config")
 	}
 	var results []*TestResult
 	for idx, test := range f.UnitTests {

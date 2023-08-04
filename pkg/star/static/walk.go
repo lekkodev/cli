@@ -255,7 +255,7 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) overridesFn {
 			}
 			overrideVal, err := w.toAny(protoVal)
 			if err != nil {
-				return errors.Wrapf(err, "extracted proto val to any for feature type %v", featureType)
+				return errors.Wrapf(err, "extracted proto val to any for config type %v", featureType)
 			}
 			override.Value = overrideVal
 			f.FeatureOld.Tree.Constraints = append(f.FeatureOld.Tree.Constraints, override)
@@ -464,7 +464,7 @@ func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 			return errors.Wrap(err, "extract default value")
 		}
 		if featureType != f.Type {
-			return errors.Wrapf(err, "cannot mutate star feature type %v with arg feature type %v", featureType, f.Type)
+			return errors.Wrapf(err, "cannot mutate star config type %v with arg config type %v", featureType, f.Type)
 		}
 		gen, err := w.genValue(f.FeatureOld.Tree.Default, f, f.GetFeature().GetDefault().GetMeta())
 		if err != nil {

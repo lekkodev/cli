@@ -3,7 +3,7 @@ tpb = proto.package("testproto.v1beta1")
 
 export(
     Config(
-        description = "map feature for testing",
+        description = "map config for testing",
         default = tpb.MapFields(
             strings = {
                 "foo": "bar",
