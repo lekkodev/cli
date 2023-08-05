@@ -498,7 +498,7 @@ func getNamespaceFeatures(ctx context.Context, r repo.ConfigurationRepository, n
 		if len(ns) == 0 || ns == nsMD.Name {
 			ffs, err := r.GetFeatureFiles(ctx, nsMD.Name)
 			if err != nil {
-				return nil, errors.Wrap(err, "get feature files")
+				return nil, errors.Wrap(err, "get config files")
 			}
 			for _, ff := range ffs {
 				nsfs = append(nsfs, newNSF(ff.NamespaceName, ff.Name))
