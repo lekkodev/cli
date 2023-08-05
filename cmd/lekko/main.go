@@ -115,8 +115,8 @@ func formatCmd() *cobra.Command {
 func compileCmd() *cobra.Command {
 	var force, dryRun, upgrade, verbose bool
 	cmd := &cobra.Command{
-		Use:   "compile [namespace[/feature]]",
-		Short: "compiles features based on individual definitions",
+		Use:   "compile [namespace[/config]]",
+		Short: "compiles configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -169,8 +169,8 @@ func compileCmd() *cobra.Command {
 
 func verifyCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "verify [namespace[/feature]]",
-		Short: "verifies features based on individual definitions",
+		Use:   "verify [namespace[/config]]",
+		Short: "verifies configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			wd, err := os.Getwd()
 			if err != nil {
@@ -264,10 +264,12 @@ func parseCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove feature from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of feature to remove")
-	cmd.Flags().BoolVarP(&all, "all", "a", false, "parse all features")
-	cmd.Flags().BoolVarP(&printFeature, "print", "p", false, "print parsed feature(s)")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
+	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to remove")
+	_ = cmd.Flags().MarkHidden("feature")
+	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
+	cmd.Flags().BoolVarP(&all, "all", "a", false, "parse all configs")
+	cmd.Flags().BoolVarP(&printFeature, "print", "p", false, "print parsed config(s)")
 	return cmd
 }
 
