@@ -150,6 +150,7 @@ message GenerateAPIKeyRequest {
 
 message GenerateAPIKeyResponse {
   string api_key = 1;
+  string nickname = 2;
 }
 
 message APIKey {
