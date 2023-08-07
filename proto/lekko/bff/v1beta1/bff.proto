@@ -764,6 +764,27 @@ message EvalResponse {
   lekko.feature.v1beta1.Any result_new = 3;
 }
 
+message MultiEvalRequest {
+  message Config {
+    string namespace_name = 1;
+    string feature_name = 2;    
+  }
+
+  repeated Config configs = 1;
+  map<string, lekko.client.v1beta1.Value> context = 2;
+  BranchKey key = 3;
+}
+
+message MultiEvalResponse {
+  message EvaluatedConfigs {
+    google.protobuf.Any result = 1;
+    lekko.feature.v1beta1.FeatureType type = 2;
+  }
+  repeated EvaluatedConfigs evaluated_configs = 1;
+  map<string, lekko.client.v1beta1.Value> context = 2;
+  BranchKey key = 3;
+}
+
 message Measurement {
   google.protobuf.Timestamp time = 1;
   int64 value = 2;
