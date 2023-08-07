@@ -99,6 +99,7 @@ service BFFService {
   rpc Merge(MergeRequest) returns (MergeResponse) {}
   // Evaluates the feature based on the given session.
   rpc Eval(EvalRequest) returns (EvalResponse) {}
+  rpc MultiEval(MultiEvalRequest) returns (MultiEvalResponse) {}
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
   rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
