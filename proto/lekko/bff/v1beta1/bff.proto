@@ -778,12 +778,10 @@ message MultiEvalRequest {
 
 message MultiEvalResponse {
   message EvaluatedConfigs {
-    google.protobuf.Any result = 1;
+    lekko.feature.v1beta1.Any result = 1;
     lekko.feature.v1beta1.FeatureType type = 2;
   }
   repeated EvaluatedConfigs evaluated_configs = 1;
-  map<string, lekko.client.v1beta1.Value> context = 2;
-  BranchKey key = 3;
 }
 
 message Measurement {
