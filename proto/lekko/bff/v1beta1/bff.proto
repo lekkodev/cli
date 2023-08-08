@@ -767,8 +767,8 @@ message EvalResponse {
 
 message MultiEvalRequest {
   message Config {
-    string namespace_name = 1;
-    string feature_name = 2;
+    string namespace = 1;
+    string name = 2;
   }
 
   repeated Config configs = 1;
