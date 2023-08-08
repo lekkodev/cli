@@ -99,6 +99,7 @@ service BFFService {
   rpc Merge(MergeRequest) returns (MergeResponse) {}
   // Evaluates the feature based on the given session.
   rpc Eval(EvalRequest) returns (EvalResponse) {}
+  rpc MultiEval(MultiEvalRequest) returns (MultiEvalResponse) {}
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
   rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
@@ -763,6 +764,33 @@ message EvalResponse {
   google.protobuf.Any result = 1;
   lekko.feature.v1beta1.FeatureType type = 2;
   lekko.feature.v1beta1.Any result_new = 3;
+}
+
+message Config {
+  string namespace = 1;
+  string name = 2;
+}
+
+message MultiEvalRequest {
+  repeated Config configs = 1;
+  map<string, lekko.client.v1beta1.Value> context = 2;
+  BranchKey key = 3;
+}
+
+message MultiEvalResponse {
+  message EvaluatedConfig {
+    lekko.feature.v1beta1.Any result = 1;
+    lekko.feature.v1beta1.FeatureType type = 2;
+  }
+
+  message EvaluatedConfigResult {
+    Config config = 1;
+    oneof evaluated_config_result {
+      EvaluatedConfig evaluated_config = 2;
+      google.rpc.ErrorInfo error = 3;
+    }
+  }
+  repeated EvaluatedConfigResult evaluated_configs = 1;
 }
 
 message Measurement {
