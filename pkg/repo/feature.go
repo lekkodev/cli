@@ -563,12 +563,17 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 	if err != nil {
 		return false, false, err
 	}
+	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ff.NamespaceName, r)
+	if err != nil {
+		return false, false, errors.Wrap(err, "parse namespace metadata")
+	}
 	formatter := star.NewStarFormatter(
 		ff.RootPath(ff.StarlarkFileName),
 		ff.Name,
 		r,
 		dryRun,
 		registry,
+		feature.NewNamespaceVersion(nsMD.Version),
 	)
 	// try static formatting
 	persisted, diffExists, err = formatter.StaticFormat(ctx)
@@ -849,6 +854,10 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCt
 }
 
 func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error) {
+	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse namespace metadata")
+	}
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get config contents")
@@ -858,7 +867,7 @@ func (r *repository) Parse(ctx context.Context, ns, featureName string, registry
 		return nil, err
 	}
 	filename := fc.File.RootPath(fc.File.StarlarkFileName)
-	w := static.NewWalker(filename, fc.Star, registry)
+	w := static.NewWalker(filename, fc.Star, registry, feature.NamespaceVersion(nsMD.Version))
 	f, err := w.Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")
