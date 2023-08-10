@@ -19,23 +19,23 @@ import (
 	"fmt"
 	"text/template"
 
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 )
 
-const starFmt = `result = feature(
-    description="my config description",
-    default=%s
+const featureTemplate = `result = feature(
+    description = "my config description",
+    default = %s,
 )
 `
 
-// TODO: v1beta6 version to support this
-// const starFmt = `export(
-//     Config(
-//         description="my config description",
-//         default=%s
-//     ),
-// )
-// `
+const configTemplate = `export(
+    Config(
+        description = "my config description",
+        default = %s,
+    ),
+)
+`
 
 const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
 {{$alias}} = proto.package("{{$name}}")
@@ -51,22 +51,21 @@ result = feature(
 )
 `
 
-// TODO: v1beta6 version to support this
-// const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
-// {{$alias}} = proto.package("{{$name}}")
-// {{- end}}
+const protoConfigTemplate = `{{- range $name, $alias := .Packages }}
+{{$alias}} = proto.package("{{$name}}")
+{{- end}}
 
-// export(
-//     Config(
-//         description = "my config description",
-//         default = {{.Message}}(
-//             {{- range .Fields}}
-//             {{. -}},
-//             {{- end}}
-//         ),
-//     ),
-// )
-// `
+export(
+    Config(
+        description = "my config description",
+        default = {{.Message}}(
+            {{- range .Fields}}
+            {{. -}},
+            {{- end}}
+        ),
+    ),
+)
+`
 
 type ProtoStarInputs struct {
 	Message  string
@@ -75,10 +74,16 @@ type ProtoStarInputs struct {
 }
 
 // RenderExistingProtoTemplate will render the parsed Proto message descriptor into a Starlark feature model
-func RenderExistingProtoTemplate(inputs ProtoStarInputs) ([]byte, error) {
+func RenderExistingProtoTemplate(inputs ProtoStarInputs, nv feature.NamespaceVersion) ([]byte, error) {
+	var templateBody string
+	if nv >= feature.NamespaceVersionV1Beta6 {
+		templateBody = protoConfigTemplate
+	} else {
+		templateBody = protoFeatureTemplate
+	}
 	var buf bytes.Buffer
 	templ := template.New("protobuf starlark")
-	templ, err := templ.Parse(protoFeatureTemplate)
+	templ, err := templ.Parse(templateBody)
 	if err != nil {
 		return nil, err
 	}
@@ -89,18 +94,24 @@ func RenderExistingProtoTemplate(inputs ProtoStarInputs) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func GetTemplate(fType eval.FeatureType) ([]byte, error) {
+func GetTemplate(fType eval.FeatureType, nv feature.NamespaceVersion) ([]byte, error) {
+	var templateBody string
+	if nv >= feature.NamespaceVersionV1Beta6 {
+		templateBody = configTemplate
+	} else {
+		templateBody = featureTemplate
+	}
 	switch fType {
 	case eval.FeatureTypeBool:
-		return []byte(fmt.Sprintf(starFmt, "False")), nil
+		return []byte(fmt.Sprintf(templateBody, "False")), nil
 	case eval.FeatureTypeInt:
-		return []byte(fmt.Sprintf(starFmt, "1")), nil
+		return []byte(fmt.Sprintf(templateBody, "1")), nil
 	case eval.FeatureTypeFloat:
-		return []byte(fmt.Sprintf(starFmt, "1.0")), nil
+		return []byte(fmt.Sprintf(templateBody, "1.0")), nil
 	case eval.FeatureTypeString:
-		return []byte(fmt.Sprintf(starFmt, "''")), nil
+		return []byte(fmt.Sprintf(templateBody, "''")), nil
 	case eval.FeatureTypeJSON:
-		return []byte(fmt.Sprintf(starFmt, "{}")), nil
+		return []byte(fmt.Sprintf(templateBody, "{}")), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for config type %s", fType)
 	}
