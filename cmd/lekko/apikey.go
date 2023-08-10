@@ -53,18 +53,18 @@ func createAPIKeyCmd() *cobra.Command {
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
-					Message: "Name:",
+					Message: "Name (optional):",
 					Help:    "Name to give the api key",
 				}, &name); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
 			}
-			fmt.Printf("Generating api key named '%s' for team '%s'...\n", name, rs.GetLekkoTeam())
-			key, err := a.Create(cmd.Context(), name)
+			fmt.Printf("Generating api key for team '%s'...\n", rs.GetLekkoTeam())
+			resp, err := a.Create(cmd.Context(), name)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Generated api key:\n\t%s\n", logging.Bold(key))
+			fmt.Printf("Generated api key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
 			fmt.Printf("Please save the key somewhere safe, as you will not be able to access it again.\n")
 			fmt.Printf("Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
 			return nil
