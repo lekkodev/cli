@@ -22,29 +22,51 @@ import (
 	"github.com/lekkodev/go-sdk/pkg/eval"
 )
 
-const starFmt = `export(
-    Config(
-        description="my config description",
-        default=%s
-    ),
+const starFmt = `result = feature(
+	description="my config description",
+	default=%s
 )
 `
+
+// TODO: v1beta6 version to support this
+// const starFmt = `export(
+//     Config(
+//         description="my config description",
+//         default=%s
+//     ),
+// )
+// `
 
 const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
 {{$alias}} = proto.package("{{$name}}")
 {{- end}}
 
-export(
-    Config(
-        description = "my config description",
-        default = {{.Message}}(
-            {{- range .Fields}}
-            {{. -}},
-            {{- end}}
-        ),
-    ),
+result = feature(
+	description = "my config description",
+	default = {{.Message}}(
+		{{- range .Fields}}
+		{{. -}},
+		{{- end}}
+	),
 )
 `
+
+// TODO: v1beta6 version to support this
+// const protoFeatureTemplate = `{{- range $name, $alias := .Packages }}
+// {{$alias}} = proto.package("{{$name}}")
+// {{- end}}
+
+// export(
+//     Config(
+//         description = "my config description",
+//         default = {{.Message}}(
+//             {{- range .Fields}}
+//             {{. -}},
+//             {{- end}}
+//         ),
+//     ),
+// )
+// `
 
 type ProtoStarInputs struct {
 	Message  string
