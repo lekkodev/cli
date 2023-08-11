@@ -81,7 +81,7 @@ func TestCompile_exportConfig(t *testing.T) {
 		},
 	)
 	c := NewCompiler(getRegistry(t), &ff, fs)
-	cf, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta5)
+	cf, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta6)
 
 	require.NoError(t, err)
 	require.NotNil(t, cf)
@@ -98,7 +98,7 @@ func TestCompile_exportNotConfig(t *testing.T) {
 		},
 	)
 	c := NewCompiler(getRegistry(t), &ff, fs)
-	_, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta5)
+	_, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta6)
 	require.Error(t, err)
 }
 
@@ -112,7 +112,7 @@ func TestCompile_feature(t *testing.T) {
 		},
 	)
 	c := NewCompiler(getRegistry(t), &ff, fs)
-	cf, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta5)
+	cf, err := c.Compile(context.Background(), feature.NamespaceVersionV1Beta6)
 
 	require.NoError(t, err)
 	require.NotNil(t, cf)

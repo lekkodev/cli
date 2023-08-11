@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/bazelbuild/buildtools/build"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
 )
@@ -49,7 +50,8 @@ type importsFn func(imports *importsWrapper) error
 // components of the file. Methods can be provided to read the
 // feature defined in the file, or even modify it.
 type traverser struct {
-	f *build.File
+	f  *build.File
+	nv feature.NamespaceVersion
 
 	defaultFn      defaultFn
 	descriptionFn  descriptionFn
@@ -57,9 +59,10 @@ type traverser struct {
 	protoImportsFn importsFn
 }
 
-func newTraverser(f *build.File) *traverser {
+func newTraverser(f *build.File, nv feature.NamespaceVersion) *traverser {
 	return &traverser{
 		f:              f,
+		nv:             nv,
 		defaultFn:      defaultNoop,
 		descriptionFn:  descriptionNoop,
 		overridesFn:    rulesNoop,
@@ -116,7 +119,7 @@ func (t *traverser) traverse() error {
 		return errors.Wrap(err, "description fn")
 	}
 	// rules
-	if err := ast.parseOverrides(t.overridesFn); err != nil {
+	if err := ast.parseOverrides(t.overridesFn, t.nv); err != nil {
 		return err
 	}
 	return nil
@@ -175,15 +178,20 @@ func (ast *starFeatureAST) unset(key string) {
 	ast.List = newAssignmentList
 }
 
-func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
+func (ast *starFeatureAST) parseOverrides(fn overridesFn, nv feature.NamespaceVersion) error {
 	overridesW := &overridesWrapper{}
+	// By default, assume used "overrides" and not "rules"
 	usedOverrides := true
+	usedRules := false
 	overridesExprPtr, overridesFound := ast.get(OverridesAttrName)
 	if !overridesFound {
 		// Fall back to rules
 		// TODO: fully migrate to overrides instead of rules
 		usedOverrides = false
 		overridesExprPtr, overridesFound = ast.get(RulesAttrName)
+		if overridesFound {
+			usedRules = true
+		}
 	} else {
 		// Overrides and rules should not be set at the same time
 		if _, rulesFound := ast.get(RulesAttrName); rulesFound {
@@ -216,18 +224,21 @@ func (ast *starFeatureAST) parseOverrides(fn overridesFn) error {
 	for _, override := range overridesW.overrides {
 		newList = append(newList, override.toExpr())
 	}
-	// Updated attribute name determined by which was used
+	// Updated attribute name determined by which was used and config version
+	var setAttrName string
 	if usedOverrides {
-		ast.set(OverridesAttrName, &build.ListExpr{
-			List:           newList,
-			ForceMultiLine: true,
-		})
+		setAttrName = OverridesAttrName
+	} else if usedRules {
+		setAttrName = RulesAttrName
+	} else if nv >= feature.NamespaceVersionV1Beta6 {
+		setAttrName = OverridesAttrName
 	} else {
-		ast.set(RulesAttrName, &build.ListExpr{
-			List:           newList,
-			ForceMultiLine: true,
-		})
+		setAttrName = RulesAttrName
 	}
+	ast.set(setAttrName, &build.ListExpr{
+		List:           newList,
+		ForceMultiLine: true,
+	})
 	return nil
 }
 

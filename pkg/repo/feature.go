@@ -563,12 +563,17 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 	if err != nil {
 		return false, false, err
 	}
+	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ff.NamespaceName, r)
+	if err != nil {
+		return false, false, errors.Wrap(err, "parse namespace metadata")
+	}
 	formatter := star.NewStarFormatter(
 		ff.RootPath(ff.StarlarkFileName),
 		ff.Name,
 		r,
 		dryRun,
 		registry,
+		feature.NewNamespaceVersion(nsMD.Version),
 	)
 	// try static formatting
 	persisted, diffExists, err = formatter.StaticFormat(ctx)
@@ -596,6 +601,11 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 	if !isValidName(featureName) {
 		return "", errors.Wrap(ErrInvalidName, "config")
 	}
+	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
+	nv := feature.NewNamespaceVersion(nsMD.Version)
+	if err != nil {
+		return "", fmt.Errorf("error parsing namespace metadata: %w", err)
+	}
 	ffs, err := r.GetFeatureFiles(ctx, ns) // returns err if ns doesn't exist
 	if err != nil {
 		return "", fmt.Errorf("failed to get config files: %v", err)
@@ -608,12 +618,12 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 
 	var template []byte
 	if fType == eval.FeatureTypeProto {
-		template, err = addFeatureFromProto(r, ctx, protoMessageName)
+		template, err = r.addFeatureFromProto(ctx, protoMessageName, nv)
 		if err != nil {
 			return "", errors.Wrap(err, "add config from proto")
 		}
 	} else {
-		template, err = star.GetTemplate(fType)
+		template, err = star.GetTemplate(fType, nv)
 		if err != nil {
 			return "", errors.Wrap(err, "get template")
 		}
@@ -627,7 +637,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 }
 
 // addFeatureFromProto uses reflection to generate a Starlark feature template specific to the message descriptor
-func addFeatureFromProto(r ConfigurationRepository, ctx context.Context, messageName string) ([]byte, error) {
+func (r *repository) addFeatureFromProto(ctx context.Context, messageName string, nv feature.NamespaceVersion) ([]byte, error) {
 	// Get the MessageType from the name, it involves loading the type registry again. This can probably be cached
 	// from the initial call when the type names were computed
 	rootMD, _, err := r.ParseMetadata(ctx)
@@ -713,7 +723,7 @@ func addFeatureFromProto(r ConfigurationRepository, ctx context.Context, message
 		Message:  descriptorName,
 		Packages: packageMap,
 		Fields:   fieldDefaults,
-	})
+	}, nv)
 }
 
 func packageAlias(pkgName string) string {
@@ -844,6 +854,10 @@ func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCt
 }
 
 func (r *repository) Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error) {
+	nsMD, err := metadata.ParseNamespaceMetadataStrict(ctx, "", ns, r)
+	if err != nil {
+		return nil, errors.Wrap(err, "parse namespace metadata")
+	}
 	fc, err := r.GetFeatureContents(ctx, ns, featureName)
 	if err != nil {
 		return nil, errors.Wrap(err, "get config contents")
@@ -853,7 +867,7 @@ func (r *repository) Parse(ctx context.Context, ns, featureName string, registry
 		return nil, err
 	}
 	filename := fc.File.RootPath(fc.File.StarlarkFileName)
-	w := static.NewWalker(filename, fc.Star, registry)
+	w := static.NewWalker(filename, fc.Star, registry, feature.NamespaceVersion(nsMD.Version))
 	f, err := w.Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "build")

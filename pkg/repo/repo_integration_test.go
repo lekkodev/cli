@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
@@ -196,9 +197,12 @@ func testRestore(ctx context.Context, t *testing.T, tmpDir string, ap AuthProvid
 	r, err := NewLocalClone(path, integrationTestURL, ap)
 	require.NoError(t, err)
 	require.NoError(t, r.RestoreWorkingDirectory(restoreCommitHash))
+	_, nsMDs, err := r.ParseMetadata(ctx)
+	nsMD, found := nsMDs["default"]
+	require.True(t, found)
 	fc, err := r.GetFeatureContents(ctx, "default", "example")
 	require.NoError(t, err)
-	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star, nil).Build()
+	f, err := static.NewWalker(fc.File.StarlarkFileName, fc.Star, nil, feature.NewNamespaceVersion(nsMD.Version)).Build()
 	require.NoError(t, err)
 	assert.Equal(t, restoreFeatureDescription, f.FeatureOld.Description)
 }
