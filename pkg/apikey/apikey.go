@@ -33,14 +33,14 @@ func NewAPIKey(bff bffv1beta1connect.BFFServiceClient) *APIKeyManager {
 	return &APIKeyManager{bff: bff}
 }
 
-func (a *APIKeyManager) Create(ctx context.Context, nickname string) (string, error) {
+func (a *APIKeyManager) Create(ctx context.Context, nickname string) (*bffv1beta1.GenerateAPIKeyResponse, error) {
 	resp, err := a.bff.GenerateAPIKey(ctx, connect_go.NewRequest(&bffv1beta1.GenerateAPIKeyRequest{
 		Nickname: nickname,
 	}))
 	if err != nil {
-		return "", errors.Wrap(err, "generate api key")
+		return nil, errors.Wrap(err, "generate api key")
 	}
-	return resp.Msg.GetApiKey(), nil
+	return resp.Msg, nil
 }
 
 func (a *APIKeyManager) List(ctx context.Context) ([]*bffv1beta1.APIKey, error) {
