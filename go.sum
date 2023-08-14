@@ -1,9 +1,6 @@
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230713234042-fbaaf4924427.1 h1:wIvg7wHKvJxchqJM+/RpewjWF4lu0E9z/VU/JqAi7WE=
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.9.0-20230713234042-fbaaf4924427.1/go.mod h1:siogXpHg2bbsZpEHT0ja4k6jthLmVbD9wfAW3iEHd28=
 buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20230808195657-843d07fa9e34.1 h1:mt4QLKZtQwEBqRm2bi7aj4/PJ8AJQg2Tq0G3hJHzwHc=
 buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20230808195657-843d07fa9e34.1/go.mod h1:15ARpvleKTFJ7xogv/ihJL1cigfDJij4juFMBQzY+Eo=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230713234042-fbaaf4924427.1 h1:8bIAAqZ1ZMIoCgjxByLjNp+a5dZ7cGUPOe9Gavq+tpE=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230713234042-fbaaf4924427.1/go.mod h1:mYcnts9MJhUckfRD5/qOThXC7Kaj7O714LOw5GoGZ9c=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230808195657-843d07fa9e34.1 h1:VA17A//BYMH5yjd1ADllRk5p+fmIUQ7mauEZ31zKdDM=
 buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20230808195657-843d07fa9e34.1/go.mod h1:mYcnts9MJhUckfRD5/qOThXC7Kaj7O714LOw5GoGZ9c=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230419180142-0694c10ef23c.1/go.mod h1:UOnQUnbc9uR4s5SlhBKspO4dffz+T3A6X200yYBnaZg=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230620172853-31a82baf7ccf.1 h1:Pdi1tbKDixZq11auYusO1s4QWnuBJXam8IheNBMteQE=
@@ -32,8 +29,7 @@ github.com/antlr4-go/antlr/v4 v4.13.0/go.mod h1:pfChB/xh/Unjila75QW7+VU4TSnWnnk9
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPdPJAN/hZIm0C4OItdklCFmMRWYpio=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91 h1:7xSt0nPZ74liqR8jjBYmjentrQVrdQEhoW4/+4BrmoM=
 github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91/go.mod h1:689QdV3hBP7Vo9dJMmzhoYIyo/9iMhEmHkJcnaPRCbo=
-github.com/bufbuild/connect-go v1.9.0 h1:JIgAeNuFpo+SUPfU19Yt5TcWlznsN5Bv10/gI/6Pjoc=
-github.com/bufbuild/connect-go v1.9.0/go.mod h1:CAIePUgkDR5pAFaylSMtNK45ANQjp9JvpluG20rhpV8=
+github.com/bufbuild/connect-go v1.10.0 h1:QAJ3G9A1OYQW2Jbk3DeoJbkCxuKArrvZgDt47mjdTbg=
 github.com/bufbuild/connect-go v1.10.0/go.mod h1:CAIePUgkDR5pAFaylSMtNK45ANQjp9JvpluG20rhpV8=
 github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/bwesterb/go-ristretto v1.2.0/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
