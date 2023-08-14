@@ -171,6 +171,8 @@ func GroupFeatureFiles(
 
 func ComplianceCheck(f FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata) error {
 	switch nsMD.Version {
+	case "v1beta6":
+		fallthrough
 	case "v1beta5":
 		fallthrough
 	case "v1beta4":

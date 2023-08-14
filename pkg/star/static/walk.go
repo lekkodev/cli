@@ -22,6 +22,7 @@ import (
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/rules/pkg/parser"
 	"github.com/pkg/errors"
 	"go.starlark.net/starlark"
@@ -55,13 +56,15 @@ type walker struct {
 	filename  string
 	starBytes []byte
 	registry  *protoregistry.Types
+	nv        feature.NamespaceVersion
 }
 
-func NewWalker(filename string, starBytes []byte, registry *protoregistry.Types) *walker {
+func NewWalker(filename string, starBytes []byte, registry *protoregistry.Types, nv feature.NamespaceVersion) *walker {
 	return &walker{
 		filename:  filename,
 		starBytes: starBytes,
 		registry:  registry,
+		nv:        nv,
 	}
 }
 
@@ -78,7 +81,7 @@ func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 			Tree: &featurev1beta1.Tree{},
 		},
 	}
-	t := newTraverser(ast).
+	t := newTraverser(ast, w.nv).
 		withDefaultFn(w.buildDefaultFn(ret)).
 		withDescriptionFn(w.buildDescriptionFn(ret)).
 		withOverridesFn(w.buildRulesFn(ret)).
@@ -95,7 +98,7 @@ func (w *walker) Mutate(f *featurev1beta1.StaticFeature) ([]byte, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "gen ast")
 	}
-	t := newTraverser(ast).
+	t := newTraverser(ast, w.nv).
 		withDefaultFn(w.mutateDefaultFn(f)).
 		withDescriptionFn(w.mutateDescriptionFn(f)).
 		withOverridesFn(w.mutateOverridesFn(f))

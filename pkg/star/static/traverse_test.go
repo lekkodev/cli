@@ -19,10 +19,13 @@ import (
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const nv = feature.NamespaceVersionV1Beta6
 
 func testFile(t *testing.T, useExport bool) *build.File {
 	_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
@@ -44,7 +47,7 @@ func TestTraverse_noop(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
 		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
 		f := testFile(t, useExport)
-		tvs := newTraverser(f)
+		tvs := newTraverser(f, nv)
 		err := tvs.traverse()
 		require.NoError(t, err)
 
@@ -54,43 +57,43 @@ func TestTraverse_noop(t *testing.T) {
 }
 
 func TestTraverse_garbage(t *testing.T) {
-	traverser := newTraverser(strToFile(t, "foo"))
+	traverser := newTraverser(strToFile(t, "foo"), nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_noExport(t *testing.T) {
-	traverser := newTraverser(strToFile(t, "Config()"))
+	traverser := newTraverser(strToFile(t, "Config()"), nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_noConfig(t *testing.T) {
-	traverser := newTraverser(strToFile(t, "export()"))
+	traverser := newTraverser(strToFile(t, "export()"), nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_emptyConfig(t *testing.T) {
-	traverser := newTraverser(strToFile(t, `export(Config())`))
+	traverser := newTraverser(strToFile(t, `export(Config())`), nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_noDescription(t *testing.T) {
 	starBytes := []byte(`export(Config(default=1))`)
 	f := toFile(t, starBytes)
-	traverser := newTraverser(f)
+	traverser := newTraverser(f, nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_noDefault(t *testing.T) {
 	starBytes := []byte(`export(Config(description="test"))`)
 	f := toFile(t, starBytes)
-	traverser := newTraverser(f)
+	traverser := newTraverser(f, nv)
 	err := traverser.traverse()
 	require.Error(t, err)
 }
 func TestTraverse_valid(t *testing.T) {
 	starBytes := []byte(`export(Config(description="test",default=1))`)
 	f := toFile(t, starBytes)
-	traverser := newTraverser(f)
+	traverser := newTraverser(f, nv)
 	err := traverser.traverse()
 	require.NoError(t, err)
 }

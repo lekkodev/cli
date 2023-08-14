@@ -20,6 +20,7 @@ import (
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
+	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/pkg/errors"
@@ -39,15 +40,17 @@ type formatter struct {
 	registry              *protoregistry.Types
 
 	cw fs.ConfigWriter
+	nv feature.NamespaceVersion
 }
 
-func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool, registry *protoregistry.Types) Formatter {
+func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool, registry *protoregistry.Types, nv feature.NamespaceVersion) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
 		cw:          cw,
 		dryRun:      dryRun,
 		registry:    registry,
+		nv:          nv,
 	}
 }
 
@@ -103,5 +106,5 @@ func (f *formatter) staticFormat(data []byte) ([]byte, error) {
 	// If static formatting passes, we can skip buildifier formatting.
 	// If static formatting fails, we can show a warning to the user
 	// that the UI will not be able to parse the feature.
-	return static.NewWalker(f.filePath, data, f.registry).Format()
+	return static.NewWalker(f.filePath, data, f.registry, f.nv).Format()
 }
