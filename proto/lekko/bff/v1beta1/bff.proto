@@ -104,7 +104,7 @@ service BFFService {
   // Metrics
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
   rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
-  rpc GetLiveContextKeys(GetLiveContextKeysRequest) returns (GetLiveContextKeysResponse) {}
+  rpc GetContextKeyMetrics(GetContextKeyMetricsRequest) returns (GetContextKeyMetricsResponse) {}
 
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
@@ -876,18 +876,20 @@ message GetRepoMetricsResponse {
   repeated MetricsTimeSeries time_series = 1;
 }
 
-message GetLiveContextKeysRequest {
+message GetContextKeyMetricsRequest {
   RepositoryKey repo_key = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
 }
 
-message GetLiveContextKeysResponse {
-  message LiveContextKey {
+message GetContextKeyMetricsResponse {
+  message ContextKeyMetrics {
     ContextKey context_key = 1;
     int64 count = 2;
-    repeated string config_names = 3;
+    repeated Config configs = 3;
   }
 
-  repeated LiveContextKey live_context_keys = 1;
+  repeated ContextKeyMetrics context_key_metrics = 1;
 }
 
 // Restore will start a new session, with all
