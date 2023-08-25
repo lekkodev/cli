@@ -100,8 +100,12 @@ service BFFService {
   // Evaluates the feature based on the given session.
   rpc Eval(EvalRequest) returns (EvalResponse) {}
   rpc MultiEval(MultiEvalRequest) returns (MultiEvalResponse) {}
+
+  // Metrics
   rpc GetFlagEvaluationMetrics(GetFlagEvaluationMetricsRequest) returns (GetFlagEvaluationMetricsResponse) {}
   rpc GetRepoMetrics(GetRepoMetricsRequest) returns (GetRepoMetricsResponse) {}
+  rpc GetContextKeyMetrics(GetContextKeyMetricsRequest) returns (GetContextKeyMetricsResponse) {}
+
   // Performs a global restore of the repo, creating a dev session under the hood with the changes.
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
@@ -380,6 +384,19 @@ message GetRepositoryContentsRequest {
   // the other one must be provided as well.
   string namespace_name = 2;
   string feature_name = 3;
+}
+
+enum ContextKeyType {
+  CONTEXT_KEY_TYPE_UNSPECIFIED = 0;
+  CONTEXT_KEY_TYPE_BOOL = 1;
+  CONTEXT_KEY_TYPE_INT = 2;
+  CONTEXT_KEY_TYPE_FLOAT = 3;
+  CONTEXT_KEY_TYPE_STRING = 4;
+}
+
+message ContextKey {
+  string key = 1;
+  ContextKeyType type = 2;
 }
 
 message GetRepositoryContentsResponse {
@@ -857,6 +874,22 @@ message GetRepoMetricsRequest {
 
 message GetRepoMetricsResponse {
   repeated MetricsTimeSeries time_series = 1;
+}
+
+message GetContextKeyMetricsRequest {
+  RepositoryKey repo_key = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+}
+
+message GetContextKeyMetricsResponse {
+  message ContextKeyMetrics {
+    ContextKey context_key = 1;
+    int64 count = 2;
+    repeated Config configs = 3;
+  }
+
+  repeated ContextKeyMetrics context_key_metrics = 1;
 }
 
 // Restore will start a new session, with all
