@@ -33,12 +33,12 @@ import (
 )
 
 var (
-	parsableFeatureTypes = []eval.FeatureType{
-		eval.FeatureTypeBool,
-		eval.FeatureTypeString,
-		eval.FeatureTypeInt,
-		eval.FeatureTypeFloat,
-		eval.FeatureTypeJSON,
+	parsableFeatureTypes = []eval.ConfigType{
+		eval.ConfigTypeBool,
+		eval.ConfigTypeString,
+		eval.ConfigTypeInt,
+		eval.ConfigTypeFloat,
+		eval.ConfigTypeJSON,
 	}
 )
 
@@ -47,17 +47,17 @@ type testVal struct {
 	starRepr string
 }
 
-func typedVals(t *testing.T, ft eval.FeatureType, indent string) (defaultVal testVal, ruleVal testVal) {
+func typedVals(t *testing.T, ft eval.ConfigType, indent string) (defaultVal testVal, ruleVal testVal) {
 	switch ft {
-	case eval.FeatureTypeBool:
+	case eval.ConfigTypeBool:
 		return testVal{true, "True"}, testVal{false, "False"}
-	case eval.FeatureTypeFloat:
+	case eval.ConfigTypeFloat:
 		return testVal{float64(23.98), "23.98"}, testVal{float64(22.01), "22.01"}
-	case eval.FeatureTypeInt:
+	case eval.ConfigTypeInt:
 		return testVal{int64(23), "23"}, testVal{int64(42), "42"}
-	case eval.FeatureTypeString:
+	case eval.ConfigTypeString:
 		return testVal{"foo", "\"foo\""}, testVal{"bar", "\"bar\""}
-	case eval.FeatureTypeJSON:
+	case eval.ConfigTypeJSON:
 		goVal, err := structpb.NewValue([]interface{}{"foo", 1, 2, 4.2})
 		require.NoError(t, err)
 		ruleVal, err := structpb.NewValue(map[string]interface{}{"a": 1, "b": false, "c": []interface{}{99, "bar"}})
@@ -73,9 +73,9 @@ func typedVals(t *testing.T, ft eval.FeatureType, indent string) (defaultVal tes
 	return
 }
 
-func testStar(t *testing.T, ft eval.FeatureType, useExport bool) (testVal, []byte) {
+func testStar(t *testing.T, ft eval.ConfigType, useExport bool) (testVal, []byte) {
 	indent := ""
-	if useExport && ft == eval.FeatureTypeJSON {
+	if useExport && ft == eval.ConfigTypeJSON {
 		indent = "    "
 	}
 	val, ruleVal := typedVals(t, ft, indent)
@@ -117,7 +117,7 @@ func testWalker(t *testing.T, testStar []byte) *walker {
 
 func TestWalkerBuild(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestWalkerBuild(t *testing.T) {
 
 func TestWalkerBuildJSON(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeJSON, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeJSON, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -155,7 +155,7 @@ func TestWalkerMutateNoop(t *testing.T) {
 
 func TestWalkerMutateDefault(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestWalkerMutateDefault(t *testing.T) {
 
 func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -191,7 +191,7 @@ func TestWalkerMutateModifyRuleCondition(t *testing.T) {
 
 func TestWalkerMutateModifyOverrideRuleV3(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -208,7 +208,7 @@ func TestWalkerMutateModifyOverrideRuleV3(t *testing.T) {
 
 func TestWalkerMutateAddOverride(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -238,7 +238,7 @@ func TestWalkerMutateAddOverride(t *testing.T) {
 }
 
 func TestWalkerMutateAddFirstOverride(t *testing.T) {
-	val, _ := typedVals(t, eval.FeatureTypeBool, "")
+	val, _ := typedVals(t, eval.ConfigTypeBool, "")
 	starBytes := []byte(fmt.Sprintf(`
 		export(
 			Config(
@@ -276,7 +276,7 @@ func TestWalkerMutateAddFirstOverride(t *testing.T) {
 
 func TestWalkerMutateRemoveOverride(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -291,7 +291,7 @@ func TestWalkerMutateRemoveOverride(t *testing.T) {
 }
 
 func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
-	val, ruleVal := typedVals(t, eval.FeatureTypeBool, "")
+	val, ruleVal := typedVals(t, eval.ConfigTypeBool, "")
 	starBytes := []byte(fmt.Sprintf(`
 		export(
 			Config(
@@ -337,7 +337,7 @@ func TestWalkerMutateDescription(t *testing.T) {
 
 func TestWalkerMutateTypeMismatch(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeFloat, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeFloat, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -353,7 +353,7 @@ func TestWalkerMutateTypeMismatch(t *testing.T) {
 
 func TestWalkerMutateDefaultFloat(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		val, starBytes := testStar(t, eval.FeatureTypeFloat, useExport)
+		val, starBytes := testStar(t, eval.ConfigTypeFloat, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -373,7 +373,7 @@ func TestWalkerMutateDefaultFloat(t *testing.T) {
 
 func TestWalkerMutateDefaultInt(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		val, starBytes := testStar(t, eval.FeatureTypeInt, useExport)
+		val, starBytes := testStar(t, eval.ConfigTypeInt, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -393,7 +393,7 @@ func TestWalkerMutateDefaultInt(t *testing.T) {
 
 func TestWalkerMutateDefaultString(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		val, starBytes := testStar(t, eval.FeatureTypeString, useExport)
+		val, starBytes := testStar(t, eval.ConfigTypeString, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)
@@ -414,7 +414,7 @@ func TestWalkerMutateDefaultString(t *testing.T) {
 
 func TestWalkerMutateDefaultJSON(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeJSON, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeJSON, useExport)
 		b := testWalker(t, starBytes)
 		f, err := b.Build()
 		require.NoError(t, err)

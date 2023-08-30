@@ -345,7 +345,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 		overrideVal := tuple.Index(1)
 		overrideVals = append(overrideVals, overrideVal)
 		switch f.FeatureType {
-		case eval.FeatureTypeProto:
+		case eval.ConfigTypeProto:
 			message, ok := protomodule.AsProtoMessage(overrideVal)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, overrideVal)
@@ -355,7 +355,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 				RuleASTV3: ruleASTv3,
 				Value:     message,
 			})
-		case eval.FeatureTypeBool:
+		case eval.ConfigTypeBool:
 			typedOverrideVal, ok := overrideVal.(starlark.Bool)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, overrideVal)
@@ -363,7 +363,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 			if err := f.AddBoolOverride(ruleStr.GoString(), ruleASTv3, bool(typedOverrideVal)); err != nil {
 				return nil, err
 			}
-		case eval.FeatureTypeString:
+		case eval.ConfigTypeString:
 			typedOverrideVal, ok := overrideVal.(starlark.String)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, overrideVal)
@@ -371,7 +371,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 			if err := f.AddStringOverride(ruleStr.GoString(), ruleASTv3, typedOverrideVal.GoString()); err != nil {
 				return nil, err
 			}
-		case eval.FeatureTypeInt:
+		case eval.ConfigTypeInt:
 			typedOverrideVal, ok := overrideVal.(starlark.Int)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, overrideVal)
@@ -383,7 +383,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 			if err := f.AddIntOverride(ruleStr.GoString(), ruleASTv3, intVal); err != nil {
 				return nil, err
 			}
-		case eval.FeatureTypeFloat:
+		case eval.ConfigTypeFloat:
 			typedOverrideVal, ok := overrideVal.(starlark.Float)
 			if !ok {
 				return nil, typeError(f.FeatureType, i, overrideVal)
@@ -391,7 +391,7 @@ func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarks
 			if err := f.AddFloatOverride(ruleStr.GoString(), ruleASTv3, float64(typedOverrideVal)); err != nil {
 				return nil, err
 			}
-		case eval.FeatureTypeJSON:
+		case eval.ConfigTypeJSON:
 			encoded, err := fb.extractJSON(overrideVal)
 			if err != nil {
 				return nil, errors.Wrap(err, typeError(f.FeatureType, i, overrideVal).Error())
@@ -458,25 +458,25 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 			return errors.Wrap(vr.Error, "test value validate")
 		}
 		switch f.FeatureType {
-		case eval.FeatureTypeProto:
+		case eval.ConfigTypeProto:
 			message, ok := protomodule.AsProtoMessage(expectedVal)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, message, starCtx.String(), expectedVal.String()))
-		case eval.FeatureTypeBool:
+		case eval.ConfigTypeBool:
 			typedUnitTestVal, ok := expectedVal.(starlark.Bool)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, bool(typedUnitTestVal), starCtx.String(), expectedVal.String()))
-		case eval.FeatureTypeString:
+		case eval.ConfigTypeString:
 			typedUnitTestVal, ok := expectedVal.(starlark.String)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, typedUnitTestVal.GoString(), starCtx.String(), expectedVal.String()))
-		case eval.FeatureTypeInt:
+		case eval.ConfigTypeInt:
 			typedUnitTestVal, ok := expectedVal.(starlark.Int)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
@@ -486,13 +486,13 @@ func (fb *featureBuilder) addUnitTests(f *feature.Feature, featureVal *starlarks
 				return errors.Wrapf(typeError(f.FeatureType, i, expectedVal), "%T not representable as int64", intVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, intVal, starCtx.String(), expectedVal.String()))
-		case eval.FeatureTypeFloat:
+		case eval.ConfigTypeFloat:
 			typedUnitTestVal, ok := expectedVal.(starlark.Float)
 			if !ok {
 				return typeError(f.FeatureType, i, expectedVal)
 			}
 			f.UnitTests = append(f.UnitTests, feature.NewValueUnitTest(goCtx, float64(typedUnitTestVal), starCtx.String(), expectedVal.String()))
-		case eval.FeatureTypeJSON:
+		case eval.ConfigTypeJSON:
 			encoded, err := fb.extractJSON(expectedVal)
 			if err != nil {
 				return errors.Wrap(err, typeError(f.FeatureType, i, expectedVal).Error())
@@ -557,21 +557,21 @@ func translateContext(dict *starlark.Dict) (map[string]interface{}, error) {
 	return m, nil
 }
 
-func typeError(expectedType eval.FeatureType, ruleIdx int, value starlark.Value) error {
+func typeError(expectedType eval.ConfigType, ruleIdx int, value starlark.Value) error {
 	return fmt.Errorf("expecting %s for value of override idx #%d, instead got %T", starType(expectedType), ruleIdx, value)
 }
 
-func starType(ft eval.FeatureType) string {
+func starType(ft eval.ConfigType) string {
 	switch ft {
-	case eval.FeatureTypeProto:
+	case eval.ConfigTypeProto:
 		return "protoMessage"
-	case eval.FeatureTypeBool:
+	case eval.ConfigTypeBool:
 		return fmt.Sprintf("%T", starlark.False)
-	case eval.FeatureTypeString:
+	case eval.ConfigTypeString:
 		return fmt.Sprintf("%T", starlark.String(""))
-	case eval.FeatureTypeInt:
+	case eval.ConfigTypeInt:
 		return fmt.Sprintf("%T", starlark.MakeInt64(0))
-	case eval.FeatureTypeFloat:
+	case eval.ConfigTypeFloat:
 		return fmt.Sprintf("%T", starlark.Float(0))
 	default:
 		return "unknown"

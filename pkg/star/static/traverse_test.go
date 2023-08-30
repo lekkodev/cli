@@ -28,7 +28,7 @@ import (
 const nv = feature.NamespaceVersionV1Beta6
 
 func testFile(t *testing.T, useExport bool) *build.File {
-	_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+	_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 	return toFile(t, starBytes)
 }
 
@@ -45,7 +45,7 @@ func strToFile(t *testing.T, contents string) *build.File {
 
 func TestTraverse_noop(t *testing.T) {
 	for _, useExport := range []bool{true, false} {
-		_, starBytes := testStar(t, eval.FeatureTypeBool, useExport)
+		_, starBytes := testStar(t, eval.ConfigTypeBool, useExport)
 		f := testFile(t, useExport)
 		tvs := newTraverser(f, nv)
 		err := tvs.traverse()

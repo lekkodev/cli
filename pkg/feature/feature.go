@@ -212,7 +212,7 @@ type Override struct {
 
 type UnitTest interface {
 	// Run runs the unit test
-	Run(idx int, eval eval.EvaluableFeature) *TestResult
+	Run(idx int, eval eval.EvaluableConfig) *TestResult
 }
 
 // ValueUnitTest is a unit test that does an equality check
@@ -239,10 +239,10 @@ type CallableUnitTest struct {
 	Registry    *protoregistry.Types
 	TestFunc    starlark.Callable
 	ContextStar string
-	FeatureType eval.FeatureType
+	FeatureType eval.ConfigType
 }
 
-func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string, ft eval.FeatureType) *CallableUnitTest {
+func NewCallableUnitTest(ctx map[string]interface{}, r *protoregistry.Types, testFn starlark.Callable, ctxStar string, ft eval.ConfigType) *CallableUnitTest {
 	return &CallableUnitTest{
 		Context:     ctx,
 		Registry:    r,
@@ -284,7 +284,7 @@ func valToStarValue(c any) (starlark.Value, error) {
 	return sv, nil
 }
 
-func (c *CallableUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
+func (c *CallableUnitTest) Run(idx int, eval eval.EvaluableConfig) *TestResult {
 	tr := NewTestResult(c.ContextStar, idx)
 	a, _, err := eval.Evaluate(c.Context)
 	if err != nil {
@@ -333,7 +333,7 @@ func (vr *testReporter) toErr() error {
 	return fmt.Errorf("%v", vr.args...)
 }
 
-func (ut ValueUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
+func (ut ValueUnitTest) Run(idx int, eval eval.EvaluableConfig) *TestResult {
 	tr := NewTestResult(ut.ContextStar, idx)
 	a, _, err := eval.Evaluate(ut.Context)
 	if err != nil {
@@ -359,7 +359,7 @@ func (ut ValueUnitTest) Run(idx int, eval eval.EvaluableFeature) *TestResult {
 type Feature struct {
 	Key, Description string
 	Value            interface{}
-	FeatureType      eval.FeatureType
+	FeatureType      eval.ConfigType
 	Namespace        string
 
 	Overrides []*Override
@@ -369,35 +369,35 @@ type Feature struct {
 func NewBoolFeature(value bool) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeBool,
+		FeatureType: eval.ConfigTypeBool,
 	}
 }
 
 func NewStringFeature(value string) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeString,
+		FeatureType: eval.ConfigTypeString,
 	}
 }
 
 func NewIntFeature(value int64) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeInt,
+		FeatureType: eval.ConfigTypeInt,
 	}
 }
 
 func NewFloatFeature(value float64) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeFloat,
+		FeatureType: eval.ConfigTypeFloat,
 	}
 }
 
 func NewProtoFeature(value protoreflect.ProtoMessage) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeProto,
+		FeatureType: eval.ConfigTypeProto,
 	}
 }
 
@@ -412,45 +412,45 @@ func NewEncodedJSONFeature(encodedJSON []byte) (*Feature, error) {
 func NewJSONFeature(value *structpb.Value) *Feature {
 	return &Feature{
 		Value:       value,
-		FeatureType: eval.FeatureTypeJSON,
+		FeatureType: eval.ConfigTypeJSON,
 	}
 }
 
 // Takes a go value and an associated type, and converts the
 // value to a language-agnostic protobuf any type.
-func ValToAny(value interface{}, ft eval.FeatureType) (*anypb.Any, error) {
+func ValToAny(value interface{}, ft eval.ConfigType) (*anypb.Any, error) {
 	switch ft {
-	case eval.FeatureTypeBool:
+	case eval.ConfigTypeBool:
 		v, ok := value.(bool)
 		if !ok {
 			return nil, errors.Errorf("expecting bool, got %T", value)
 		}
 		return newAny(wrapperspb.Bool(v))
-	case eval.FeatureTypeInt:
+	case eval.ConfigTypeInt:
 		v, ok := value.(int64)
 		if !ok {
 			return nil, errors.Errorf("expecting int64, got %T", value)
 		}
 		return newAny(wrapperspb.Int64(v))
-	case eval.FeatureTypeFloat:
+	case eval.ConfigTypeFloat:
 		v, ok := value.(float64)
 		if !ok {
 			return nil, errors.Errorf("expecting float64, got %T", value)
 		}
 		return newAny(wrapperspb.Double(v))
-	case eval.FeatureTypeString:
+	case eval.ConfigTypeString:
 		v, ok := value.(string)
 		if !ok {
 			return nil, errors.Errorf("expecting string, got %T", value)
 		}
 		return newAny(wrapperspb.String(v))
-	case eval.FeatureTypeJSON:
+	case eval.ConfigTypeJSON:
 		v, ok := value.(*structpb.Value)
 		if !ok {
 			return nil, errors.Errorf("expecting *structpb.Value, got %T", value)
 		}
 		return newAny(v)
-	case eval.FeatureTypeProto:
+	case eval.ConfigTypeProto:
 		v, ok := value.(protoreflect.ProtoMessage)
 		if !ok {
 			return nil, errors.Errorf("expecting protoreflect.ProtoMessage, got %T", value)
@@ -472,39 +472,39 @@ func newAny(pm protoreflect.ProtoMessage) (*anypb.Any, error) {
 // Translates the pb any object to a go-native object based on the
 // given type. Also takes an optional protbuf type registry, in case the
 // value depends on a user-defined protobuf type.
-func AnyToVal(a *anypb.Any, fType eval.FeatureType, registry *protoregistry.Types) (interface{}, error) {
+func AnyToVal(a *anypb.Any, fType eval.ConfigType, registry *protoregistry.Types) (interface{}, error) {
 	switch fType {
-	case eval.FeatureTypeBool:
+	case eval.ConfigTypeBool:
 		b := wrapperspb.BoolValue{}
 		if err := a.UnmarshalTo(&b); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to bool")
 		}
 		return b.Value, nil
-	case eval.FeatureTypeInt:
+	case eval.ConfigTypeInt:
 		i := wrapperspb.Int64Value{}
 		if err := a.UnmarshalTo(&i); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to int")
 		}
 		return i.Value, nil
-	case eval.FeatureTypeFloat:
+	case eval.ConfigTypeFloat:
 		f := wrapperspb.DoubleValue{}
 		if err := a.UnmarshalTo(&f); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to float")
 		}
 		return f.Value, nil
-	case eval.FeatureTypeString:
+	case eval.ConfigTypeString:
 		s := wrapperspb.StringValue{}
 		if err := a.UnmarshalTo(&s); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to string")
 		}
 		return s.Value, nil
-	case eval.FeatureTypeJSON:
+	case eval.ConfigTypeJSON:
 		v := structpb.Value{}
 		if err := a.UnmarshalTo(&v); err != nil {
 			return nil, errors.Wrap(err, "unmarshal to json")
 		}
 		return &v, nil
-	case eval.FeatureTypeProto:
+	case eval.ConfigTypeProto:
 		p, err := anypb.UnmarshalNew(a, proto.UnmarshalOptions{
 			Resolver: registry,
 		})
@@ -526,8 +526,8 @@ func valFromJSON(encoded []byte) (*structpb.Value, error) {
 }
 
 func (f *Feature) AddBoolOverride(rule string, astNew *rulesv1beta3.Rule, val bool) error {
-	if f.FeatureType != eval.FeatureTypeBool {
-		return newTypeMismatchErr(eval.FeatureTypeBool, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeBool {
+		return newTypeMismatchErr(eval.ConfigTypeBool, f.FeatureType)
 	}
 	f.Overrides = append(f.Overrides, &Override{
 		Rule:      rule,
@@ -538,8 +538,8 @@ func (f *Feature) AddBoolOverride(rule string, astNew *rulesv1beta3.Rule, val bo
 }
 
 func (f *Feature) AddStringOverride(rule string, astNew *rulesv1beta3.Rule, val string) error {
-	if f.FeatureType != eval.FeatureTypeString {
-		return newTypeMismatchErr(eval.FeatureTypeString, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeString {
+		return newTypeMismatchErr(eval.ConfigTypeString, f.FeatureType)
 	}
 	f.Overrides = append(f.Overrides, &Override{
 		Rule:      rule,
@@ -550,8 +550,8 @@ func (f *Feature) AddStringOverride(rule string, astNew *rulesv1beta3.Rule, val 
 }
 
 func (f *Feature) AddIntOverride(rule string, astNew *rulesv1beta3.Rule, val int64) error {
-	if f.FeatureType != eval.FeatureTypeInt {
-		return newTypeMismatchErr(eval.FeatureTypeInt, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeInt {
+		return newTypeMismatchErr(eval.ConfigTypeInt, f.FeatureType)
 	}
 	f.Overrides = append(f.Overrides, &Override{
 		Rule:      rule,
@@ -562,8 +562,8 @@ func (f *Feature) AddIntOverride(rule string, astNew *rulesv1beta3.Rule, val int
 }
 
 func (f *Feature) AddFloatOverride(rule string, astNew *rulesv1beta3.Rule, val float64) error {
-	if f.FeatureType != eval.FeatureTypeFloat {
-		return newTypeMismatchErr(eval.FeatureTypeFloat, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeFloat {
+		return newTypeMismatchErr(eval.ConfigTypeFloat, f.FeatureType)
 	}
 	f.Overrides = append(f.Overrides, &Override{
 		Rule:      rule,
@@ -574,8 +574,8 @@ func (f *Feature) AddFloatOverride(rule string, astNew *rulesv1beta3.Rule, val f
 }
 
 func (f *Feature) AddJSONOverride(rule string, astNew *rulesv1beta3.Rule, val *structpb.Value) error {
-	if f.FeatureType != eval.FeatureTypeJSON {
-		return newTypeMismatchErr(eval.FeatureTypeJSON, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeJSON {
+		return newTypeMismatchErr(eval.ConfigTypeJSON, f.FeatureType)
 	}
 	f.Overrides = append(f.Overrides, &Override{
 		Rule:      rule,
@@ -586,8 +586,8 @@ func (f *Feature) AddJSONOverride(rule string, astNew *rulesv1beta3.Rule, val *s
 }
 
 func (f *Feature) AddJSONUnitTest(context map[string]interface{}, val *structpb.Value, starCtx, starVal string) error {
-	if f.FeatureType != eval.FeatureTypeJSON {
-		return newTypeMismatchErr(eval.FeatureTypeJSON, f.FeatureType)
+	if f.FeatureType != eval.ConfigTypeJSON {
+		return newTypeMismatchErr(eval.ConfigTypeJSON, f.FeatureType)
 	}
 	f.UnitTests = append(f.UnitTests, NewValueUnitTest(context, val, starCtx, starVal))
 	return nil
@@ -630,7 +630,7 @@ func FromProto(fProto *featurev1beta1.Feature, registry *protoregistry.Types) (*
 		Key:         fProto.Key,
 		Description: fProto.Description,
 	}
-	ret.FeatureType = eval.FeatureTypeFromProto(fProto.GetType())
+	ret.FeatureType = eval.ConfigTypeFromProto(fProto.GetType())
 	var err error
 	ret.Value, err = AnyToVal(fProto.GetTree().GetDefault(), ret.FeatureType, registry)
 	if err != nil {
@@ -682,7 +682,7 @@ func (f *Feature) PrintJSON(registry *protoregistry.Types) {
 	fmt.Println(string(jBytes))
 }
 
-func (f *Feature) ToEvaluableFeature() (eval.EvaluableFeature, error) {
+func (f *Feature) ToEvaluableConfig() (eval.EvaluableConfig, error) {
 	res, err := f.ToProto()
 	if err != nil {
 		return nil, err
@@ -740,7 +740,7 @@ func (tr *TestResult) DebugString() string {
 }
 
 func (f *Feature) RunUnitTests() ([]*TestResult, error) {
-	eval, err := f.ToEvaluableFeature()
+	eval, err := f.ToEvaluableConfig()
 	if err != nil {
 		return nil, errors.Wrap(err, "invalid config")
 	}
@@ -751,7 +751,7 @@ func (f *Feature) RunUnitTests() ([]*TestResult, error) {
 	return results, nil
 }
 
-func newTypeMismatchErr(expected, got eval.FeatureType) error {
+func newTypeMismatchErr(expected, got eval.ConfigType) error {
 	return errors.Wrapf(ErrTypeMismatch, "expected %s, got %s", expected, got)
 }
 

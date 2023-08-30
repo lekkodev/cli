@@ -131,13 +131,13 @@ func featureAdd() *cobra.Command {
 			if len(fType) == 0 {
 				if err := survey.AskOne(&survey.Select{
 					Message: "Config Type:",
-					Options: eval.FeatureTypes(),
+					Options: eval.ConfigTypes(),
 				}, &fType); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
 			}
 
-			if fType == string(eval.FeatureTypeProto) && len(fProtoMessage) == 0 {
+			if fType == string(eval.ConfigTypeProto) && len(fProtoMessage) == 0 {
 				protos, err := r.GetProtoMessages(cmd.Context())
 				if err != nil {
 					return errors.Wrap(err, "unable to get proto messages")
@@ -151,7 +151,7 @@ func featureAdd() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			if path, err := r.AddFeature(ctx, ns, featureName, eval.FeatureType(fType), fProtoMessage); err != nil {
+			if path, err := r.AddFeature(ctx, ns, featureName, eval.ConfigType(fType), fProtoMessage); err != nil {
 				return errors.Wrap(err, "add config")
 			} else {
 				fmt.Printf("Successfully added config %s/%s at path %s\n", ns, featureName, path)
@@ -269,7 +269,7 @@ func featureEval() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "any to val")
 			}
-			if fType == eval.FeatureTypeJSON {
+			if fType == eval.ConfigTypeJSON {
 				valueRes, ok := res.(*structpb.Value)
 				if !ok {
 					return errors.Errorf("invalid type for %v", res)

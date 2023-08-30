@@ -12,7 +12,7 @@ require (
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/go-git/go-git/v5 v5.8.0
 	github.com/google/go-github/v52 v52.0.0
-	github.com/lekkodev/go-sdk v0.2.1-0.20230726175347-16f7715b419e
+	github.com/lekkodev/go-sdk v0.2.6-0.20230830172236-f072eb8bf64e
 	github.com/lekkodev/rules v1.5.3-0.20230724195144-d0ed93c3e218
 	github.com/migueleliasweb/go-github-mock v0.0.16
 	github.com/mitchellh/go-homedir v1.1.0
@@ -27,7 +27,7 @@ require (
 )
 
 require (
-	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230620172853-31a82baf7ccf.1 // indirect
+	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230810202034-1c821065b9a0.1 // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230518184743-7afd39499903 // indirect
