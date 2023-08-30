@@ -50,11 +50,11 @@ type ConfigurationStore interface {
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
 	Format(ctx context.Context, verbose bool) error
-	AddFeature(ctx context.Context, ns, featureName string, fType eval.FeatureType, protoMessageName string) (string, error)
+	AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
-	Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, eval.FeatureType, eval.ResultPath, error)
+	Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, eval.ConfigType, eval.ResultPath, error)
 	Parse(ctx context.Context, ns, featureName string, registry *protoregistry.Types) (*featurev1beta1.StaticFeature, error)
 	GetContents(ctx context.Context) (map[metadata.NamespaceConfigRepoMetadata][]feature.FeatureFile, error)
 	ListNamespaces(ctx context.Context) ([]*metadata.NamespaceConfigRepoMetadata, error)
@@ -597,7 +597,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 // the namespace doesn't exist, or
 // a feature named featureName already exists
 // Returns the path to the feature file that was written to disk.
-func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType eval.FeatureType, protoMessageName string) (string, error) {
+func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string) (string, error) {
 	if !isValidName(featureName) {
 		return "", errors.Wrap(ErrInvalidName, "config")
 	}
@@ -617,7 +617,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 	}
 
 	var template []byte
-	if fType == eval.FeatureTypeProto {
+	if fType == eval.ConfigTypeProto {
 		template, err = r.addFeatureFromProto(ctx, protoMessageName, nv)
 		if err != nil {
 			return "", errors.Wrap(err, "add config from proto")
@@ -826,7 +826,7 @@ func (r *repository) RemoveNamespace(ctx context.Context, ns string) error {
 	return nil
 }
 
-func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, eval.FeatureType, eval.ResultPath, error) {
+func (r *repository) Eval(ctx context.Context, ns, featureName string, featureCtx map[string]interface{}) (*anypb.Any, eval.ConfigType, eval.ResultPath, error) {
 	_, nsMDs, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return nil, "", nil, errors.Wrap(err, "parse metadata")

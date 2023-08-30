@@ -94,7 +94,7 @@ func RenderExistingProtoTemplate(inputs ProtoStarInputs, nv feature.NamespaceVer
 	return buf.Bytes(), nil
 }
 
-func GetTemplate(fType eval.FeatureType, nv feature.NamespaceVersion) ([]byte, error) {
+func GetTemplate(fType eval.ConfigType, nv feature.NamespaceVersion) ([]byte, error) {
 	var templateBody string
 	if nv >= feature.NamespaceVersionV1Beta6 {
 		templateBody = configTemplate
@@ -102,15 +102,15 @@ func GetTemplate(fType eval.FeatureType, nv feature.NamespaceVersion) ([]byte, e
 		templateBody = featureTemplate
 	}
 	switch fType {
-	case eval.FeatureTypeBool:
+	case eval.ConfigTypeBool:
 		return []byte(fmt.Sprintf(templateBody, "False")), nil
-	case eval.FeatureTypeInt:
+	case eval.ConfigTypeInt:
 		return []byte(fmt.Sprintf(templateBody, "1")), nil
-	case eval.FeatureTypeFloat:
+	case eval.ConfigTypeFloat:
 		return []byte(fmt.Sprintf(templateBody, "1.0")), nil
-	case eval.FeatureTypeString:
+	case eval.ConfigTypeString:
 		return []byte(fmt.Sprintf(templateBody, "''")), nil
-	case eval.FeatureTypeJSON:
+	case eval.ConfigTypeJSON:
 		return []byte(fmt.Sprintf(templateBody, "{}")), nil
 	default:
 		return nil, fmt.Errorf("templating is not supported for config type %s", fType)

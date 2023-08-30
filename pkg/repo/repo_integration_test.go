@@ -111,12 +111,12 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	getFeatureName := func(ft string) string {
 		return fmt.Sprintf("integration_test_%s", ft)
 	}
-	for _, fType := range eval.FeatureTypes() {
+	for _, fType := range eval.ConfigTypes() {
 		var protoMessageName string
-		if eval.FeatureType(fType) == eval.FeatureTypeProto {
+		if eval.ConfigType(fType) == eval.ConfigTypeProto {
 			protoMessageName = "google.protobuf.BoolValue"
 		}
-		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.FeatureType(fType), protoMessageName)
+		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.ConfigType(fType), protoMessageName)
 		require.NoError(t, err)
 		t.Logf("wrote config to path %s\n", path)
 	}
@@ -139,7 +139,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 	}
 	assert.NotEmpty(t, b.String())
 	// Eval
-	for _, fType := range eval.FeatureTypes() {
+	for _, fType := range eval.ConfigTypes() {
 		evalResult, evalType, resultPath, err := r.Eval(ctx, namespace, getFeatureName(fType), nil)
 		require.NoError(t, err)
 		require.NotNil(t, evalResult)
