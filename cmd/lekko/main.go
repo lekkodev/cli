@@ -504,7 +504,11 @@ func commitCmd() *cobra.Command {
 			if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
 				return errors.Wrap(err, "verify")
 			}
-			if _, err = r.Commit(ctx, rs, message); err != nil {
+			signature, err := repo.GetCommitSignature(ctx, rs)
+			if err != nil {
+				return err
+			}
+			if _, err = r.Commit(ctx, rs, message, signature); err != nil {
 				return err
 			}
 			return nil
