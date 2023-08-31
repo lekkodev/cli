@@ -67,12 +67,20 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 		if err := r.NewRemoteBranch(branchName); err != nil {
 			return "", errors.Wrapf(err, "new remote branch: %s", branchName)
 		}
-		if _, err := r.Commit(ctx, ap, title); err != nil {
+		signature, err := GetCommitSignature(ctx, ap)
+		if err != nil {
+			return "", errors.Wrap(err, "get commit signature")
+		}
+		if _, err := r.Commit(ctx, ap, title, signature); err != nil {
 			return "", errors.Wrap(err, "default add commit push")
 		}
 	} else {
 		if !clean { // commit local changes and push
-			if _, err := r.Commit(ctx, ap, title); err != nil {
+			signature, err := GetCommitSignature(ctx, ap)
+			if err != nil {
+				return "", errors.Wrap(err, "get commit signature")
+			}
+			if _, err := r.Commit(ctx, ap, title, signature); err != nil {
 				return "", errors.Wrap(err, "branch add commit push")
 			}
 		} else { // push (does nothing if there's nothing to push)

@@ -77,7 +77,7 @@ type GitRepository interface {
 	GetRemoteURL() (string, error)
 	// Commit will take an optional commit message and push the changes in the
 	// local working directory to the remote branch.
-	Commit(ctx context.Context, ap AuthProvider, message string) (string, error)
+	Commit(ctx context.Context, ap AuthProvider, message string, signature *object.Signature) (string, error)
 	// Cleans up all resources and references associated with the given branch on
 	// local and remote, if they exist. If branchName is nil, uses the current
 	// (non-master) branch. Will switch the current branch back to the default, and
@@ -169,11 +169,8 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 // given url at the provided path.
 func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository, error) {
 	r, err := git.PlainClone(path, false, &git.CloneOptions{
-		URL: url,
-		Auth: &http.BasicAuth{
-			Username: auth.GetUsername(),
-			Password: auth.GetToken(),
-		},
+		URL:  url,
+		Auth: basicAuth(auth),
 		// Note: the default branch selection logic below relies on
 		// us cloning from the default branch here.
 	})
@@ -355,15 +352,7 @@ func (r *repository) GetRemoteURL() (string, error) {
 // local working directory to the remote branch.
 // It will try to associate the authorized user's GitHub identity (name, primary email address)
 // with the commit and fall back to a username-only commit author if not available.
-func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string) (string, error) {
-	if err := credentialsExist(ap); err != nil {
-		return "", err
-	}
-	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
-	user, err := ghCli.GetUser(ctx)
-	if err != nil {
-		return "", errors.Wrap(err, "could not fetch author identity from GitHub")
-	}
+func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string, signature *object.Signature) (string, error) {
 	defaultBranch, err := r.isDefaultBranch()
 	if err != nil {
 		return "", errors.Wrap(err, "is default branch")
@@ -386,6 +375,34 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 		return "", errors.Wrap(err, "add glob")
 	}
 
+	hash, err := r.wt.Commit(message, &git.CommitOptions{
+		All:    true,
+		Author: signature,
+	})
+	if err != nil {
+		return "", errors.Wrap(err, "commit")
+	}
+	r.Logf("Committed new hash %s locally\n", hash)
+	branchName, err := r.BranchName()
+	if err != nil {
+		return "", errors.Wrap(err, "branch name")
+	}
+	if err := r.Push(ctx, ap, branchName, false); err != nil {
+		return "", errors.Wrap(err, "push")
+	}
+	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
+	return hash.String(), nil
+}
+
+func GetCommitSignature(ctx context.Context, ap AuthProvider) (*object.Signature, error) {
+	if err := credentialsExist(ap); err != nil {
+		return nil, err
+	}
+	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
+	user, err := ghCli.GetUser(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not fetch author identity from GitHub")
+	}
 	// Try to use name/email associated with GitHub account if available
 	var name string
 	if user.Name != nil {
@@ -414,27 +431,11 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 		}
 	}
 
-	hash, err := r.wt.Commit(message, &git.CommitOptions{
-		All: true,
-		Author: &object.Signature{
-			Name:  name,
-			Email: email,
-			When:  time.Now(),
-		},
-	})
-	if err != nil {
-		return "", errors.Wrap(err, "commit")
-	}
-	r.Logf("Committed new hash %s locally\n", hash)
-	branchName, err := r.BranchName()
-	if err != nil {
-		return "", errors.Wrap(err, "branch name")
-	}
-	if err := r.Push(ctx, ap, branchName, false); err != nil {
-		return "", errors.Wrap(err, "push")
-	}
-	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
-	return hash.String(), nil
+	return &object.Signature{
+		Name:  name,
+		Email: email,
+		When:  time.Now(),
+	}, nil
 }
 
 // Cleans up all resources and references associated with the given branch on
