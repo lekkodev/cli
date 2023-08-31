@@ -350,8 +350,7 @@ func (r *repository) GetRemoteURL() (string, error) {
 
 // Commit will take an optional commit message and push the changes in the
 // local working directory to the remote branch.
-// It will try to associate the authorized user's GitHub identity (name, primary email address)
-// with the commit and fall back to a username-only commit author if not available.
+// The commit will be made by the main signatory, and include optional coauthors.
 func (r *repository) Commit(
 	ctx context.Context,
 	ap AuthProvider,
@@ -422,6 +421,10 @@ func coauthorsToString(coauthors []*object.Signature) string {
 	return strings.Join(lines, "\n")
 }
 
+// GetCommitSignature returns the commit signature for the provided credentials.
+// It tries to use the name and email associated with the user's GitHub account.
+// If the name or email is not available, it tries to fetch the email separately.
+// It uses GitHub's noreply email as a fallback.
 func GetCommitSignature(ctx context.Context, ap AuthProvider) (*object.Signature, error) {
 	if err := credentialsExist(ap); err != nil {
 		return nil, err
