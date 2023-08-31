@@ -77,7 +77,7 @@ type GitRepository interface {
 	GetRemoteURL() (string, error)
 	// Commit will take an optional commit message and push the changes in the
 	// local working directory to the remote branch.
-	Commit(ctx context.Context, ap AuthProvider, message string, signature *object.Signature) (string, error)
+	Commit(ctx context.Context, ap AuthProvider, message string, signature *object.Signature, coauthors ...*object.Signature) (string, error)
 	// Cleans up all resources and references associated with the given branch on
 	// local and remote, if they exist. If branchName is nil, uses the current
 	// (non-master) branch. Will switch the current branch back to the default, and
@@ -352,7 +352,13 @@ func (r *repository) GetRemoteURL() (string, error) {
 // local working directory to the remote branch.
 // It will try to associate the authorized user's GitHub identity (name, primary email address)
 // with the commit and fall back to a username-only commit author if not available.
-func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string, signature *object.Signature) (string, error) {
+func (r *repository) Commit(
+	ctx context.Context,
+	ap AuthProvider,
+	message string,
+	signature *object.Signature,
+	coauthors ...*object.Signature,
+) (string, error) {
 	defaultBranch, err := r.isDefaultBranch()
 	if err != nil {
 		return "", errors.Wrap(err, "is default branch")
@@ -370,6 +376,9 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 
 	if message == "" {
 		message = "new config changes"
+	}
+	if len(coauthors) > 0 {
+		message = fmt.Sprintf("%s\n\n%s", message, coauthorsToString(coauthors))
 	}
 	if err := r.wt.AddGlob("."); err != nil {
 		return "", errors.Wrap(err, "add glob")
@@ -392,6 +401,25 @@ func (r *repository) Commit(ctx context.Context, ap AuthProvider, message string
 	}
 	r.Logf("Pushed local branch %q to remote %q\n", branchName, RemoteName)
 	return hash.String(), nil
+}
+
+func coauthorToString(coauthor *object.Signature) string {
+	ret := fmt.Sprintf("Co-authored-by: %s", coauthor.Name)
+	if coauthor.Email != "" {
+		ret = fmt.Sprintf("%s <%s>", ret, coauthor.Email)
+	}
+	return ret
+}
+
+func coauthorsToString(coauthors []*object.Signature) string {
+	if len(coauthors) == 0 {
+		return ""
+	}
+	var lines []string
+	for _, coauthor := range coauthors {
+		lines = append(lines, coauthorToString(coauthor))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func GetCommitSignature(ctx context.Context, ap AuthProvider) (*object.Signature, error) {
