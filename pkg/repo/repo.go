@@ -425,9 +425,16 @@ func coauthorsToString(coauthors []*object.Signature) string {
 // It tries to use the name and email associated with the user's GitHub account.
 // If the name or email is not available, it tries to fetch the email separately.
 // It uses GitHub's noreply email as a fallback.
-func GetCommitSignature(ctx context.Context, ap AuthProvider) (*object.Signature, error) {
-	if err := credentialsExist(ap); err != nil {
-		return nil, err
+// If GitHub creds aren't available, use lekko username. This applies to users
+// that don't have a GitHub account.
+func GetCommitSignature(ctx context.Context, ap AuthProvider, lekkoUser string) (*object.Signature, error) {
+	if len(ap.GetToken()) == 0 {
+		// No credentials, use lekko username
+		return &object.Signature{
+			Name:  strings.Split(lekkoUser, "@")[0],
+			Email: lekkoUser,
+			When:  time.Now(),
+		}, nil
 	}
 	ghCli := gh.NewGithubClientFromToken(ctx, ap.GetToken())
 	user, err := ghCli.GetUser(ctx)
