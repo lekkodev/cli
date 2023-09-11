@@ -67,7 +67,7 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 		if err := r.NewRemoteBranch(branchName); err != nil {
 			return "", errors.Wrapf(err, "new remote branch: %s", branchName)
 		}
-		signature, err := GetCommitSignature(ctx, ap)
+		signature, err := GetCommitSignature(ctx, ap, "")
 		if err != nil {
 			return "", errors.Wrap(err, "get commit signature")
 		}
@@ -76,7 +76,7 @@ func (r *repository) Review(ctx context.Context, title string, ghCli *gh.GithubC
 		}
 	} else {
 		if !clean { // commit local changes and push
-			signature, err := GetCommitSignature(ctx, ap)
+			signature, err := GetCommitSignature(ctx, ap, "")
 			if err != nil {
 				return "", errors.Wrap(err, "get commit signature")
 			}
