@@ -110,6 +110,28 @@ service BFFService {
   rpc Restore(RestoreRequest) returns (RestoreResponse) {}
   rpc GetRepositoryLogs(GetRepositoryLogsRequest) returns (GetRepositoryLogsResponse) {}
   rpc GetRollout(GetRolloutRequest) returns (GetRolloutResponse) {}
+
+  // User role and permission management
+
+  rpc GetTeamRoles(GetTeamRolesRequest) returns (GetTeamRolesResponse) {}
+  rpc UpsertTeamRole(UpsertTeamRoleRequest) returns (UpsertTeamRoleResponse) {}
+  rpc DeleteTeamRole(DeleteTeamRoleRequest) returns (DeleteTeamRoleResponse) {}
+
+  rpc GetUserRoles(GetUserRolesRequest) returns (GetUserRolesResponse) {}
+
+  rpc GetRoleUsers(GetRoleUsersRequest) returns (GetRoleUsersResponse) {}
+  // Creates and deletes role assignments accordingly given a list of usernames
+  rpc UpdateRoleUsers(UpdateRoleUsersRequest) returns (UpdateRoleUsersResponse) {}
+
+  rpc GetRolePermissions(GetRolePermissionsRequest) returns (GetRolePermissionsResponse) {}
+  rpc UpsertRolePermission(UpsertRolePermissionRequest) returns (UpsertRolePermissionResponse) {}
+  rpc DeleteRolePermission(DeleteRolePermissionRequest) returns (DeleteRolePermissionResponse) {}
+
+  // Query "merged" permissions a user through all of their roles
+  rpc GetUserPermissions(GetUserPermissionsRequest) returns (GetUserPermissionsResponse) {}
+
+  // Query which roles have what level of access on a specific resource
+  rpc GetResourcePermissions(GetResourcePermissionsRequest) returns (GetResourcePermissionsResponse) {}
 }
 
 message GetUserGitHubReposRequest {
@@ -948,4 +970,123 @@ message Rollout {
 
 message GetRolloutResponse {
   Rollout rollout = 1;
+}
+
+message Role {
+  string name = 1;
+  string team_name = 2;
+  string description = 3;
+}
+
+enum PermissionLevel {
+  PERMISSION_LEVEL_UNSPECIFIED = 0;
+  PERMISSION_LEVEL_READ = 1;
+  PERMISSION_LEVEL_UPDATE = 2;
+  PERMISSION_LEVEL_MANAGE = 3;
+  PERMISSION_LEVEL_ADMIN = 4;
+}
+
+message Permission {
+  string resource_path = 1;
+  string role_name = 2;
+  PermissionLevel level = 3;
+}
+
+message GetTeamRolesRequest {
+  string team_name = 1;
+}
+
+message GetTeamRolesResponse {
+  repeated Role roles = 1;
+}
+
+message UpsertTeamRoleRequest {
+  string team_name = 1;
+  string role_name = 2;
+  Role updated_role = 3;
+}
+
+message UpsertTeamRoleResponse {
+  Role role = 1;
+}
+
+message DeleteTeamRoleRequest {
+  string team_name = 1;
+  string role_name = 2;
+}
+
+message DeleteTeamRoleResponse {}
+
+message GetUserRolesRequest {
+  string username = 1;
+  string team_name = 2;
+}
+
+message GetUserRolesResponse {
+  repeated Role roles = 1;
+}
+
+message GetRoleUsersRequest {
+  string team_name = 1;
+  string role_name = 2;
+}
+
+message GetRoleUsersResponse {
+  repeated string usernames = 1;
+}
+
+message UpdateRoleUsersRequest {
+  string team_name = 1;
+  string role_name = 2;
+  repeated string usernames = 3;
+}
+
+message UpdateRoleUsersResponse {}
+
+message GetRolePermissionsRequest {
+  string team_name = 1;
+  string role_name = 2;
+}
+
+message GetRolePermissionsResponse {
+  repeated Permission permissions = 1;
+}
+
+message UpsertRolePermissionRequest {
+  string team_name = 1;
+  string role_name = 2;
+  string resource_path = 3;
+  PermissionLevel permission_level = 4;
+}
+
+message UpsertRolePermissionResponse {
+  Permission permission = 1;
+}
+
+message DeleteRolePermissionRequest {
+  string team_name = 1;
+  string role_name = 2;
+  string resource_path = 3;
+}
+
+message DeleteRolePermissionResponse {}
+
+message GetUserPermissionsRequest {
+  string username = 1;
+  string team_name = 2;
+}
+
+message GetUserPermissionsResponse {
+  repeated Permission permissions = 1;
+}
+
+message GetResourcePermissionsRequest {
+  string resource_path = 1;
+  string team_name = 2;
+}
+
+message GetResourcePermissionsResponse {
+  // If resource path does not match the one provided in the request,
+  // it means that the role has transitive access via the returned path.
+  repeated Permission permissions = 1;
 }
