@@ -245,8 +245,8 @@ func featureEval() *cobra.Command {
 			if err := json.Unmarshal([]byte(jsonContext), &featureCtx); err != nil {
 				return err
 			}
-			fmt.Printf("Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
-			fmt.Printf("-------------------\n")
+			fmt.Fprintf(os.Stderr, "Evaluating %s with context %s\n", logging.Bold(fmt.Sprintf("%s/%s", ns, featureName)), logging.Bold(jsonContext))
+			fmt.Fprintf(os.Stderr, "-------------------\n")
 			anyVal, fType, path, err := r.Eval(ctx, ns, featureName, featureCtx)
 			if err != nil {
 				return err
@@ -281,9 +281,11 @@ func featureEval() *cobra.Command {
 				res = string(jsonRes)
 			}
 
-			fmt.Printf("[%s] %s\n", fType, logging.Bold(res))
+			fmt.Fprintf(os.Stderr, "[%s] ", fType)
+			fmt.Printf("%s", res)
+			fmt.Println()
 			if verbose {
-				fmt.Printf("[path] %v\n", path)
+				fmt.Fprintf(os.Stderr, "[path] %v\n", path)
 			}
 
 			return nil
