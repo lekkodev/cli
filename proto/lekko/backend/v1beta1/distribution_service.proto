@@ -77,6 +77,8 @@ message Feature {
   // The sha of the protobuf binary according to git.
   string sha = 2;
   lekko.feature.v1beta1.Feature feature = 3;
+  // SHA of the last commit that modified the config
+  string last_update_commit_sha = 4;
 }
 
 message ContextKey {
@@ -95,6 +97,8 @@ message FlagEvaluationEvent {
   // The node in the tree that contained the final return value of the feature.
   repeated int32 result_path = 7;
   google.protobuf.Timestamp client_event_time = 8;
+  // SHA of the last commit that modified the config
+  string last_update_commit_sha = 9;
 }
 
 message SendFlagEvaluationMetricsRequest {
