@@ -121,7 +121,8 @@ service BFFService {
 
   rpc GetRoleUsers(GetRoleUsersRequest) returns (GetRoleUsersResponse) {}
   // Creates and deletes role assignments accordingly given a list of usernames
-  rpc UpdateRoleUsers(UpdateRoleUsersRequest) returns (UpdateRoleUsersResponse) {}
+  rpc AddUsersToRole(AddUsersToRoleRequest) returns (AddUsersToRoleResponse) {}
+  rpc RemoveUsersFromRole(RemoveUsersFromRoleRequest) returns (RemoveUsersFromRoleResponse) {}
 
   rpc GetRolePermissions(GetRolePermissionsRequest) returns (GetRolePermissionsResponse) {}
   rpc UpsertRolePermission(UpsertRolePermissionRequest) returns (UpsertRolePermissionResponse) {}
@@ -1002,7 +1003,11 @@ message GetTeamRolesResponse {
 
 message UpsertTeamRoleRequest {
   string team_name = 1;
+  // Role name to identify current role or create new role with if one does not exist.
   string role_name = 2;
+  // Can contain an updated role name.
+  // If inserting, role_name and name of updated_role should match.
+  // Team name in this object will be ignored.
   Role updated_role = 3;
 }
 
@@ -1035,13 +1040,21 @@ message GetRoleUsersResponse {
   repeated string usernames = 1;
 }
 
-message UpdateRoleUsersRequest {
+message AddUsersToRoleRequest {
   string team_name = 1;
   string role_name = 2;
   repeated string usernames = 3;
 }
 
-message UpdateRoleUsersResponse {}
+message AddUsersToRoleResponse {}
+
+message RemoveUsersFromRoleRequest {
+  string team_name = 1;
+  string role_name = 2;
+  repeated string usernames = 3;
+}
+
+message RemoveUsersFromRoleResponse {}
 
 message GetRolePermissionsRequest {
   string team_name = 1;
