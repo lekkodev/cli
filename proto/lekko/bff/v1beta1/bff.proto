@@ -203,7 +203,7 @@ message ListAPIKeyScopesRequest {
 }
 
 message ListAPIKeyScopesResponse {
-  repeated Namespace namespaces = 1;
+  repeated Namespace enabled_namespaces = 1;
 }
 
 message UpdateAPIKeyScopesRequest {
