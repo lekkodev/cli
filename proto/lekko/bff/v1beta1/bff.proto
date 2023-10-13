@@ -48,6 +48,10 @@ service BFFService {
   // method. For safety reasons you're only able to check an api key for
   // your currently active team.
   rpc CheckAPIKey(CheckAPIKeyRequest) returns (CheckAPIKeyResponse) {}
+  rpc ListAPIKeyScopes(ListAPIKeyScopesRequest) returns (ListAPIKeyScopesResponse) {}
+  // Takes the "desired state" of an API key's scopes and applies them, creating and deleting
+  // scopes as necessary.
+  rpc UpdateAPIKeyScopes(UpdateAPIKeyScopesRequest) returns (UpdateAPIKeyScopesResponse) {}
 
   // Team management
 
@@ -192,6 +196,23 @@ message CheckAPIKeyRequest {
 message CheckAPIKeyResponse {
   APIKey key = 1;
 }
+
+message ListAPIKeyScopesRequest {
+  string nickname = 1;
+  string team_name = 2;
+}
+
+message ListAPIKeyScopesResponse {
+  repeated Namespace enabled_namespaces = 1;
+}
+
+message UpdateAPIKeyScopesRequest {
+  string nickname = 1;
+  string team_name = 2;
+  repeated Namespace namespaces = 3;
+}
+
+message UpdateAPIKeyScopesResponse {}
 
 message CreateTeamRequest {
   string name = 1;
@@ -340,6 +361,11 @@ message Repository {
   // is typically the default branch, e.g. 'main'.
   string branch_name = 10;
   GithubInstallationStatus github_installation_status = 11;
+}
+
+message Namespace {
+  RepositoryKey repo_key = 1;
+  string name = 2;
 }
 
 // RepositoriesResponse contains either a
