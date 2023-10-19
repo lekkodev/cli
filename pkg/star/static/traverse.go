@@ -30,6 +30,7 @@ const (
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
+	MetadataAttrName     string          = "metadata"
 	// TODO: Fully migrate to overrides over rules
 	RulesAttrName     string = "rules"
 	OverridesAttrName string = "overrides"
@@ -40,11 +41,13 @@ func defaultNoop(v *build.Expr) error           { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
 func rulesNoop(rules *overridesWrapper) error   { return nil }
 func importsNoop(imports *importsWrapper) error { return nil }
+func metadataNoop(ast *starFeatureAST) error { return nil}
 
 type defaultFn func(v *build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
 type overridesFn func(rules *overridesWrapper) error
 type importsFn func(imports *importsWrapper) error
+type metadataFn func(ast *starFeatureAST) error
 
 // Traverses a lekko starlark file, running methods on various
 // components of the file. Methods can be provided to read the
@@ -57,6 +60,7 @@ type traverser struct {
 	descriptionFn  descriptionFn
 	overridesFn    overridesFn
 	protoImportsFn importsFn
+	metadataFn     metadataFn
 }
 
 func newTraverser(f *build.File, nv feature.NamespaceVersion) *traverser {
@@ -67,6 +71,7 @@ func newTraverser(f *build.File, nv feature.NamespaceVersion) *traverser {
 		descriptionFn:  descriptionNoop,
 		overridesFn:    rulesNoop,
 		protoImportsFn: importsNoop,
+		metadataFn: metadataNoop,
 	}
 }
 
@@ -89,6 +94,11 @@ func (t *traverser) withProtoImportsFn(fn importsFn) *traverser {
 	t.protoImportsFn = fn
 	return t
 }
+
+func (t *traverser) withMetadataFn(fn metadataFn) *traverser {
+	t.metadataFn = fn
+	return t
+} 
 
 func (t *traverser) traverse() error {
 	imports := t.getProtoImports()
@@ -117,6 +127,9 @@ func (t *traverser) traverse() error {
 	}
 	if err := t.descriptionFn(descriptionStr); err != nil {
 		return errors.Wrap(err, "description fn")
+	}
+	if err := t.metadataFn(ast); err != nil {
+		return errors.Wrap(err, "metadata fn")
 	}
 	// rules
 	if err := ast.parseOverrides(t.overridesFn, t.nv); err != nil {
@@ -324,6 +337,10 @@ type importsWrapper struct {
 
 type importVal struct {
 	assignExpr *build.AssignExpr
+}
+
+type metadataWrapper struct {
+	metadataExpr *build.DictExpr
 }
 
 func newOverride(li build.Expr) (*override, error) {

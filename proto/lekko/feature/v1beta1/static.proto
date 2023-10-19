@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package lekko.feature.v1beta1;
 
+import "google/protobuf/struct.proto";
 import "lekko/feature/v1beta1/feature.proto";
 
 // Represents a statically parsed feature.
@@ -47,6 +48,7 @@ message FeatureStruct {
   string description = 2;
   StarExpr default = 3;
   Rules rules = 4;
+  google.protobuf.Value metadata = 7;
 }
 
 message Rules {

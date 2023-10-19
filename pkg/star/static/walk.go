@@ -85,7 +85,8 @@ func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 		withDefaultFn(w.buildDefaultFn(ret)).
 		withDescriptionFn(w.buildDescriptionFn(ret)).
 		withOverridesFn(w.buildRulesFn(ret)).
-		withProtoImportsFn(w.buildProtoImportsFn(ret))
+		withProtoImportsFn(w.buildProtoImportsFn(ret)).
+		withMetadataFn(w.buildMetadataFn(ret))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -101,7 +102,8 @@ func (w *walker) Mutate(f *featurev1beta1.StaticFeature) ([]byte, error) {
 	t := newTraverser(ast, w.nv).
 		withDefaultFn(w.mutateDefaultFn(f)).
 		withDescriptionFn(w.mutateDescriptionFn(f)).
-		withOverridesFn(w.mutateOverridesFn(f))
+		withOverridesFn(w.mutateOverridesFn(f)).
+		withMetadataFn(w.mutateMetadataFn(f))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -236,6 +238,27 @@ func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) description
 	return func(v *build.StringExpr) error {
 		f.Feature.Description = v.Value
 		f.FeatureOld.Description = v.Value
+		return nil
+	}
+}
+
+func (w *walker) buildMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
+	return func(ast *starFeatureAST) error {
+		metadataExprPtr, found := ast.get(MetadataAttrName)
+		if !found {
+			return nil
+		}
+		metadataExpr := *metadataExprPtr
+		metadataDict, ok := metadataExpr.(*build.DictExpr)
+		if !ok {
+			return errors.Wrapf(ErrUnsupportedStaticParsing, "metadata kwarg: expected dict, got %T", metadataExpr)
+		}
+		metadataValue, err := w.extractJSONValue(metadataDict)
+		if err != nil {
+			return errors.Wrap(err, "extract metadata")
+		}
+		f.Feature.Metadata = metadataValue
+		f.FeatureOld.Metadata = metadataValue
 		return nil
 	}
 }
@@ -481,6 +504,21 @@ func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
 		v.Value = f.FeatureOld.Description
+		return nil
+	}
+}
+
+func (w *walker) mutateMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
+	return func(ast *starFeatureAST) error {
+		metadataProto := f.FeatureOld.GetMetadata()
+		if metadataProto == nil {
+			return nil
+		}
+		metadataStarDict, err := w.genJSONValue(metadataProto, nil) 
+		if err != nil {
+			return err
+		}
+		ast.set(MetadataAttrName, metadataStarDict)
 		return nil
 	}
 }

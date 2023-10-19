@@ -39,6 +39,7 @@ const (
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
+	MetadataAttrName     string          = "metadata"
 	// TODO: Fully migrate to overrides over rules
 	RulesAttrName     string = "rules"
 	OverridesAttrName string = "overrides"
@@ -54,6 +55,7 @@ var (
 		OverridesAttrName:    {},
 		validatorAttrName:    {},
 		unitTestsAttrName:    {},
+		MetadataAttrName:     {},
 	}
 )
 
@@ -293,6 +295,22 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 		return "", fmt.Errorf("description must be a string (got a %s)", descriptionVal.Type())
 	}
 	return dsc.GoString(), nil
+}
+
+func (fb *featureBuilder) getMetadata(featureVal *starlarkstruct.Struct) (*structpb.Value, error) {
+	metadataVal, err := featureVal.Attr(MetadataAttrName)
+	if err != nil {
+		return nil, errors.Wrap(err, "metadata attribute")
+	}
+	metadataDict, ok := metadataVal.(*starlark.Dict)
+	if !ok {
+		return nil, fmt.Errorf("metadata must be a dict (got a %s)", metadataVal.Type())
+	}
+	metadataMap, err := translateContext(metadataDict)
+	if err != nil {
+		return nil, errors.Wrap(err, "translate metadata attribute")
+	}
+	return structpb.NewValue(metadataMap)
 }
 
 func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {
