@@ -514,7 +514,7 @@ func (w *walker) mutateMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
 		if metadataProto == nil {
 			return nil
 		}
-		metadataStarDict, err := w.genJSONValue(metadataProto, nil) 
+		metadataStarDict, err := w.genJSONValue(metadataProto, nil)
 		if err != nil {
 			return err
 		}

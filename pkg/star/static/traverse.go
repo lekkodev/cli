@@ -41,7 +41,7 @@ func defaultNoop(v *build.Expr) error           { return nil }
 func descriptionNoop(v *build.StringExpr) error { return nil }
 func rulesNoop(rules *overridesWrapper) error   { return nil }
 func importsNoop(imports *importsWrapper) error { return nil }
-func metadataNoop(ast *starFeatureAST) error { return nil}
+func metadataNoop(ast *starFeatureAST) error    { return nil }
 
 type defaultFn func(v *build.Expr) error
 type descriptionFn func(v *build.StringExpr) error
@@ -71,7 +71,7 @@ func newTraverser(f *build.File, nv feature.NamespaceVersion) *traverser {
 		descriptionFn:  descriptionNoop,
 		overridesFn:    rulesNoop,
 		protoImportsFn: importsNoop,
-		metadataFn: metadataNoop,
+		metadataFn:     metadataNoop,
 	}
 }
 
@@ -98,7 +98,7 @@ func (t *traverser) withProtoImportsFn(fn importsFn) *traverser {
 func (t *traverser) withMetadataFn(fn metadataFn) *traverser {
 	t.metadataFn = fn
 	return t
-} 
+}
 
 func (t *traverser) traverse() error {
 	imports := t.getProtoImports()
@@ -337,10 +337,6 @@ type importsWrapper struct {
 
 type importVal struct {
 	assignExpr *build.AssignExpr
-}
-
-type metadataWrapper struct {
-	metadataExpr *build.DictExpr
 }
 
 func newOverride(li build.Expr) (*override, error) {

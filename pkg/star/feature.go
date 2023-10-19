@@ -155,6 +155,10 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 		return nil, errors.Wrap(err, "description")
 	}
 	f.Namespace = fb.namespace
+	f.Metadata, err = fb.getMetadata(featureVal)
+	if err != nil {
+		return nil, errors.Wrap(err, "metadata")
+	}
 
 	overrideVals, err := fb.addOverrides(f, featureVal)
 	if err != nil {
@@ -297,10 +301,11 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 	return dsc.GoString(), nil
 }
 
-func (fb *featureBuilder) getMetadata(featureVal *starlarkstruct.Struct) (*structpb.Value, error) {
+func (fb *featureBuilder) getMetadata(featureVal *starlarkstruct.Struct) (map[string]any, error) {
 	metadataVal, err := featureVal.Attr(MetadataAttrName)
 	if err != nil {
-		return nil, errors.Wrap(err, "metadata attribute")
+		//lint:ignore nilerr `Struct.Attr` returns error if attribute doesn't exist
+		return nil, nil
 	}
 	metadataDict, ok := metadataVal.(*starlark.Dict)
 	if !ok {
@@ -310,7 +315,7 @@ func (fb *featureBuilder) getMetadata(featureVal *starlarkstruct.Struct) (*struc
 	if err != nil {
 		return nil, errors.Wrap(err, "translate metadata attribute")
 	}
-	return structpb.NewValue(metadataMap)
+	return metadataMap, nil
 }
 
 func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {

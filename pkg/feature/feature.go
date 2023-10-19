@@ -361,6 +361,7 @@ type Feature struct {
 	Value            interface{}
 	FeatureType      eval.ConfigType
 	Namespace        string
+	Metadata         map[string]any
 
 	Overrides []*Override
 	UnitTests []UnitTest
