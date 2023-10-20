@@ -31,7 +31,7 @@ message Feature {
   string description = 2;
   Tree tree = 3;
   FeatureType type = 4;
-  google.protobuf.Value metadata = 7;
+  google.protobuf.Struct metadata = 7;
 }
 
 // Enumerates the canonical types that lekko supports

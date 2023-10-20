@@ -30,6 +30,8 @@ const (
 	NamespaceVersionV1Beta5 NamespaceVersion = "v1beta5"
 	// Supports using "overrides" instead of "rules" and "export(Config(...))" instead of "result = feature(...)" (dual support)
 	NamespaceVersionV1Beta6 NamespaceVersion = "v1beta6"
+	// Supports `metadata` field
+	NamespaceVersionV1Beta7 NamespaceVersion = "v1beta7"
 )
 
 var (
@@ -50,6 +52,7 @@ func AllNamespaceVersions() []NamespaceVersion {
 		NamespaceVersionV1Beta4,
 		NamespaceVersionV1Beta5,
 		NamespaceVersionV1Beta6,
+		NamespaceVersionV1Beta7,
 	}
 }
 

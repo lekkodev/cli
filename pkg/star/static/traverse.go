@@ -128,8 +128,10 @@ func (t *traverser) traverse() error {
 	if err := t.descriptionFn(descriptionStr); err != nil {
 		return errors.Wrap(err, "description fn")
 	}
-	if err := t.metadataFn(ast); err != nil {
-		return errors.Wrap(err, "metadata fn")
+	if t.nv >= feature.NamespaceVersionV1Beta7 {
+		if err := t.metadataFn(ast); err != nil {
+			return errors.Wrap(err, "metadata fn")
+		}
 	}
 	// rules
 	if err := ast.parseOverrides(t.overridesFn, t.nv); err != nil {

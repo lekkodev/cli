@@ -155,9 +155,11 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 		return nil, errors.Wrap(err, "description")
 	}
 	f.Namespace = fb.namespace
-	f.Metadata, err = fb.getMetadata(featureVal)
-	if err != nil {
-		return nil, errors.Wrap(err, "metadata")
+	if fb.nv >= feature.NamespaceVersionV1Beta7 {
+		f.Metadata, err = fb.getMetadata(featureVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "metadata")
+		}
 	}
 
 	overrideVals, err := fb.addOverrides(f, featureVal)
