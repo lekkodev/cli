@@ -85,7 +85,8 @@ func (w *walker) Build() (*featurev1beta1.StaticFeature, error) {
 		withDefaultFn(w.buildDefaultFn(ret)).
 		withDescriptionFn(w.buildDescriptionFn(ret)).
 		withOverridesFn(w.buildRulesFn(ret)).
-		withProtoImportsFn(w.buildProtoImportsFn(ret))
+		withProtoImportsFn(w.buildProtoImportsFn(ret)).
+		withMetadataFn(w.buildMetadataFn(ret))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -101,7 +102,8 @@ func (w *walker) Mutate(f *featurev1beta1.StaticFeature) ([]byte, error) {
 	t := newTraverser(ast, w.nv).
 		withDefaultFn(w.mutateDefaultFn(f)).
 		withDescriptionFn(w.mutateDescriptionFn(f)).
-		withOverridesFn(w.mutateOverridesFn(f))
+		withOverridesFn(w.mutateOverridesFn(f)).
+		withMetadataFn(w.mutateMetadataFn(f))
 
 	if err := t.traverse(); err != nil {
 		return nil, errors.Wrap(err, "traverse")
@@ -211,31 +213,60 @@ func (w *walker) extractJSONValue(v build.Expr) (*structpb.Value, error) {
 		}
 		return structpb.NewListValue(listVal), nil
 	case *build.DictExpr:
-		structVal := structpb.Struct{
-			Fields: map[string]*structpb.Value{},
+		structVal, err := w.extractJSONStruct(t)
+		if err != nil {
+			return nil, err
 		}
-		for _, kvExpr := range t.List {
-			kvExpr := kvExpr
-			keyExpr, ok := kvExpr.Key.(*build.StringExpr)
-			if !ok {
-				return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "json structs must have keys of type string, not %T", kvExpr.Key)
-			}
-			key := keyExpr.Value
-			vVar, err := w.extractJSONValue(kvExpr.Value)
-			if err != nil {
-				return nil, errors.Wrap(err, "extract struct elem value")
-			}
-			structVal.Fields[key] = vVar
-		}
-		return structpb.NewStructValue(&structVal), nil
+		return structpb.NewStructValue(structVal), nil
 	}
 	return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+}
+
+func (w *walker) extractJSONStruct(d *build.DictExpr) (*structpb.Struct, error) {
+	structVal := structpb.Struct{
+		Fields: map[string]*structpb.Value{},
+	}
+	for _, kvExpr := range d.List {
+		kvExpr := kvExpr
+		keyExpr, ok := kvExpr.Key.(*build.StringExpr)
+		if !ok {
+			return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "json structs must have keys of type string, not %T", kvExpr.Key)
+		}
+		key := keyExpr.Value
+		vVar, err := w.extractJSONValue(kvExpr.Value)
+		if err != nil {
+			return nil, errors.Wrap(err, "extract struct elem value")
+		}
+		structVal.Fields[key] = vVar
+	}
+	return &structVal, nil
 }
 
 func (w *walker) buildDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
 		f.Feature.Description = v.Value
 		f.FeatureOld.Description = v.Value
+		return nil
+	}
+}
+
+func (w *walker) buildMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
+	return func(ast *starFeatureAST) error {
+		metadataExprPtr, found := ast.get(MetadataAttrName)
+		if !found {
+			return nil
+		}
+		metadataExpr := *metadataExprPtr
+		metadataDict, ok := metadataExpr.(*build.DictExpr)
+		if !ok {
+			return errors.Wrapf(ErrUnsupportedStaticParsing, "metadata kwarg: expected dict, got %T", metadataExpr)
+		}
+		metadataStruct, err := w.extractJSONStruct(metadataDict)
+		if err != nil {
+			return errors.Wrap(err, "extract metadata")
+		}
+		f.Feature.Metadata = metadataStruct
+		f.FeatureOld.Metadata = metadataStruct
 		return nil
 	}
 }
@@ -405,6 +436,24 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *
 	}
 }
 
+func (w *walker) genJSONStruct(s *structpb.Struct, meta *featurev1beta1.StarMeta) (*build.DictExpr, error) {
+	dictExpr := &build.DictExpr{
+		ForceMultiLine: true,
+	}
+	for key, value := range s.Fields {
+		valExpr, err := w.genJSONValue(value, meta)
+		if err != nil {
+			return nil, errors.Wrap(err, "gen value dict elem")
+		}
+		dictExpr.List = append(dictExpr.List, &build.KeyValueExpr{
+			Key:   starString(key),
+			Value: valExpr,
+		})
+	}
+	sortKVs(dictExpr.List)
+	return dictExpr, nil
+}
+
 func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta) (build.Expr, error) {
 	switch k := val.Kind.(type) {
 	case *structpb.Value_NullValue:
@@ -434,20 +483,10 @@ func (w *walker) genJSONValue(val *structpb.Value, meta *featurev1beta1.StarMeta
 		}
 		return listExpr, nil
 	case *structpb.Value_StructValue:
-		dictExpr := &build.DictExpr{
-			ForceMultiLine: true,
+		dictExpr, err := w.genJSONStruct(k.StructValue, meta)
+		if err != nil {
+			return nil, err
 		}
-		for key, value := range k.StructValue.Fields {
-			valExpr, err := w.genJSONValue(value, meta)
-			if err != nil {
-				return nil, errors.Wrap(err, "gen value dict elem")
-			}
-			dictExpr.List = append(dictExpr.List, &build.KeyValueExpr{
-				Key:   starString(key),
-				Value: valExpr,
-			})
-		}
-		sortKVs(dictExpr.List)
 		return dictExpr, nil
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "structpb val type %T", k)
@@ -481,6 +520,21 @@ func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 func (w *walker) mutateDescriptionFn(f *featurev1beta1.StaticFeature) descriptionFn {
 	return func(v *build.StringExpr) error {
 		v.Value = f.FeatureOld.Description
+		return nil
+	}
+}
+
+func (w *walker) mutateMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
+	return func(ast *starFeatureAST) error {
+		metadataProto := f.FeatureOld.GetMetadata()
+		if metadataProto == nil {
+			return nil
+		}
+		metadataStarDict, err := w.genJSONStruct(metadataProto, nil)
+		if err != nil {
+			return err
+		}
+		ast.set(MetadataAttrName, metadataStarDict)
 		return nil
 	}
 }

@@ -39,6 +39,7 @@ const (
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
+	MetadataAttrName     string          = "metadata"
 	// TODO: Fully migrate to overrides over rules
 	RulesAttrName     string = "rules"
 	OverridesAttrName string = "overrides"
@@ -54,6 +55,7 @@ var (
 		OverridesAttrName:    {},
 		validatorAttrName:    {},
 		unitTestsAttrName:    {},
+		MetadataAttrName:     {},
 	}
 )
 
@@ -153,6 +155,12 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 		return nil, errors.Wrap(err, "description")
 	}
 	f.Namespace = fb.namespace
+	if fb.nv >= feature.NamespaceVersionV1Beta7 {
+		f.Metadata, err = fb.getMetadata(featureVal)
+		if err != nil {
+			return nil, errors.Wrap(err, "metadata")
+		}
+	}
 
 	overrideVals, err := fb.addOverrides(f, featureVal)
 	if err != nil {
@@ -293,6 +301,23 @@ func (fb *featureBuilder) getDescription(featureVal *starlarkstruct.Struct) (str
 		return "", fmt.Errorf("description must be a string (got a %s)", descriptionVal.Type())
 	}
 	return dsc.GoString(), nil
+}
+
+func (fb *featureBuilder) getMetadata(featureVal *starlarkstruct.Struct) (map[string]any, error) {
+	metadataVal, err := featureVal.Attr(MetadataAttrName)
+	if err != nil {
+		//lint:ignore nilerr `Struct.Attr` returns error if attribute doesn't exist
+		return nil, nil
+	}
+	metadataDict, ok := metadataVal.(*starlark.Dict)
+	if !ok {
+		return nil, fmt.Errorf("metadata must be a dict (got a %s)", metadataVal.Type())
+	}
+	metadataMap, err := translateContext(metadataDict)
+	if err != nil {
+		return nil, errors.Wrap(err, "translate metadata attribute")
+	}
+	return metadataMap, nil
 }
 
 func (fb *featureBuilder) addOverrides(f *feature.Feature, featureVal *starlarkstruct.Struct) ([]starlark.Value, error) {

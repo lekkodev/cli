@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package lekko.feature.v1beta1;
 
+import "google/protobuf/struct.proto";
 import "lekko/feature/v1beta1/feature.proto";
 
 // Represents a statically parsed feature.
@@ -40,13 +41,14 @@ message StaticFeature {
   lekko.feature.v1beta1.Feature feature_old = 5;
 }
 
-// Represents everything stored in the feature struct in starlark.
-// i.e. `feature(...)`
+// Represents everything stored in the config struct in starlark.
+// i.e. `Config(...)`
 message FeatureStruct {
   StarMeta meta = 1;
   string description = 2;
   StarExpr default = 3;
   Rules rules = 4;
+  google.protobuf.Struct metadata = 7;
 }
 
 message Rules {

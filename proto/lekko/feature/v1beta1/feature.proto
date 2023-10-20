@@ -17,6 +17,7 @@ syntax = "proto3";
 package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/struct.proto";
 import "lekko/rules/v1beta2/rules.proto";
 import "lekko/rules/v1beta3/rules.proto";
 
@@ -30,6 +31,7 @@ message Feature {
   string description = 2;
   Tree tree = 3;
   FeatureType type = 4;
+  google.protobuf.Struct metadata = 7;
 }
 
 // Enumerates the canonical types that lekko supports
