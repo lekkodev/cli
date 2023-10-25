@@ -315,6 +315,54 @@ func TestWalkerMutateRemoveOnlyOverride(t *testing.T) {
 	assert.NotContains(t, string(bytes), "age == 10")
 }
 
+func TestWalkerNegativeNumber(t *testing.T) {
+	starBytes := []byte(`
+		export(
+			Config(
+				description = "this is a simple config",
+				default = -1,
+				rules = [
+					("age == 10", -2),
+				],
+			),
+		)
+	`)
+	b := testWalker(t, starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	f.FeatureOld.Tree.Constraints = nil
+
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotContains(t, string(bytes), "age == 10")
+}
+
+func TestWalkerNegativeFloat(t *testing.T) {
+	starBytes := []byte(`
+		export(
+			Config(
+				description = "this is a simple config",
+				default = -1e5,
+				rules = [
+					("age == 10", -2.0),
+				],
+			),
+		)
+	`)
+	b := testWalker(t, starBytes)
+	f, err := b.Build()
+	require.NoError(t, err)
+	require.NotNil(t, f)
+
+	f.FeatureOld.Tree.Constraints = nil
+
+	bytes, err := b.Mutate(f)
+	require.NoError(t, err)
+	assert.NotContains(t, string(bytes), "age == 10")
+}
+
 func TestWalkerMutateDescription(t *testing.T) {
 	for _, fType := range parsableFeatureTypes {
 		t.Run(string(fType), func(t *testing.T) {

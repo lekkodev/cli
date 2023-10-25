@@ -147,7 +147,7 @@ func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature)
 			return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unknown identifier %s", t.Name)
 		}
 	case *build.LiteralExpr:
-		if strings.Contains(t.Token, ".") {
+		if strings.Contains(t.Token, ".") || strings.Contains(t.Token, "e") || strings.Contains(t.Token, "E") {
 			if f, err := strconv.ParseFloat(t.Token, 64); err == nil {
 				return wrapperspb.Double(f), featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT, nil
 			}
@@ -170,8 +170,26 @@ func (w *walker) extractValue(vPtr *build.Expr, f *featurev1beta1.StaticFeature)
 	case *build.DotExpr:
 		// could be a proto enum
 		return w.extractProtoValue(t, f)
+	case *build.UnaryExpr:
+		if t.Op == "-" {
+			wrapper, featureType, err := w.extractValue(&t.X, f)
+			if err != nil {
+				return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, err
+			}
+			if featureType == featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT {
+				wrapperD, _ := wrapper.(*wrapperspb.DoubleValue)
+				wrapperD.Value = -wrapperD.Value
+				return wrapperD, featureType, nil
+			} else if featureType == featurev1beta1.FeatureType_FEATURE_TYPE_INT {
+				wrapperI, _ := wrapper.(*wrapperspb.Int64Value)
+				wrapperI.Value = -wrapperI.Value
+				return wrapperI, featureType, nil
+			} else {
+				return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "unsupported negative on type %T", wrapper)
+			}
+		}
 	}
-	return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "type %T", v)
+	return nil, featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED, errors.Wrapf(ErrUnsupportedStaticParsing, "%v type %T", v, v)
 }
 
 func (w *walker) extractProtoValue(v build.Expr, f *featurev1beta1.StaticFeature) (proto.Message, featurev1beta1.FeatureType, error) {
