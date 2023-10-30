@@ -528,6 +528,7 @@ func (w *walker) mutateMetadataFn(f *featurev1beta1.StaticFeature) metadataFn {
 	return func(ast *starFeatureAST) error {
 		metadataProto := f.FeatureOld.GetMetadata()
 		if metadataProto == nil {
+			ast.unset(MetadataAttrName)
 			return nil
 		}
 		metadataStarDict, err := w.genJSONStruct(metadataProto, nil)
