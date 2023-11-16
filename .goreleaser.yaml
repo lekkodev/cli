@@ -74,7 +74,7 @@ blobs:
     # Bucket name.
     #
     # Templates: allowed
-    bucket: "cli-releases"
+    bucket: "lekko-cli-releases"
 
     # IDs of the artifacts you want to upload.
     # ids:
