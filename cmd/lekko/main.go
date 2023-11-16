@@ -594,14 +594,9 @@ func upgradeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf(
 				`Our CLI is currently managed by Homebrew.
-In order to upgrade, first set your API key:
-		
-	export LEKKO_API_KEY=lekko_********
-
-Next, run the following commands:
+In order to upgrade, run the following commands:
 
 	brew update
-	export HOMEBREW_GITHUB_API_TOKEN=$($(brew --repo)/Library/Taps/lekkodev/homebrew-lekko/gen_token.sh)
 	brew upgrade lekko
 
 For more information, check out our docs:
