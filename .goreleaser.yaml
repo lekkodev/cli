@@ -143,7 +143,7 @@ brews:
     # done with scoop.
 
     # GitHub/GitLab repository to push the formula to
-    tap:
+    repository:
       # Repository owner template. (templateable)
       owner: lekkodev
 
@@ -163,7 +163,7 @@ brews:
     # gitlab or gitea)
     #
     # Default depends on the client.
-    url_template: "https://lekko-cli-releases.s3.amazonaws.com/{{ .Version }}/{{ .ArtifactName }}"
+    url_template: "https://lekko-cli-releases.s3.amazonaws.com/{{ .Tag }}/{{ .ArtifactName }}"
 
     # Allows you to set a custom download strategy. Note that you'll need
     # to implement the strategy and add it to your tap repository.
@@ -183,7 +183,7 @@ brews:
     #   email: bot@goreleaser.com
 
     # The project name and current git tag are used in the format string.
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Version }}"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
 
     # Folder inside the repository to put the formula.
     # Default is the root folder.
