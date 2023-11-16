@@ -15,7 +15,7 @@ builds:
       # - windows
       - darwin
     ldflags:
-      - -X "main.version={{.Env.CLI_TAG}}"
+      - -X "main.version={{.Version}}"
 
 archives:
   - format: tar.gz
@@ -85,7 +85,7 @@ blobs:
     #
     # Default: '{{ .ProjectName }}/{{ .Tag }}'
     # Templates: allowed
-    folder: "{{ .Tag }}"
+    folder: "{{.Version}}"
 
     # Whether to disable this particular upload configuration.
     #

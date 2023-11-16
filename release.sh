@@ -2,7 +2,7 @@
 
 # First, ensure that the github token is set
 if [[ -z $GITHUB_TOKEN ]]; then
-  echo Github token not found. 
+  echo Github token not found.
   echo "Please set your github token via \"export GITHUB_TOKEN=<your-gh-token>\" and try again."
   exit 1
 fi
@@ -13,7 +13,7 @@ echo What would you like the new tag to be?
 read new_tag
 tag_message=`git --no-pager log -1 --pretty=%s`
 
-echo Pushing $new_tag: $tag_message. 
+echo Pushing $new_tag: $tag_message.
 read -p "Continue? [y/N] " yn
 case $yn in
     [Yy]* ) echo Pushing to remote...;;
@@ -31,5 +31,4 @@ case $yn in
 esac
 
 # Build & release, setting the tag as the lekko cli version via ldflags.
-export CLI_TAG=$new_tag
 goreleaser release --clean
