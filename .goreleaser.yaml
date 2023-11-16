@@ -85,7 +85,7 @@ blobs:
     #
     # Default: '{{ .ProjectName }}/{{ .Tag }}'
     # Templates: allowed
-    folder: "{{.Version}}"
+    folder: "{{.Tag}}"
 
     # Whether to disable this particular upload configuration.
     #
