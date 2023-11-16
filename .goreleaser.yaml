@@ -153,7 +153,7 @@ brews:
       # Optionally a branch can be provided. (templateable)
       #
       # Defaults to the default repository branch.
-      branch: main
+      branch: releasetest
 
       # Optionally a token can be provided, if it differs from the token
       # provided to GoReleaser
@@ -163,18 +163,18 @@ brews:
     # gitlab or gitea)
     #
     # Default depends on the client.
-    url_template: "https://github.com/lekkodev/cli/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+    url_template: "https://lekko-cli-releases.s3.amazonaws.com/{{ .Version }}/{{ .ArtifactName }}"
 
     # Allows you to set a custom download strategy. Note that you'll need
     # to implement the strategy and add it to your tap repository.
     # Example: https://docs.brew.sh/Formula-Cookbook#specifying-the-download-strategy-explicitly
     # Default is empty.
-    download_strategy: GitHubPrivateRepositoryReleaseDownloadStrategy
+    download_strategy: CurlDownloadStrategy
 
     # Allows you to add a custom require_relative at the top of the formula
     # template.
     # Default is empty
-    custom_require: ../lib/custom_download_strategy
+    # custom_require: ../lib/custom_download_strategy
 
     # Git author used to commit to the repository.
     # Defaults are shown.
@@ -183,7 +183,7 @@ brews:
     #   email: bot@goreleaser.com
 
     # The project name and current git tag are used in the format string.
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Version }}"
 
     # Folder inside the repository to put the formula.
     # Default is the root folder.
