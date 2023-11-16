@@ -2,16 +2,15 @@
 
 CLI Interface to the Lekko Dynamic Configuration Platform.
 
-## Documentation 
+## Documentation
 
 Find our documentation at https://app.lekko.com/docs.
 
 ## Download
 
-To download `lekko` cli, you can use homebrew. Since the code is still in a private repository, you will need to use a Github personal access token that has been given access to `lekkodev/homebrew-lekko` and `lekkodev/cli` repos.
+To download `lekko` cli, you can use homebrew.
 
 ```bash
-export HOMEBREW_GITHUB_API_TOKEN=<MY_GITHUB_TOKEN>
 brew tap lekkodev/lekko
 brew install lekko
 ```
@@ -41,6 +40,8 @@ make release
 This command will first prompt you for a new tag that it will push to GitHub. Then, it will cross-compile the binary for multiple platforms and architectures, using the latest tag on GitHub.
 
 After completion, navigate to https://github.com/lekkodev/cli/releases/ to see the latest releases under the tag you just created.
+
+Because the CLI repository is still private, the releaser is configured to publish the compiled assets to a public S3 bucket (`lekko-cli-releases`). The releaser is also responsible for generating/updating the homebrew formula for the lekkodev/lekko brew [tap](https://github.com/lekkodev/homebrew-lekko), which will download and install the CLI from that bucket.
 
 Done! The cli has just been released. Follow instructions above to [Download](#download) the latest cli.
 
