@@ -29,6 +29,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/starlarktest"
+	"go.starlark.net/syntax"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -75,7 +76,10 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	// so any builtin that needs to pass something back should use lekkoGlobals
 	// see `makeExport`
 	lekkoGlobals := starlark.StringDict{}
-	starlarkGlobals, err := starlark.ExecFile(thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
+	fileOptions := &syntax.FileOptions{
+		Recursion: true,
+	}
+	starlarkGlobals, err := starlark.ExecFileOptions(fileOptions, thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
 		"assert":  assertModule,
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 		"export":  starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
