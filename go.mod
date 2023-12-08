@@ -99,7 +99,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stripe/skycfg v0.1.1-0.20220125220303-4571141c5da1
-	go.starlark.net v0.0.0-20220815112429-e1b9ebd162dd
+	go.starlark.net v0.0.0-20231121155337-90ade8b19d09
 	golang.org/x/sys v0.8.0 // indirect
 	k8s.io/client-go v0.25.0
 )
