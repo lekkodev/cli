@@ -79,7 +79,7 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	for _, elem := range listElems {
 		res.List = append(res.List, elem.starElem)
 	}
-	res.ForceMultiLine = numFields > 1 && meta.GetMultiline()
+	res.ForceMultiLine = numFields > 1
 	return res, retErr
 }
 
