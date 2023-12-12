@@ -487,7 +487,7 @@ message FeatureHistoryItem {
   string author_url = 6;
   // The configs touched by this change.
   // NOTE: Currently only includes configs that were added or updated.
-  repeated NamespaceContents contents = 7;
+  NamespaceContents contents = 7;
 }
 
 message AddNamespaceRequest {
