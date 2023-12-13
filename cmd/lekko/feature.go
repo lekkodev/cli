@@ -155,7 +155,6 @@ func featureAdd() *cobra.Command {
 				return errors.Wrap(err, "add config")
 			} else {
 				fmt.Printf("Successfully added config %s/%s at path %s\n", ns, featureName, path)
-				fmt.Printf("Make any changes you wish, and then run `lekko compile`.")
 			}
 			_, err = r.Compile(ctx, &repo.CompileRequest{})
 			return err
