@@ -396,7 +396,10 @@ message NamespaceContents {
     string name = 1;
     // version of the namespace in lekko, e.g. 'v1beta3'
     string version = 2;
-    repeated FeatureListItem features = 3 [deprecated = true];
+    // Deprecated in favor of using Feature type below.
+    // Not explicitly marked as deprecated for compatibility
+    // for now.
+    repeated FeatureListItem features = 3;
     repeated Feature configs = 4;
   }
 
