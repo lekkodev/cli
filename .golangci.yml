@@ -7,11 +7,6 @@ linters-settings:
     forbid:
       - "^print$"
       - "^println$"
-issues:
-  exclude-rules:
-    - path: pkg/repo/repo.go
-      linters:
-        - nilerr
 linters:
   enable:
     - asciicheck
