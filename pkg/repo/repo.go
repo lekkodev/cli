@@ -17,6 +17,7 @@ package repo
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -801,11 +802,10 @@ func (r *repository) GetHistory(ctx context.Context, namespace, configName strin
 	var history []*HistoryItem
 	for i := int32(0); i < offset+maxLen; {
 		c, err := commitIter.Next()
-		if err != nil {
+		if errors.Is(err, io.EOF) {
 			break
-		}
-		if i < offset {
-			continue
+		} else if err != nil {
+			return nil, errors.Wrap(err, "iterate through commits")
 		}
 		historyItem := &HistoryItem{
 			Description:    c.Message,
@@ -816,8 +816,10 @@ func (r *repository) GetHistory(ctx context.Context, namespace, configName strin
 		}
 		// Identify changed files -> configs
 		parent, err := c.Parent(0)
-		if err != nil { // No parent (initial commit in repo)
+		if errors.Is(err, object.ErrParentNotFound) { // No parent (initial commit in repo)
 			break
+		} else if err != nil {
+			return nil, errors.Wrap(err, "get parent commit")
 		}
 		patch, err := c.Patch(parent)
 		if err != nil {
@@ -839,8 +841,10 @@ func (r *repository) GetHistory(ctx context.Context, namespace, configName strin
 				configPath = to.Path()
 			}
 			if configPath != "" {
+				// namespace/config.star -> namespace/, config.star
 				namespaceSlash, configFileName := filepath.Split(configPath)
 				namespace := namespaceSlash[:len(namespaceSlash)-1]
+				// Remove .star suffix
 				historyItem.ConfigContents[namespace] = append(historyItem.ConfigContents[namespace], configFileName[:len(configFileName)-5])
 				if pathFilterFn != nil {
 					include = include || pathFilterFn(configPath)
@@ -848,11 +852,14 @@ func (r *repository) GetHistory(ctx context.Context, namespace, configName strin
 			}
 		}
 		if include {
-			coAuthorName, coAuthorEmail := GetCoauthorInformation(c.Message)
-			if len(coAuthorEmail) > 0 {
-				historyItem.CoAuthors = append(historyItem.CoAuthors, Author{Name: coAuthorName, Email: coAuthorEmail})
+			// Skip if not in requested range (TODO: a sha token-based pagination is probably better)
+			if i >= offset {
+				coAuthorName, coAuthorEmail := GetCoauthorInformation(c.Message)
+				if len(coAuthorEmail) > 0 {
+					historyItem.CoAuthors = append(historyItem.CoAuthors, Author{Name: coAuthorName, Email: coAuthorEmail})
+				}
+				history = append(history, historyItem)
 			}
-			history = append(history, historyItem)
 			i++
 		}
 	}
