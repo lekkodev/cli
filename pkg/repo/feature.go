@@ -334,6 +334,33 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	if len(results) < 50 {
 		concurrency = len(results)
 	}
+
+	// This object will hold a map from namespace to named segments
+	// for that ns. For example, if a segment config has two segments: "foo == A, segmentA" and "bar == B, segmentB" in namespace "default"
+	// this map would contain:
+	//
+	// {"default":{"segmentA": "foo == A", "segmentB": "foo == b"}}
+	//
+	nsNameToSegments := make(map[string]map[string]string)
+	for _, fcr := range results {
+		if fcr.FeatureName == "segments" {
+			cf, err := r.CompileFeature(ctx, registry, fcr.NamespaceName, fcr.FeatureName, fcr.NamespaceVersion)
+			if err != nil {
+				fcr.CompilationError = err
+			}
+			rules := make(map[string]string)
+			for _, override := range cf.Feature.Overrides {
+				val, ok := override.Value.(string)
+				if !ok {
+					panic(fmt.Sprintf("should be a string: %+v", override.Value))
+				}
+
+				rules[val] = override.Rule
+			}
+			nsNameToSegments[fcr.NamespaceName] = rules
+		}
+	}
+
 	var wg sync.WaitGroup
 	featureChan := make(chan *FeatureCompilationResult)
 	// start compile workers
@@ -351,7 +378,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 					}
 					ff := feature.NewFeatureFile(fcr.NamespaceName, fcr.FeatureName)
 					// format starlark file
-					_, fmtDiffExists, err := r.FormatFeature(ctx, &ff, registry, req.DryRun, req.Verbose)
+					_, fmtDiffExists, err := r.FormatFeature(ctx, &ff, registry, req.DryRun, req.Verbose, nsNameToSegments[fcr.NamespaceName])
 					if err != nil {
 						fcr.CompilationError = errors.Wrap(err, "format")
 						return
@@ -365,7 +392,6 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			}
 		}()
 	}
-
 	for _, fcr := range results {
 		featureChan <- fcr
 	}
@@ -546,7 +572,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 
 		for _, ff := range ffs {
 			ff := ff
-			formatted, _, err := r.FormatFeature(ctx, &ff, nil, false, verbose)
+			formatted, _, err := r.FormatFeature(ctx, &ff, nil, false, verbose, nil)
 			if err != nil {
 				return errors.Wrapf(err, "format config '%s/%s", ff.NamespaceName, ff.Name)
 			}
@@ -558,7 +584,7 @@ func (r *repository) Format(ctx context.Context, verbose bool) error {
 	return nil
 }
 
-func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, registry *protoregistry.Types, dryRun, verbose bool) (persisted, diffExists bool, err error) {
+func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile, registry *protoregistry.Types, dryRun, verbose bool, segments map[string]string) (persisted, diffExists bool, err error) {
 	registry, err = r.registry(ctx, registry)
 	if err != nil {
 		return false, false, err
@@ -574,6 +600,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 		dryRun,
 		registry,
 		feature.NewNamespaceVersion(nsMD.Version),
+		segments,
 	)
 	// try static formatting
 	persisted, diffExists, err = formatter.StaticFormat(ctx)
