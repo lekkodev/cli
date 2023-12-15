@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -42,12 +43,28 @@ import (
 const (
 	RemoteName        = "origin"
 	backoffMaxElapsed = 7 * time.Second
+	// Username for LekkoApp bot.
+	LekkoAppUser = "lekko-app[bot]"
 )
 
 var (
 	ErrMissingCredentials = fmt.Errorf("missing credentials")
 	ErrNotFound           = fmt.Errorf("not found")
 )
+
+type Author struct {
+	Name  string
+	Email string
+}
+
+type HistoryItem struct {
+	Description    string
+	Author         Author
+	CoAuthors      []Author
+	ConfigContents map[string][]string // Map of namespaces to changed configs (added or updated)
+	CommitSHA      string
+	Timestamp      time.Time
+}
 
 // ConfigurationRepository provides read and write access to Lekko configuration
 // stored in a git repository.
@@ -63,6 +80,10 @@ type ConfigurationRepository interface {
 	// Underlying filesystem interfaces
 	fs.Provider
 	fs.ConfigWriter
+
+	// Returns the history of changes made on the repository. Items can also be filtered to config.
+	// Offset (0-based) and maxLen are required to limit the number of history items returned.
+	GetHistory(ctx context.Context, namespace, configName string, offset, maxLen int32) ([]*HistoryItem, error)
 }
 
 // Provides functionality for interacting with git.
@@ -476,6 +497,34 @@ func GetCommitSignature(ctx context.Context, ap AuthProvider, lekkoUser string) 
 	}, nil
 }
 
+// Returns the coauthor name and email based on the long git commit message.
+// e.g. `Co-authored-by: <coauthor_name> <coauthor_email>`.
+// TODO: Consider if we want to properly handle multiple coauthors.
+func GetCoauthorInformation(commitMessage string) (string, string) {
+	var coauthorName, coauthorEmail string
+	for _, line := range strings.Split(commitMessage, "\n") {
+		if strings.HasPrefix(line, "Co-authored-by:") {
+			rest := strings.TrimPrefix(line, "Co-authored-by:")
+			if strings.HasSuffix(rest, ">") {
+				parts := strings.Split(rest, " ")
+				coauthorName = strings.TrimSpace(strings.Join(parts[:len(parts)-1], " "))
+				email := parts[len(parts)-1]
+				coauthorEmail = strings.TrimPrefix(strings.TrimSuffix(email, ">"), "<")
+			} else { // no email present, i.e. 'Co-authored-by: coauthor_name'
+				coauthorName = strings.TrimSpace(rest)
+			}
+			if coauthorName == LekkoAppUser {
+				// This is not the coauthor we want
+				coauthorName = ""
+				coauthorEmail = ""
+				continue
+			}
+			break
+		}
+	}
+	return coauthorName, coauthorEmail
+}
+
 // Cleans up all resources and references associated with the given branch on
 // local and remote, if they exist. If branchName is nil, uses the current
 // (non-master) branch. Will switch the current branch back to the default, and
@@ -720,6 +769,94 @@ func (r *repository) NewRemoteBranch(branchName string) error {
 	r.Logf("Local branch %s has been set up to track changes from %s\n",
 		branchName, plumbing.NewRemoteReferenceName(RemoteName, branchName))
 	return nil
+}
+
+// NOTE: Currently untested for very large numbers of files changed.
+// TODO: Extract changed configs detection logic as a util if usable in other contexts
+func (r *repository) GetHistory(ctx context.Context, namespace, configName string, offset, maxLen int32) ([]*HistoryItem, error) {
+	if err := r.wt.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName(r.DefaultBranchName()),
+	}); err != nil {
+		return nil, errors.Wrap(err, "checkout default branch")
+	}
+
+	commitIter, err := r.repo.Log(&git.LogOptions{
+		Order: git.LogOrderCommitterTime,
+		// NOTE: It's possible to add a path filter here but since we're extracting
+		// change info below, we manually filter there - saves on duplicated logic
+		// and seems to be more efficient
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "get commit log of default branch")
+	}
+	defer commitIter.Close()
+
+	var pathFilterFn func(string) bool
+	if len(namespace) > 0 && len(configName) > 0 {
+		pathFilterFn = func(path string) bool {
+			return strings.HasSuffix(path, fmt.Sprintf("%s/%s.star", namespace, configName))
+		}
+	}
+
+	var history []*HistoryItem
+	for i := int32(0); i < offset+maxLen; {
+		c, err := commitIter.Next()
+		if err != nil {
+			break
+		}
+		if i < offset {
+			continue
+		}
+		historyItem := &HistoryItem{
+			Description:    c.Message,
+			Author:         Author{Name: c.Author.Name, Email: c.Author.Email},
+			ConfigContents: make(map[string][]string),
+			CommitSHA:      c.Hash.String(),
+			Timestamp:      c.Author.When,
+		}
+		// Identify changed files -> configs
+		parent, err := c.Parent(0)
+		if err != nil { // No parent (initial commit in repo)
+			break
+		}
+		patch, err := c.Patch(parent)
+		if err != nil {
+			return nil, errors.Wrapf(err, "check patch between %v and parent %v", c.Hash.String(), parent.Hash.String())
+		}
+		fps := patch.FilePatches()
+		// Iterate over file patches, identifying touched files
+		// Also check if commit matches config filter - only include in returned history if so
+		// NOTE: Based on assumption that all config files are located in {namespace}/{config}.star
+		include := pathFilterFn == nil
+		for _, fp := range fps {
+			from, to := fp.Files()
+			// NOTE: renames/moves are not handled here
+			var configPath string
+			if from != nil && strings.HasSuffix(from.Path(), ".star") {
+				configPath = from.Path()
+			}
+			if to != nil && configPath == "" && strings.HasSuffix(to.Path(), ".star") {
+				configPath = to.Path()
+			}
+			if configPath != "" {
+				namespaceSlash, configFileName := filepath.Split(configPath)
+				namespace := namespaceSlash[:len(namespaceSlash)-1]
+				historyItem.ConfigContents[namespace] = append(historyItem.ConfigContents[namespace], configFileName[:len(configFileName)-5])
+				if pathFilterFn != nil {
+					include = include || pathFilterFn(configPath)
+				}
+			}
+		}
+		if include {
+			coAuthorName, coAuthorEmail := GetCoauthorInformation(c.Message)
+			if len(coAuthorEmail) > 0 {
+				historyItem.CoAuthors = append(historyItem.CoAuthors, Author{Name: coAuthorName, Email: coAuthorEmail})
+			}
+			history = append(history, historyItem)
+			i++
+		}
+	}
+	return history, nil
 }
 
 func (r *repository) mirror(ctx context.Context, ap AuthProvider, url string) error {

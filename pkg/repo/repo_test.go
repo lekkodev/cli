@@ -16,6 +16,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,4 +41,52 @@ func TestGetCommitSignatureNoGitHub(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, lekkoUser, sign.Email)
 	assert.Equal(t, "test", sign.Name)
+}
+
+func TestGetCoauthorInformation(t *testing.T) {
+	for i, tc := range []struct {
+		commitMsg     string
+		expectedName  string
+		expectedEmail string
+	}{
+		{
+			commitMsg: "commit (#464)",
+		},
+		{
+			commitMsg:     "test commit (#51)\n\nCo-authored-by: lekko-app[bot] <108442683+lekko-app[bot]@users.noreply.github.com>\nCo-authored-by: Average Joe <12345+joe@users.noreply.github.com>",
+			expectedName:  "Average Joe",
+			expectedEmail: "12345+joe@users.noreply.github.com",
+		},
+		{
+			commitMsg: "test commit (#51)\n\nCo-authored-by: lekko-app[bot] <108442683+lekko-app[bot]@users.noreply.github.com>",
+		},
+		{
+			commitMsg:     "test commit (#51)\n\nCo-authored-by: Average Joe <12345+joe@users.noreply.github.com>",
+			expectedName:  "Average Joe",
+			expectedEmail: "12345+joe@users.noreply.github.com",
+		},
+		{
+			commitMsg: "test commit (#51)\n\nother unrelated things",
+		},
+		{
+			commitMsg:     "test commit (#51)\n\nCo-authored-by: lekko-app[bot] <108442683+lekko-app[bot]@users.noreply.github.com>\nCo-authored-by: Average Joe <12345+joe@users.noreply.github.com>\nCo-authored-by: Steve <12345+steve@users.noreply.github.com>",
+			expectedName:  "Average Joe",
+			expectedEmail: "12345+joe@users.noreply.github.com",
+		},
+		{
+			commitMsg:     "test commit (#51)\n\nCo-authored-by: Steve <12345+steve@users.noreply.github.com>",
+			expectedName:  "Steve",
+			expectedEmail: "12345+steve@users.noreply.github.com",
+		},
+		{
+			commitMsg:    "test commit (#51)\n\nCo-authored-by: Steve",
+			expectedName: "Steve",
+		},
+	} {
+		t.Run(fmt.Sprintf("%d|%s", i, tc.commitMsg), func(t *testing.T) {
+			name, email := GetCoauthorInformation(tc.commitMsg)
+			assert.Equal(t, tc.expectedName, name)
+			assert.Equal(t, tc.expectedEmail, email)
+		})
+	}
 }
