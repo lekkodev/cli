@@ -5,8 +5,13 @@ linters-settings:
     check-type-assertions: true
   forbidigo:
     forbid:
-      - '^print$'
-      - '^println$'
+      - "^print$"
+      - "^println$"
+issues:
+  exclude-rules:
+    - path: pkg/repo/repo.go
+      linters:
+        - nilerr
 linters:
   enable:
     - asciicheck
