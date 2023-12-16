@@ -5,8 +5,8 @@ linters-settings:
     check-type-assertions: true
   forbidigo:
     forbid:
-      - '^print$'
-      - '^println$'
+      - "^print$"
+      - "^println$"
 linters:
   enable:
     - asciicheck
