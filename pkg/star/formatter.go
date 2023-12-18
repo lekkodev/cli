@@ -118,13 +118,15 @@ func (f *formatter) staticFormat(data []byte, segments map[string]string) ([]byt
 
 	metadataMap := feat.Feature.Metadata.AsMap()
 	if res, ok := metadataMap["segments"]; ok && res != nil {
-		for index, segmentName := range res.(map[string]interface{}) {
+		m, _ := res.(map[string]interface{})
+		for index, segmentName := range m {
 			key, err := strconv.Atoi(index)
 			if err != nil {
 				panic(fmt.Sprintf("invalid key %s", index))
 			}
-			feat.Feature.Rules.Rules[key].Condition = segments[segmentName.(string)]
-			feat.FeatureOld.Tree.Constraints[key].Rule = segments[segmentName.(string)]
+			name, _ := segmentName.(string)
+			feat.Feature.Rules.Rules[key].Condition = segments[name]
+			feat.FeatureOld.Tree.Constraints[key].Rule = segments[name]
 			feat.FeatureOld.Tree.Constraints[key].RuleAstNew = nil
 		}
 	}
