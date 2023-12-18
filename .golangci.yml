@@ -5,8 +5,8 @@ linters-settings:
     check-type-assertions: true
   forbidigo:
     forbid:
-      - '^print$'
-      - '^println$'
+      - "^print$"
+      - "^println$"
 issues:
   exclude-rules:
     - path: cmd/lekko/main.go

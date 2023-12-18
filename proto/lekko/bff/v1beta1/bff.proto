@@ -396,7 +396,11 @@ message NamespaceContents {
     string name = 1;
     // version of the namespace in lekko, e.g. 'v1beta3'
     string version = 2;
+    // Deprecated in favor of using Feature type below.
+    // Not explicitly marked as deprecated for compatibility
+    // for now.
     repeated FeatureListItem features = 3;
+    repeated Feature configs = 4;
   }
 
   repeated NamespaceListItem namespaces = 1;
@@ -404,12 +408,15 @@ message NamespaceContents {
 
 message GetRepositoryContentsRequest {
   BranchKey key = 1;
-  // The feature contents that should be returned.
-  // If empty, no feature is returned. If either
+  // The config contents that should be returned.
+  // If empty, all configs are returned. If either
   // one of the following two fields are provided,
   // the other one must be provided as well.
   string namespace_name = 2;
   string feature_name = 3;
+  // Mutually exclusive with namespace_name/feature_name.
+  // If shallow, only names of contents will be populated.
+  bool shallow = 4;
 }
 
 enum ContextKeyType {
@@ -449,6 +456,7 @@ message GetFeatureResponse {
 }
 
 message GetFeatureHistoryRequest {
+  // NOTE: branch is not used - response will be the default branch's history
   BranchKey branch_key = 1;
   string namespace_name = 2;
   string feature_name = 3;
@@ -485,6 +493,9 @@ message FeatureHistoryItem {
   string author_name = 5;
   // URL for the commit author's GitHub profile. Might not be available.
   string author_url = 6;
+  // The configs touched by this change.
+  // NOTE: Namespace versions are not included here for now.
+  NamespaceContents contents = 7;
 }
 
 message AddNamespaceRequest {
