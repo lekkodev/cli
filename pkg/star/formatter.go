@@ -17,6 +17,8 @@ package star
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strconv"
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
@@ -39,11 +41,12 @@ type formatter struct {
 	dryRun                bool
 	registry              *protoregistry.Types
 
-	cw fs.ConfigWriter
-	nv feature.NamespaceVersion
+	cw       fs.ConfigWriter
+	nv       feature.NamespaceVersion
+	segments map[string]string
 }
 
-func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool, registry *protoregistry.Types, nv feature.NamespaceVersion) Formatter {
+func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun bool, registry *protoregistry.Types, nv feature.NamespaceVersion, segments map[string]string) Formatter {
 	return &formatter{
 		filePath:    filePath,
 		featureName: featureName,
@@ -51,25 +54,26 @@ func NewStarFormatter(filePath, featureName string, cw fs.ConfigWriter, dryRun b
 		dryRun:      dryRun,
 		registry:    registry,
 		nv:          nv,
+		segments:    segments,
 	}
 }
 
 func (f *formatter) Format(ctx context.Context) (persisted, diffExists bool, err error) {
-	return f.format(ctx, false)
+	return f.format(ctx, false, nil)
 }
 
 func (f *formatter) StaticFormat(ctx context.Context) (persisted, diffExists bool, err error) {
-	return f.format(ctx, true)
+	return f.format(ctx, true, f.segments)
 }
 
-func (f *formatter) format(ctx context.Context, static bool) (persisted, diffExists bool, err error) {
+func (f *formatter) format(ctx context.Context, static bool, segments map[string]string) (persisted, diffExists bool, err error) {
 	data, err := f.cw.GetFileContents(ctx, f.filePath)
 	if err != nil {
 		return false, false, errors.Wrapf(err, "failed to read file %s", f.filePath)
 	}
 	var ndata []byte
 	if static {
-		ndata, err = f.staticFormat(data)
+		ndata, err = f.staticFormat(data, segments)
 	} else {
 		ndata, err = f.bazelFormat(data)
 	}
@@ -97,7 +101,7 @@ func (f *formatter) bazelFormat(data []byte) ([]byte, error) {
 	return build.Format(bfile), nil
 }
 
-func (f *formatter) staticFormat(data []byte) ([]byte, error) {
+func (f *formatter) staticFormat(data []byte, segments map[string]string) ([]byte, error) {
 	// This statically parses the feature
 	// and writes it back to the file without any functional changes.
 	// Doing this ensures that the file is formatted exactly the way that
@@ -106,5 +110,28 @@ func (f *formatter) staticFormat(data []byte) ([]byte, error) {
 	// If static formatting passes, we can skip buildifier formatting.
 	// If static formatting fails, we can show a warning to the user
 	// that the UI will not be able to parse the feature.
-	return static.NewWalker(f.filePath, data, f.registry, f.nv).Format()
+	walker := static.NewWalker(f.filePath, data, f.registry, f.nv)
+	feat, err := walker.Build()
+	if err != nil {
+		return nil, err
+	}
+
+	// This is an intentional hack, that is meant to eventually be replaced
+	// by imports and reusable rules. The actual formatting code too is a mess,
+	// the fact that I have to set RuleAstNew to nil is not great. Due for a cleanup.
+	metadataMap := feat.Feature.Metadata.AsMap()
+	if res, ok := metadataMap["segments"]; ok && res != nil {
+		m, _ := res.(map[string]interface{})
+		for index, segmentName := range m {
+			key, err := strconv.Atoi(index)
+			if err != nil {
+				panic(fmt.Sprintf("invalid key %s", index))
+			}
+			name, _ := segmentName.(string)
+			feat.Feature.Rules.Rules[key].Condition = segments[name]
+			feat.FeatureOld.Tree.Constraints[key].Rule = segments[name]
+			feat.FeatureOld.Tree.Constraints[key].RuleAstNew = nil
+		}
+	}
+	return walker.Mutate(feat)
 }
