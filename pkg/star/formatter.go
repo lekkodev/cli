@@ -116,6 +116,9 @@ func (f *formatter) staticFormat(data []byte, segments map[string]string) ([]byt
 		return nil, err
 	}
 
+	// This is an intentional hack, that is meant to eventually be replaced
+	// by imports and reusable rules. The actual formatting code too is a mess,
+	// the fact that I have to set RuleAstNew to nil is not great. Due for a cleanup.
 	metadataMap := feat.Feature.Metadata.AsMap()
 	if res, ok := metadataMap["segments"]; ok && res != nil {
 		m, _ := res.(map[string]interface{})
