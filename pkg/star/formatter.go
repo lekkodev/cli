@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/bazelbuild/buildtools/build"
 	butils "github.com/bazelbuild/buildtools/buildifier/utils"
@@ -114,14 +115,17 @@ func (f *formatter) staticFormat(data []byte, segments map[string]string) ([]byt
 	if err != nil {
 		return nil, err
 	}
+
 	metadataMap := feat.Feature.Metadata.AsMap()
-	if res, ok := metadataMap["segments"]; ok {
-		m, ok := res.(map[int32]string)
-		if !ok {
-			panic(fmt.Sprintf("unknown type of %v", m))
-		}
-		for index, segmentName := range m {
-			feat.Feature.Rules.Rules[index].Condition = segments[segmentName]
+	if res, ok := metadataMap["segments"]; ok && res != nil {
+		for index, segmentName := range res.(map[string]interface{}) {
+			key, err := strconv.Atoi(index)
+			if err != nil {
+				panic(fmt.Sprintf("invalid key %s", index))
+			}
+			feat.Feature.Rules.Rules[key].Condition = segments[segmentName.(string)]
+			feat.FeatureOld.Tree.Constraints[key].Rule = segments[segmentName.(string)]
+			feat.FeatureOld.Tree.Constraints[key].RuleAstNew = nil
 		}
 	}
 	return walker.Mutate(feat)
