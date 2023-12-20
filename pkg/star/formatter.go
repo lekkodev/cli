@@ -128,9 +128,13 @@ func (f *formatter) staticFormat(data []byte, segments map[string]string) ([]byt
 				panic(fmt.Sprintf("invalid key %s", index))
 			}
 			name, _ := segmentName.(string)
-			feat.Feature.Rules.Rules[key].Condition = segments[name]
-			feat.FeatureOld.Tree.Constraints[key].Rule = segments[name]
-			feat.FeatureOld.Tree.Constraints[key].RuleAstNew = nil
+			// this is to preserve backwards compatibility, and if you only
+			// compile the feature without the whole namespace
+			if newSegment, ok := segments[name]; ok {
+				feat.Feature.Rules.Rules[key].Condition = newSegment
+				feat.FeatureOld.Tree.Constraints[key].Rule = newSegment
+				feat.FeatureOld.Tree.Constraints[key].RuleAstNew = nil
+			}
 		}
 	}
 	return walker.Mutate(feat)
