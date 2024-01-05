@@ -315,10 +315,10 @@ var StaticConfig = map[string]map[string][]byte{
 			}
 			pCmd := exec.Command(
 				"protoc",
-				"--go_opt=Mdefault/config/v1beta1/example.proto=.",
-				"--proto_path=/Users/jonathan/src/teflon/config/proto",
+				"--go_opt=M"+ns+"/config/v1beta1/example.proto=.", // #nosec G204
+				"--proto_path="+wd+"/proto",                       // #nosec G204
 				"--go_out=proto",
-				"default/config/v1beta1/example.proto")
+				ns+"/config/v1beta1/example.proto") // #nosec G204
 			pCmd.Dir = "./internal/lekko/" + ns
 			err = pCmd.Run()
 			if err != nil {
