@@ -281,7 +281,7 @@ func featureEval() *cobra.Command {
 			}
 
 			fmt.Fprintf(os.Stderr, "[%s] ", fType)
-			fmt.Printf("%s", res)
+			fmt.Printf("%v", res)
 			fmt.Println()
 			if verbose {
 				fmt.Fprintf(os.Stderr, "[path] %v\n", path)

@@ -40,6 +40,8 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 	case feature.NamespaceVersionV1Beta5.String():
 		fallthrough
 	case feature.NamespaceVersionV1Beta6.String():
+		fallthrough
+	case feature.NamespaceVersionV1Beta7.String():
 		var f featurev1beta1.Feature
 		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
 		if err != nil {
