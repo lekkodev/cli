@@ -590,6 +590,8 @@ func starType(ft eval.ConfigType) string {
 	switch ft {
 	case eval.ConfigTypeProto:
 		return "protoMessage"
+	case eval.ConfigTypeJSON:
+		return "JSON"
 	case eval.ConfigTypeBool:
 		return fmt.Sprintf("%T", starlark.False)
 	case eval.ConfigTypeString:

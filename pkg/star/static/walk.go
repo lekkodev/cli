@@ -449,6 +449,8 @@ func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *
 			return nil, err
 		}
 		return callExpr, nil
+	case featurev1beta1.FeatureType_FEATURE_TYPE_UNSPECIFIED:
+		fallthrough
 	default:
 		return nil, errors.Wrapf(ErrUnsupportedStaticParsing, "proto val type %v", a.TypeUrl)
 	}

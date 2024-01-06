@@ -68,9 +68,12 @@ func typedVals(t *testing.T, ft eval.ConfigType, indent string) (defaultVal test
             %[1]s"c": [99, "bar"],
         %[1]s}`, indent)
 		return testVal{goVal, "[\"foo\", 1, 2, 4.2]"}, testVal{ruleVal, ruleStarVal}
+	case eval.ConfigTypeProto:
+		fallthrough
+	default:
+		t.Fatalf("unsupported config type %s", ft)
+		return
 	}
-	t.Fatalf("unsupported config type %s", ft)
-	return
 }
 
 func testStar(t *testing.T, ft eval.ConfigType, useExport bool) (testVal, []byte) {

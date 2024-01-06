@@ -697,6 +697,7 @@ func (r *repository) addFeatureFromProto(ctx context.Context, messageName string
 		field := descriptor.Fields().Get(i)
 		fieldDefault := ""
 		fieldDefault += string(field.Name()) + " = "
+		//exhaustive:ignore
 		switch field.Kind() {
 		case protoreflect.MessageKind:
 			if field.IsMap() {

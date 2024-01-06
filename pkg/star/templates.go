@@ -112,6 +112,8 @@ func GetTemplate(fType eval.ConfigType, nv feature.NamespaceVersion) ([]byte, er
 		return []byte(fmt.Sprintf(templateBody, "''")), nil
 	case eval.ConfigTypeJSON:
 		return []byte(fmt.Sprintf(templateBody, "{}")), nil
+	case eval.ConfigTypeProto:
+		fallthrough
 	default:
 		return nil, fmt.Errorf("templating is not supported for config type %s", fType)
 	}
