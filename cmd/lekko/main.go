@@ -15,20 +15,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strconv"
-	"strings"
-	"text/template"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
-	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/bufbuild/connect-go"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -41,9 +34,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
-	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/spf13/cobra"
 )
@@ -95,257 +86,6 @@ func rootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 	cmd.PersistentFlags().StringVar(&lekko.URL, "backend-url", "https://prod.api.lekko.dev", "Lekko backend url")
-	return cmd
-}
-
-var genCmd = &cobra.Command{
-	Use:   "gen",
-	Short: "generate library code from configs",
-}
-
-func genGoForFeature(f *featurev1beta1.Feature, ns string) (string, error) {
-	const defaultTemplateBody = `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
-}
-
-// {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
-}
-`
-
-	const protoTemplateBody = `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
-	result := &{{$.RetType}}{}
-	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	return result, err
-}
-
-// {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) *{{$.RetType}} {
-	result := &{{$.RetType}}{}
-	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	return result
-}
-`
-	const jsonTemplateBody = `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) error {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-}
-
-// {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
-	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-}
-`
-	var funcNameBuilder strings.Builder
-	funcNameBuilder.WriteString("Get")
-	for _, word := range regexp.MustCompile("[_-]+").Split(f.Key, -1) {
-		funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
-	}
-	funcName := funcNameBuilder.String()
-	var retType string
-	var getFunction string
-	templateBody := defaultTemplateBody
-	switch f.Type {
-	case 1:
-		retType = "bool"
-		getFunction = "GetBool"
-	case 2:
-		retType = "int64"
-		getFunction = "GetInt"
-	case 3:
-		retType = "float64"
-		getFunction = "GetFloat"
-	case 4:
-		retType = "string"
-		getFunction = "GetString"
-	case 5:
-		getFunction = "GetJSON"
-		templateBody = jsonTemplateBody
-	case 6:
-		getFunction = "GetProto"
-		templateBody = protoTemplateBody
-		typeParts := strings.Split(f.Tree.Default.TypeUrl, ".")
-		retType = strings.Join(typeParts[len(typeParts)-2:], ".")
-	}
-
-	data := struct {
-		Description string
-		FuncName    string
-		GetFunction string
-		RetType     string
-		Namespace   string
-		Key         string
-	}{
-		f.Description,
-		funcName,
-		getFunction,
-		retType,
-		ns,
-		f.Key,
-	}
-	templ, err := template.New("go func").Parse(templateBody)
-	if err != nil {
-		return "", err
-	}
-	var ret bytes.Buffer
-	err = templ.Execute(&ret, data)
-	return ret.String(), err
-}
-
-func genGoCmd() *cobra.Command {
-	var ns string
-	var wd string
-	var of string
-	cmd := &cobra.Command{
-		Use:   "go",
-		Short: "generate Go library code from configs",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := os.ReadFile("go.mod")
-			if err != nil {
-				return err
-			}
-			mf, err := modfile.ParseLax("go.mod", b, nil)
-			if err != nil {
-				return err
-			}
-			moduleRoot := mf.Module.Mod.Path
-
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
-			if err != nil {
-				return err
-			}
-			sort.SliceStable(ffs, func(i, j int) bool {
-				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
-			})
-			var protoAsByteStrings []string
-			var codeStrings []string
-			for _, ff := range ffs {
-				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
-				if err != nil {
-					return err
-				}
-				f := &featurev1beta1.Feature{}
-				err = proto.Unmarshal(fff, f)
-				if err != nil {
-					return err
-				}
-				codeString, err := genGoForFeature(f, ns)
-				if err != nil {
-					return err
-				}
-				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
-				for idx, b := range fff {
-					if idx%16 == 0 {
-						protoAsBytes += "\n\t\t\t"
-					} else {
-						protoAsBytes += " "
-					}
-					protoAsBytes += fmt.Sprintf("0x%02x,", b)
-				}
-				protoAsBytes += "\n\t\t},\n"
-				protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
-				codeStrings = append(codeStrings, codeString)
-			}
-			const templateBody = `package lekko
-
-import (
-	v1beta1 "{{$.ModuleRoot}}/internal/lekko/{{$.Namespace}}/proto"
-	"context"
-	client "github.com/lekkodev/go-sdk/client"
-)
-
-type LekkoClient struct {
-	client.Client
-	Close client.CloseFunc
-}
-
-type SafeLekkoClient struct {
-	client.Client
-	Close client.CloseFunc
-}
-
-func (c *SafeLekkoClient) GetBool(ctx context.Context, namespace string, key string) bool {
-	res, err := c.Client.GetBool(ctx, namespace, key)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-func (c *SafeLekkoClient) GetString(ctx context.Context, namespace string, key string) string {
-	res, err := c.Client.GetString(ctx, namespace, key)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-
-func (c *SafeLekkoClient) GetFloat(ctx context.Context, key string, namespace string) float64 {
-	res, err := c.Client.GetFloat(ctx, namespace, key)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-
-func (c *SafeLekkoClient) GetInt(ctx context.Context, key string, namespace string) int64 {
-	res, err := c.Client.GetInt(ctx, namespace, key)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
-
-var StaticConfig = map[string]map[string][]byte{
-	"{{$.Namespace}}": {
-{{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
-}
-{{range  $.CodeStrings}}
-{{ . }}{{end}}`
-			err = os.MkdirAll("./internal/lekko/"+ns+"/proto/", 0770)
-			if err != nil {
-				return err
-			}
-			pCmd := exec.Command(
-				"protoc",
-				"--go_opt=M"+ns+"/config/v1beta1/example.proto=.", // #nosec G204
-				"--proto_path="+wd+"/proto",                       // #nosec G204
-				"--go_out=proto",
-				ns+"/config/v1beta1/example.proto") // #nosec G204
-			pCmd.Dir = "./internal/lekko/" + ns
-			err = pCmd.Run()
-			if err != nil {
-				return err
-			}
-			f, err := os.Create("./internal/lekko/" + ns + "/" + of)
-			if err != nil {
-				return err
-			}
-			data := struct {
-				ModuleRoot         string
-				Namespace          string
-				ProtoAsByteStrings []string
-				CodeStrings        []string
-			}{
-				moduleRoot,
-				ns,
-				protoAsByteStrings,
-				codeStrings,
-			}
-			templ := template.Must(template.New("").Parse(templateBody))
-			return templ.Execute(f, data)
-		},
-	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
-	cmd.Flags().StringVarP(&of, "output", "o", "lekko.go", "output file")
 	return cmd
 }
 
