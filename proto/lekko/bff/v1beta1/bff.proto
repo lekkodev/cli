@@ -432,10 +432,6 @@ message ContextKey {
   ContextKeyType type = 2;
 }
 
-// The configs will have metadata fields populated based on the latest rolled
-// out version of the repo.
-// If a config was newly created since, created_at will not be set.
-// If a config existed already but was updated, last_updated_at will not be set.
 message GetRepositoryContentsResponse {
   Branch branch = 1;
   NamespaceContents namespace_contents = 2;
@@ -472,6 +468,10 @@ message GetFeatureHistoryResponse {
   repeated FeatureHistoryItem history = 1;
 }
 
+// The configs will have metadata fields populated based on the latest rolled
+// out version of the repo.
+// If a config was newly created since, created_at will not be set.
+// If a config existed already but was updated, last_updated_at will not be set.
 message ConfigMetadata {
   google.protobuf.Timestamp created_at = 1;
   google.protobuf.Timestamp last_updated_at = 2;
