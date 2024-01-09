@@ -24,6 +24,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/google/go-github/v52/github"
 	"github.com/pkg/errors"
+	"github.com/shurcooL/githubv4"
 	"golang.org/x/oauth2"
 )
 
@@ -37,20 +38,20 @@ const (
 // relevant to lekko.
 type GithubClient struct {
 	*github.Client
+	Graphql *githubv4.Client
 }
 
 func NewGithubClient(h *http.Client) *GithubClient {
 	return &GithubClient{
-		Client: github.NewClient(h),
+		Client:  github.NewClient(h),
+		Graphql: githubv4.NewClient(h),
 	}
 }
 
 func NewGithubClientFromToken(ctx context.Context, token string) *GithubClient {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(ctx, ts)
-	return &GithubClient{
-		Client: github.NewClient(tc),
-	}
+	return NewGithubClient(tc)
 }
 
 func (gc *GithubClient) GetUser(ctx context.Context) (*github.User, error) {
