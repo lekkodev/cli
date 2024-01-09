@@ -50,8 +50,9 @@ type RootConfigRepoMetadata struct {
 type NamespaceConfigRepoMetadata struct {
 	// This version refers to the version of the configuration in the repo itself.
 	// TODO we should move this to a separate version number.
-	Version string `json:"version,omitempty" yaml:"version,omitempty"`
-	Name    string `json:"name,omitempty" yaml:"name,omitempty"`
+	Version      string `json:"version,omitempty" yaml:"version,omitempty"`
+	Name         string `json:"name,omitempty" yaml:"name,omitempty"`
+	ContextProto string `json:"contextProto,omitempty" yaml:"contextProto,omitempty"`
 }
 
 const DefaultRootConfigRepoMetadataFileName = "lekko.root.yaml"
