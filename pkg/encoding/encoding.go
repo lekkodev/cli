@@ -16,7 +16,6 @@ package encoding
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -32,26 +31,17 @@ import (
 // Takes a version number and parses file contents into the corresponding
 // type.
 func ParseFeature(ctx context.Context, rootPath string, featureFile feature.FeatureFile, nsMD *metadata.NamespaceConfigRepoMetadata, provider fs.Provider) (eval.EvaluableConfig, error) {
-	switch nsMD.Version {
-	case feature.NamespaceVersionV1Beta3.String():
-		fallthrough
-	case feature.NamespaceVersionV1Beta4.String():
-		fallthrough
-	case feature.NamespaceVersionV1Beta5.String():
-		fallthrough
-	case feature.NamespaceVersionV1Beta6.String():
-		fallthrough
-	case feature.NamespaceVersionV1Beta7.String():
-		var f featurev1beta1.Feature
-		contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
-		if err != nil {
-			return nil, errors.Wrap(err, "get file contents")
-		}
-		if err := proto.Unmarshal(contents, &f); err != nil {
-			return nil, err
-		}
-		return eval.NewV1Beta3(&f, nsMD.Name), nil
-	default:
-		return nil, fmt.Errorf("unknown version when parsing config: %s", nsMD.Version)
+	err := feature.NamespaceVersion(nsMD.Version).Supported()
+	if err != nil {
+		return nil, errors.Wrapf(err, "invalid namespace version %s", nsMD.Version)
 	}
+	var f featurev1beta1.Feature
+	contents, err := provider.GetFileContents(ctx, filepath.Join(rootPath, nsMD.Name, featureFile.CompiledProtoBinFileName))
+	if err != nil {
+		return nil, errors.Wrap(err, "get file contents")
+	}
+	if err := proto.Unmarshal(contents, &f); err != nil {
+		return nil, err
+	}
+	return eval.NewV1Beta3(&f, nsMD.Name), nil
 }

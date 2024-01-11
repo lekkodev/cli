@@ -821,6 +821,7 @@ func toStarlarkScalarValue(obj interface{}) (starlark.Value, bool) {
 	}
 	rt := reflect.TypeOf(obj)
 	v := reflect.ValueOf(obj)
+	//exhaustive:ignore
 	switch rt.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return starlark.MakeInt64(v.Int()), true
@@ -845,38 +846,45 @@ func toStarlarkValue(obj interface{}) (starlark.Value, error) {
 		return objval, nil
 	}
 	rt := reflect.TypeOf(obj)
+	//exhaustive:ignore
 	switch rt.Kind() {
 	case reflect.Map:
 		ret := &starlark.Dict{}
-		if obj, ok := obj.(map[string]interface{}); ok {
-			for k, v := range obj {
-				keyval, ok := toStarlarkScalarValue(k)
-				if !ok {
-					return nil, fmt.Errorf("%s (%v) is not a supported key type", rt.Kind(), obj)
-				}
-				starval, err := toStarlarkValue(v)
-				if err != nil {
-					return nil, err
-				}
-				if err = ret.SetKey(keyval, starval); err != nil {
-					return nil, err
-				}
-			}
-			return ret, nil
+		obj, ok := obj.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("%v is not a map", obj)
 		}
+		for k, v := range obj {
+			keyval, ok := toStarlarkScalarValue(k)
+			if !ok {
+				return nil, fmt.Errorf("%s (%v) is not a supported key type", rt.Kind(), obj)
+			}
+			starval, err := toStarlarkValue(v)
+			if err != nil {
+				return nil, err
+			}
+			if err = ret.SetKey(keyval, starval); err != nil {
+				return nil, err
+			}
+		}
+		return ret, nil
 
 	case reflect.Slice:
-		if slice, ok := obj.([]interface{}); ok {
-			starvals := make([]starlark.Value, len(slice))
-			for i, element := range slice {
-				v, err := toStarlarkValue(element)
-				if err != nil {
-					return nil, err
-				}
-				starvals[i] = v
-			}
-			return starlark.NewList(starvals), nil
+		slice, ok := obj.([]interface{})
+		if !ok {
+			return nil, fmt.Errorf("%v is not a slice", obj)
 		}
+		starvals := make([]starlark.Value, len(slice))
+		for i, element := range slice {
+			v, err := toStarlarkValue(element)
+			if err != nil {
+				return nil, err
+			}
+			starvals[i] = v
+		}
+		return starlark.NewList(starvals), nil
+
+	default:
+		return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
 	}
-	return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
 }
