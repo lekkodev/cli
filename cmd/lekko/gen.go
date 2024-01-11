@@ -15,7 +15,6 @@ import (
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/exp/maps"
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,12 +27,10 @@ func genGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "generate Go library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("hi")
 			b, err := os.ReadFile("go.mod")
 			if err != nil {
 				return err
 			}
-			fmt.Println("hi2")
 			mf, err := modfile.ParseLax("go.mod", b, nil)
 			if err != nil {
 				return err
@@ -41,7 +38,6 @@ func genGoCmd() *cobra.Command {
 			moduleRoot := mf.Module.Mod.Path
 
 			rs := secrets.NewSecretsOrFail()
-			fmt.Println("hi3")
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
@@ -53,10 +49,9 @@ func genGoCmd() *cobra.Command {
 			sort.SliceStable(ffs, func(i, j int) bool {
 				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 			})
-			fmt.Println("hi4")
 			var protoAsByteStrings []string
 			var codeStrings []string
-			protoImportSet := make(map[string]struct{})
+			protoImportSet := make(map[string]*protoImport)
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
 				if err != nil {
@@ -71,7 +66,8 @@ func genGoCmd() *cobra.Command {
 					return err
 				}
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-					protoImportSet[genImport(moduleRoot, f.Tree.Default.TypeUrl)] = struct{}{}
+					protoImport := unpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
+					protoImportSet[protoImport.ImportPath] = &protoImport
 				}
 				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
 				for idx, b := range fff {
@@ -86,7 +82,7 @@ func genGoCmd() *cobra.Command {
 				protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
 				codeStrings = append(codeStrings, codeString)
 			}
-			const templateBody = `package lekko
+			const templateBody = `package lekko{{$.Namespace}}
 
 import (
 {{range  $.ProtoImports}}
@@ -144,16 +140,19 @@ var StaticConfig = map[string]map[string][]byte{
 {{ . }}{{end}}`
 
 			// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
-			// old one:
-			// --template={"managed": {"enabled": true, "go_package_prefix": {"default": "."}}, "version":"v1","plugins":[{"plugin":"go","out":"internal/lekko/proto", "opt": "paths=source_relative"}]}
+			//
+			// This generates the code for the config repo, assuming it has a buf.gen.yml in that repo.
+			// In OUR repos, and maybe some of our customers, they may already have a buf.gen.yml, so if
+			// that is the case, we should identify that, not run code gen (maybe?) and instead need to
+			// take the prefix by parsing the buf.gen.yml to understand where the go code goes.
 			pCmd := exec.Command(
 				"buf",
 				"generate",
 				fmt.Sprintf(`--template={"managed": {"enabled": true, "go_package_prefix": {"default": "%s/internal/lekko/proto"}}, "version":"v1","plugins":[{"plugin":"go","out":"internal/lekko/proto", "opt": "paths=source_relative"}]}`, moduleRoot),
 				"--include-imports",
-				"https://github.com/lekkodev/internal.git") // #nosec G204
+				wd) // #nosec G204
 			pCmd.Dir = "."
-			fmt.Println(pCmd.String())
+			fmt.Println("executing in wd: " + wd + " command: " pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
 				fmt.Println("this is the error probably")
 				fmt.Println(string(out))
@@ -167,13 +166,17 @@ var StaticConfig = map[string]map[string][]byte{
 			if err != nil {
 				return err
 			}
+			var protoImports []string
+			for _, imp := range protoImportSet {
+				protoImports = append(protoImports, fmt.Sprintf(`%s "%s"`, imp.PackageAlias, imp.ImportPath))
+			}
 			data := struct {
 				ProtoImports       []string
 				Namespace          string
 				ProtoAsByteStrings []string
 				CodeStrings        []string
 			}{
-				maps.Keys(protoImportSet),
+				protoImports,
 				ns,
 				protoAsByteStrings,
 				codeStrings,
@@ -257,9 +260,10 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	case 6:
 		getFunction = "GetProto"
 		templateBody = protoTemplateBody
-		typeParts := strings.Split(strings.Split(f.Tree.Default.TypeUrl, "/")[1], ".")
+		// we don't need the import path so sending in empty string
+		protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
-		retType = fmt.Sprintf("%s%s.%s", typeParts[len(typeParts)-3], typeParts[len(typeParts)-2], typeParts[len(typeParts)-1])
+		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
 	}
 
 	data := struct {
@@ -286,7 +290,13 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	return ret.String(), err
 }
 
-func genImport(moduleRoot string, typeURL string) string {
+type protoImport struct {
+	PackageAlias string
+	ImportPath   string
+	Type         string
+}
+
+func unpackProtoType(moduleRoot string, typeURL string) protoImport {
 	anyURLSplit := strings.Split(typeURL, "/")
 	if anyURLSplit[0] != "type.googleapis.com" {
 		panic("invalid any type url: " + typeURL)
@@ -297,8 +307,15 @@ func genImport(moduleRoot string, typeURL string) string {
 
 	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
 
-	// TODO do google.protobuf.X
+	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
 
-	// returns configv1beta1
-	return fmt.Sprintf(`%s%s "%s"`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2], importPath)
+	// TODO do google.protobuf.X
+	switch anyURLSplit[1] {
+	case "google.protobuf.Duration":
+		importPath = "google.golang.org/protobuf/types/known/durationpb"
+		prefix = "durationpb"
+	default:
+	}
+
+	return protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
 }
