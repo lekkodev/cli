@@ -1,3 +1,17 @@
+// Copyright 2022 Lekko Technologies, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package main
 
 import (
@@ -152,7 +166,7 @@ var StaticConfig = map[string]map[string][]byte{
 				"--include-imports",
 				wd) // #nosec G204
 			pCmd.Dir = "."
-			fmt.Println("executing in wd: " + wd + " command: " pCmd.String())
+			fmt.Println("executing in wd: " + wd + " command: " + pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
 				fmt.Println("this is the error probably")
 				fmt.Println(string(out))
