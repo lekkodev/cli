@@ -15,19 +15,13 @@
 package main
 
 import (
-	// "bytes"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	// "regexp"
-	"sort"
 	"strconv"
-	// "strings"
-	"text/template"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
-	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/bufbuild/connect-go"
 	"github.com/lekkodev/cli/pkg/feature"
@@ -41,7 +35,6 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/spf13/cobra"
 )
@@ -93,171 +86,6 @@ func rootCmd() *cobra.Command {
 		SilenceErrors: true,
 	}
 	cmd.PersistentFlags().StringVar(&lekko.URL, "backend-url", "https://prod.api.lekko.dev", "Lekko backend url")
-	return cmd
-}
-
-var genCmd = &cobra.Command{
-	Use:   "gen",
-	Short: "generate library code from configs",
-}
-
-/*
-func genGoForFeature(f *featurev1beta1.Feature, ns string) (string, error) {
-	const defaultTemplateBody = `
-// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
-}
-`
-	// protoc  --go_opt=Mdefault/config/v1beta1/example.proto=lekko.com/default/config/v1beta1 --proto_path=../teflon/config/proto --go_out=gen --go_opt=paths=source_relative default/config/v1beta1/example.proto
-	const protoTemplateBody = `
-// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
-	result := &{{$.RetType}}{}
-	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	if err != nil {
-		return result, err
-	}
-	return result, nil
-}
-    `
-	const jsonTemplateBody = `
-// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) error {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-}
-`
-	var funcNameBuilder strings.Builder
-	funcNameBuilder.WriteString("Get")
-	for _, word := range regexp.MustCompile("[_-]+").Split(f.Key, -1) {
-		funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
-	}
-	funcName := funcNameBuilder.String()
-	var retType string
-	var getFunction string
-	templateBody := defaultTemplateBody
-	switch f.Type {
-	case 1:
-		retType = "bool"
-		getFunction = "GetBool"
-	case 2:
-		retType = "int64"
-		getFunction = "GetInt"
-	case 3:
-		retType = "float64"
-		getFunction = "GetFloat"
-	case 4:
-		retType = "string"
-		getFunction = "GetString"
-	case 5:
-		getFunction = "GetJSON"
-		templateBody = jsonTemplateBody
-	case 6:
-		getFunction = "GetProto"
-		templateBody = protoTemplateBody
-		typeParts := strings.Split(f.Tree.Default.TypeUrl, ".")
-		retType = strings.Join(typeParts[len(typeParts)-2:], ".")
-	}
-
-	data := struct {
-		Description string
-		FuncName    string
-		GetFunction string
-		RetType     string
-		Namespace   string
-		Key         string
-	}{
-		f.Description,
-		funcName,
-		getFunction,
-		retType,
-		ns,
-		f.Key,
-	}
-	templ, err := template.New("go func").Parse(templateBody)
-	if err != nil {
-		return "", err
-	}
-	var ret bytes.Buffer
-	err = templ.Execute(&ret, data)
-	return ret.String(), err
-}
-*/
-
-func genGoCmd() *cobra.Command {
-	var ns string
-	var wd string
-	var of string
-	cmd := &cobra.Command{
-		Use:   "go",
-		Short: "generate Go library code from configs",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
-			if err != nil {
-				return err
-			}
-			sort.SliceStable(ffs, func(i, j int) bool {
-				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
-			})
-			var protoAsByteStrings []string
-			// var codeStrings []string
-			for _, ff := range ffs {
-				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
-				if err != nil {
-					return err
-				}
-				f := &featurev1beta1.Feature{}
-				err = proto.Unmarshal(fff, f)
-				if err != nil {
-					return err
-				}
-				// codeString, err := genGoForFeature(f, ns)
-				// if err != nil {
-				//	return err
-				// }
-				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
-				for idx, b := range fff {
-					if idx%16 == 0 {
-						protoAsBytes += "\n\t\t\t"
-					} else {
-						protoAsBytes += " "
-					}
-					protoAsBytes += fmt.Sprintf("0x%02x,", b)
-				}
-				protoAsBytes += "\n\t\t},\n"
-				protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
-				// codeStrings = append(codeStrings, codeString)
-			}
-			const templateBody = `package lekko
-
-var StaticConfig = map[string]map[string][]byte{
-	"{{$.Namespace}}": {
-{{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
-}
-`
-			f, err := os.Create(of)
-			if err != nil {
-				return err
-			}
-			data := struct {
-				Namespace          string
-				ProtoAsByteStrings []string
-			}{
-				ns,
-				protoAsByteStrings,
-			}
-			templ := template.Must(template.New("").Parse(templateBody))
-			return templ.Execute(f, data)
-		},
-	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
-	cmd.Flags().StringVarP(&of, "output", "o", "./lekko.go", "output file")
 	return cmd
 }
 
