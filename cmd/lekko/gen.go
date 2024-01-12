@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,11 +26,14 @@ import (
 	"text/template"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -56,6 +60,9 @@ func genGoCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
+			_, nsMDs, err := r.ParseMetadata(cmd.Context(), ns)
+
+			staticCtxType := unpackProtoType(moduleRoot, "/"+nsMDs[ns])
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
 				return err
@@ -166,7 +173,7 @@ var StaticConfig = map[string]map[string][]byte{
 				"--include-imports",
 				wd) // #nosec G204
 			pCmd.Dir = "."
-			fmt.Println("executing in wd: " + wd + " command: " + pCmd.String())
+			fmt.Println("executing in working dir: " + wd + " command: " + pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
 				fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
 				return err
@@ -216,9 +223,10 @@ func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error)
 
 // {{$.Description}}
 func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
+{{if $.NaturalLanguage}}{{range  $.NaturalLanguage}}{{ . }}
+{{end}}{{else}}
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
-}
-`
+{{end}}}`
 
 	const protoTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
@@ -253,6 +261,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	var retType string
 	var getFunction string
 	templateBody := defaultTemplateBody
+	var natty []string
 	switch f.Type {
 	case 1:
 		retType = "bool"
@@ -266,6 +275,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	case 4:
 		retType = "string"
 		getFunction = "GetString"
+		natty = translateFeature(f)
 	case 5:
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
@@ -279,12 +289,13 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	}
 
 	data := struct {
-		Description string
-		FuncName    string
-		GetFunction string
-		RetType     string
-		Namespace   string
-		Key         string
+		Description     string
+		FuncName        string
+		GetFunction     string
+		RetType         string
+		Namespace       string
+		Key             string
+		NaturalLanguage []string
 	}{
 		f.Description,
 		funcName,
@@ -292,6 +303,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		retType,
 		ns,
 		f.Key,
+		natty,
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -330,4 +342,45 @@ func unpackProtoType(moduleRoot string, typeURL string) protoImport {
 	}
 
 	return protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
+}
+
+func translateFeature(f *featurev1beta1.Feature) []string {
+	var buffer []string
+	for i, constraint := range f.Tree.Constraints {
+		ifToken := "} else if"
+		if i == 0 {
+			ifToken = "if"
+		}
+		rule := translateRule(constraint.GetRuleAstNew())
+		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
+		// TODO this doesn't work for proto, but let's try
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", try.To1(protojson.Marshal(try.To1(constraint.Value.UnmarshalNew())))))
+	}
+	if len(f.Tree.Constraints) > 0 {
+		buffer = append(buffer, "\t}")
+	}
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", try.To1(protojson.Marshal(try.To1(f.Tree.Default.UnmarshalNew())))))
+	return buffer
+}
+
+func translateRule(rule *rulesv1beta3.Rule) string {
+	if rule == nil {
+		return ""
+	}
+	switch v := rule.GetRule().(type) {
+	case *rulesv1beta3.Rule_Atom:
+		switch v.Atom.GetComparisonOperator() {
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
+			b, err := json.Marshal(v.Atom.ComparisonValue)
+			if err != nil {
+				panic(err)
+			}
+			return fmt.Sprintf("%s == %s", v.Atom.ContextKey, string(b))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
+			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
+		}
+	case *rulesv1beta3.Rule_LogicalExpression:
+		// TODO do some ands and ors
+	}
+	return ""
 }
