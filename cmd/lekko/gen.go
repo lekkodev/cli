@@ -130,7 +130,7 @@ func (c *SafeLekkoClient) GetString(ctx context.Context, namespace string, key s
 	return res
 }
 
-func (c *SafeLekkoClient) GetFloat(ctx context.Context, key string, namespace string) float64 {
+func (c *SafeLekkoClient) GetFloat(ctx context.Context, namespace string, key string) float64 {
 	res, err := c.Client.GetFloat(ctx, namespace, key)
 	if err != nil {
 		panic(err)
@@ -138,7 +138,7 @@ func (c *SafeLekkoClient) GetFloat(ctx context.Context, key string, namespace st
 	return res
 }
 
-func (c *SafeLekkoClient) GetInt(ctx context.Context, key string, namespace string) int64 {
+func (c *SafeLekkoClient) GetInt(ctx context.Context, namespace string, key string) int64 {
 	res, err := c.Client.GetInt(ctx, namespace, key)
 	if err != nil {
 		panic(err)
@@ -168,9 +168,7 @@ var StaticConfig = map[string]map[string][]byte{
 			pCmd.Dir = "."
 			fmt.Println("executing in wd: " + wd + " command: " + pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
-				fmt.Println("this is the error probably")
-				fmt.Println(string(out))
-				fmt.Println(err)
+				fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
 				return err
 			}
 			if err := os.MkdirAll("./internal/lekko/"+ns, 0770); err != nil {
