@@ -2,6 +2,8 @@ buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20231020162356-e763402
 buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20231020162356-e763402ec965.1/go.mod h1:hJtG6Y49OSN1DhCYPGaCkfN1jibDflptgnHnLJo/Nl0=
 buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20231020162356-e763402ec965.1 h1:YzjpTz4MgOa+EhI6lbIFLBAUTgQf2aVSIUoZlPBBv2k=
 buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20231020162356-e763402ec965.1/go.mod h1:mYcnts9MJhUckfRD5/qOThXC7Kaj7O714LOw5GoGZ9c=
+buf.build/gen/go/lekkodev/sdk/bufbuild/connect-go v1.10.0-20230810202034-1c821065b9a0.1 h1:J0Bw6bd6GUnWpGp1c2rbTlHg8Ne3G2PKYa3vTxp6SP0=
+buf.build/gen/go/lekkodev/sdk/bufbuild/connect-go v1.10.0-20230810202034-1c821065b9a0.1/go.mod h1:GOhwtQN3rKKGVXxfXwhluFsjltgDTTJsEnIrrzjlUIk=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230419180142-0694c10ef23c.1/go.mod h1:UOnQUnbc9uR4s5SlhBKspO4dffz+T3A6X200yYBnaZg=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230810202034-1c821065b9a0.1 h1:jd5EUbnTPSEuCL+U3TsK4fjym4eVveXJCOssOUOiJcM=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.31.0-20230810202034-1c821065b9a0.1/go.mod h1:UOnQUnbc9uR4s5SlhBKspO4dffz+T3A6X200yYBnaZg=
@@ -199,6 +201,8 @@ github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINE
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
+github.com/rjeczalik/notify v0.9.3 h1:6rJAzHTGKXGj76sbRgDiDcYj/HniypXmSJo1SWakZeY=
+github.com/rjeczalik/notify v0.9.3/go.mod h1:gF3zSOrafR9DQEWSE8TjfI9NkooDxbyT4UgRGKZA0lc=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sergi/go-diff v1.1.0 h1:we8PVUC3FE2uYfodKH/nBHMSetSfHDR6scGdBi+erh0=
 github.com/sergi/go-diff v1.1.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
@@ -283,6 +287,7 @@ golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9/go.mod h1:RxMgew5VJxzue5/jJ
 golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sync v0.1.0/go.mod h1:RxMgew5VJxzue5/jJTE5uejpjVlOe/izrB70Jof72aM=
 golang.org/x/sys v0.0.0-20180830151530-49385e6e1522/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
+golang.org/x/sys v0.0.0-20180926160741-c2ed4eda69e7/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190222072716-a9d3bda3a223/go.mod h1:STP8DvDyc/dI5b8T5hshtkjS+E42TnysNCUPdjciGhY=
 golang.org/x/sys v0.0.0-20190412213103-97732733099d/go.mod h1:h1NjWce9XRLGQEsW7wpKNCjG9DtNlClVuFLEZdDNbEs=

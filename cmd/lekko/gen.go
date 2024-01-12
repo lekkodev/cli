@@ -177,6 +177,7 @@ var StaticConfig = map[string]map[string][]byte{
 				"--include-imports",
 				wd) // #nosec G204
 			pCmd.Dir = "."
+			fmt.Println("executing in wd: " + wd + " command: " + pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
 				fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
 				return err
@@ -264,7 +265,13 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	var retType string
 	var getFunction string
 	templateBody := defaultTemplateBody
-	var natty []string
+
+	type StaticContextInfo struct {
+		// natural language lines
+		Natty             []string
+		StaticContextType string
+	}
+	var staticContextInfo *StaticContextInfo
 
 	switch f.Type {
 	case 1:
@@ -279,7 +286,12 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	case 4:
 		retType = "string"
 		getFunction = "GetString"
-		natty = translateFeature(f)
+		if staticCtxType != nil {
+			staticContextInfo = &StaticContextInfo{
+				Natty:             translateFeature(f),
+				StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
+			}
+		}
 	case 5:
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
@@ -308,8 +320,12 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		retType,
 		ns,
 		f.Key,
-		natty,
-		fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
+		[]string{},
+		"",
+	}
+	if staticContextInfo != nil {
+		data.NaturalLanguage = staticContextInfo.Natty
+		data.StaticType = staticContextInfo.StaticContextType
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -359,7 +375,6 @@ func unpackProtoType(moduleRoot string, typeURL string) *protoImport {
 		prefix = "durationpb"
 	default:
 	}
-
 	return &protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
 }
 
