@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
@@ -880,6 +881,28 @@ func toStarlarkValue(obj interface{}) (starlark.Value, error) {
 		}
 	}
 	return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
+}
+
+// Automagically suggest names for a grouped config based on the inputs
+// Should return options from highest to lowest confidence
+// Lowest confidence item will be a simple concatenation of names
+// TODO: take options like max len, call an API endpoint, etc.
+func SuggestGroupedNames(configs ...*Feature) []string {
+	var names []string
+	for _, c := range configs {
+		names = append(names, strcase.ToKebab(c.Key))
+	}
+	var suggestions []string
+	// Really complicated AI magic goes here (a.k.a. hardcoded fake demo entries)
+	time.Sleep(2 * time.Second)
+	suggestions = append(suggestions, "memcache-config")
+	suggestions = append(suggestions, "connection-options")
+	suggestions = append(suggestions, "network-config")
+	suggestions = append(suggestions, "grouped-conn-config")
+
+	suggestions = append(suggestions, strings.Join(names, "-"))
+
+	return suggestions
 }
 
 // Builder for a protobuf message definition string

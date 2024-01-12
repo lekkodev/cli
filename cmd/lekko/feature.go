@@ -21,11 +21,14 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"slices"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/briandowns/spinner"
 	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -313,9 +316,6 @@ func configGroup() *cobra.Command {
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(configNames) < 2 {
-				return errors.New("at least 2 configs must be specified for grouping")
-			}
 			wd, err := os.Getwd()
 			if err != nil {
 				return err
@@ -325,9 +325,45 @@ func configGroup() *cobra.Command {
 				return err
 			}
 			ctx := cmd.Context()
+			// Take namespace input if necessary
+			if ns == "" {
+				nss, err := r.ListNamespaces(ctx)
+				if err != nil {
+					return errors.Wrap(err, "list namespaces")
+				}
+				var options []string
+				for _, ns := range nss {
+					options = append(options, ns.Name)
+				}
+				if err := survey.AskOne(&survey.Select{
+					Message: "Namespace:",
+					Options: options,
+				}, &ns); err != nil {
+					return errors.Wrap(err, "prompt for namespace")
+				}
+			}
 			allNsfs, err := getNamespaceFeatures(ctx, r, ns, "")
 			if err != nil {
 				return err
+			}
+			// Take configs input if necessary
+			if len(configNames) == 0 {
+				var options []string
+				for _, nsf := range allNsfs {
+					options = append(options, nsf.featureName)
+				}
+				slices.Sort(options)
+				// NOTE: Currently this doesn't respect selection order
+				// so if someone wants a specific order they have to pass the flag explicitly
+				if err := survey.AskOne(&survey.MultiSelect{
+					Message: "Configs to group:",
+					Options: options,
+				}, &configNames, survey.WithValidator(survey.MinItems(2))); err != nil {
+					return errors.Wrap(err, "prompt for configs")
+				}
+			}
+			if len(configNames) < 2 {
+				return errors.New("at least 2 configs must be specified for grouping")
 			}
 			cMap := make(map[string]struct{})
 			for _, nsf := range allNsfs {
@@ -359,17 +395,34 @@ func configGroup() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "pre-group compile")
 			}
+			var compiledList []*feature.Feature
 			compiledMap := make(map[string]*feature.Feature)
 			for _, res := range compileResults {
 				compiledMap[res.FeatureName] = res.CompiledFeature.Feature
 			}
-			// Generate new proto message def string based on config types
-			// TODO: name suggestion/magic
-			sb := strings.Builder{}
 			for _, c := range configNames {
-				sb.WriteString(strcase.ToCamel(c))
+				compiledList = append(compiledList, compiledMap[c])
 			}
-			protoMsgName := sb.String()
+			// Prompt for grouped name if necessary, using suggestion engine
+			if outName == "" {
+				// tab for suggestions?
+				if err := survey.AskOne(&survey.Input{
+					Message: "Grouped config name:",
+					Suggest: func(_ string) []string {
+						s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+						s.Suffix = " Generating AI suggestions..."
+						s.Start()
+						suggestions := feature.SuggestGroupedNames(compiledList...)
+						s.Stop()
+						return suggestions
+					},
+				}, &outName); err != nil {
+					return errors.Wrap(err, "prompt for grouped name")
+				}
+			}
+			// Generate new proto message def string based on config types
+			// TODO: handle name collisions
+			protoMsgName := strcase.ToCamel(outName)
 			pdf := feature.NewProtoDefBuilder(protoMsgName)
 			protoFieldNames := make([]string, len(configNames))
 			for i, c := range configNames {
@@ -411,11 +464,7 @@ func configGroup() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "rebuild type registry")
 			}
-			// Create new config using generated type
-			// TODO: name suggestion/magic
-			if outName == "" {
-				outName = strings.Join(configNames, "-")
-			}
+			// Create new config using generated proto type
 			protoFullName := strings.Join([]string{protoPkg, protoMsgName}, ".")
 			_, err = r.AddFeature(ctx, ns, outName, eval.ConfigTypeProto, protoFullName)
 			if err != nil {
@@ -498,9 +547,7 @@ func configGroup() *cobra.Command {
 	// This might not be the cleanest CLI design, but not sure how to do it cleaner
 	cmd.Flags().StringVarP(&outName, "out", "o", "", "name of grouped config")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace of configs to group together")
-	cmd.MarkFlagRequired("namespace")
 	cmd.Flags().StringSliceVarP(&configNames, "configs", "c", []string{}, "comma-separated names of configs to group together")
-	cmd.MarkFlagRequired("configs")
 	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
 	return cmd
