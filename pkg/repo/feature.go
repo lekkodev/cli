@@ -448,7 +448,6 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 			nsContextTypes[ns] = ct
 		}
 	}
-	r.Logf("%#v\n", nsContextTypes)
 
 	// Step 1: collect. Find all features
 	vffs, numNamespaces, err := r.findVersionedFeatureFiles(ctx, req.NamespaceFilter, req.FeatureFilter, req.Verify)
