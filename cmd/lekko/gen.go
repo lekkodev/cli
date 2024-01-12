@@ -32,6 +32,7 @@ import (
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	strcase "github.com/stoewer/go-strcase"
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -60,9 +61,9 @@ func genGoCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			_, nsMDs, err := r.ParseMetadata(cmd.Context(), ns)
+			_, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
 
-			staticCtxType := unpackProtoType(moduleRoot, "/"+nsMDs[ns])
+			staticCtxType := unpackProtoType(moduleRoot, nsMDs[ns].ContextProto)
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
 				return err
@@ -73,6 +74,9 @@ func genGoCmd() *cobra.Command {
 			var protoAsByteStrings []string
 			var codeStrings []string
 			protoImportSet := make(map[string]*protoImport)
+			if staticCtxType != nil {
+				protoImportSet[staticCtxType.ImportPath] = staticCtxType
+			}
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
 				if err != nil {
@@ -82,13 +86,13 @@ func genGoCmd() *cobra.Command {
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
 				}
-				codeString, err := genGoForFeature(f, ns)
+				codeString, err := genGoForFeature(f, ns, staticCtxType)
 				if err != nil {
 					return err
 				}
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 					protoImport := unpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
-					protoImportSet[protoImport.ImportPath] = &protoImport
+					protoImportSet[protoImport.ImportPath] = protoImport
 				}
 				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
 				for idx, b := range fff {
@@ -173,7 +177,6 @@ var StaticConfig = map[string]map[string][]byte{
 				"--include-imports",
 				wd) // #nosec G204
 			pCmd.Dir = "."
-			fmt.Println("executing in working dir: " + wd + " command: " + pCmd.String())
 			if out, err := pCmd.CombinedOutput(); err != nil {
 				fmt.Println("this is the error probably")
 				fmt.Println(string(out))
@@ -217,16 +220,16 @@ var genCmd = &cobra.Command{
 	Short: "generate library code from configs",
 }
 
-func genGoForFeature(f *featurev1beta1.Feature, ns string) (string, error) {
+func genGoForFeature(f *featurev1beta1.Feature, ns string, staticCtxType *protoImport) (string, error) {
 	const defaultTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 }
 
 // {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
-{{if $.NaturalLanguage}}{{range  $.NaturalLanguage}}{{ . }}
-{{end}}{{else}}
+{{if $.NaturalLanguage}}func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}{{else}}func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 {{end}}}`
 
@@ -264,6 +267,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	var getFunction string
 	templateBody := defaultTemplateBody
 	var natty []string
+
 	switch f.Type {
 	case 1:
 		retType = "bool"
@@ -298,6 +302,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		Namespace       string
 		Key             string
 		NaturalLanguage []string
+		StaticType      string
 	}{
 		f.Description,
 		funcName,
@@ -306,6 +311,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		ns,
 		f.Key,
 		natty,
+		fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -322,28 +328,41 @@ type protoImport struct {
 	Type         string
 }
 
-func unpackProtoType(moduleRoot string, typeURL string) protoImport {
-	anyURLSplit := strings.Split(typeURL, "/")
-	if anyURLSplit[0] != "type.googleapis.com" {
-		panic("invalid any type url: " + typeURL)
+// This function handles both the google.protobuf.Any.TypeURL variable
+// which has the format of `types.googleapis.com/fully.qualified.Proto`
+// and purely `fully.qualified.Proto`
+//
+// return nil if typeURL is empty. Panics on any problems like the rest of the file.
+func unpackProtoType(moduleRoot string, typeURL string) *protoImport {
+	if typeURL == "" {
+		return nil
 	}
+	anyURLSplit := strings.Split(typeURL, "/")
+	fqType := anyURLSplit[0]
+	if len(anyURLSplit) > 1 {
+		if anyURLSplit[0] != "type.googleapis.com" {
+			panic("invalid any type url: " + typeURL)
+		}
+		fqType = anyURLSplit[1]
+	}
+
 	// turn default.config.v1beta1.DBConfig into:
 	// moduleRoot/internal/lekko/proto/default/config/v1beta1
-	typeParts := strings.Split(anyURLSplit[1], ".")
+	typeParts := strings.Split(fqType, ".")
 
 	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
 
 	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
 
 	// TODO do google.protobuf.X
-	switch anyURLSplit[1] {
+	switch fqType {
 	case "google.protobuf.Duration":
 		importPath = "google.golang.org/protobuf/types/known/durationpb"
 		prefix = "durationpb"
 	default:
 	}
 
-	return protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
+	return &protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
 }
 
 func translateFeature(f *featurev1beta1.Feature) []string {
@@ -355,7 +374,9 @@ func translateFeature(f *featurev1beta1.Feature) []string {
 		}
 		rule := translateRule(constraint.GetRuleAstNew())
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
+
 		// TODO this doesn't work for proto, but let's try
+
 		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", try.To1(protojson.Marshal(try.To1(constraint.Value.UnmarshalNew())))))
 	}
 	if len(f.Tree.Constraints) > 0 {
@@ -377,7 +398,7 @@ func translateRule(rule *rulesv1beta3.Rule) string {
 			if err != nil {
 				panic(err)
 			}
-			return fmt.Sprintf("%s == %s", v.Atom.ContextKey, string(b))
+			return fmt.Sprintf("ctx.%s == %s", strcase.UpperCamelCase(v.Atom.ContextKey), string(b))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
 		}
