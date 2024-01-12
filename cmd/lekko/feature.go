@@ -307,13 +307,13 @@ func featureEval() *cobra.Command {
 }
 
 func configGroup() *cobra.Command {
-	var ns, protoPkg, outName string
-	var cs []string
+	var ns, protoPkg, outName, description string
+	var configNames []string
 	cmd := &cobra.Command{
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(cs) < 2 {
+			if len(configNames) < 2 {
 				return errors.New("at least 2 configs must be specified for grouping")
 			}
 			wd, err := os.Getwd()
@@ -334,7 +334,7 @@ func configGroup() *cobra.Command {
 				cMap[nsf.featureName] = struct{}{}
 			}
 			// Check all specified configs exist
-			for _, c := range cs {
+			for _, c := range configNames {
 				if _, ok := cMap[c]; !ok {
 					return errors.Errorf("config %s/%s not found", ns, c)
 				}
@@ -366,18 +366,19 @@ func configGroup() *cobra.Command {
 			// Generate new proto message def string based on config types
 			// TODO: name suggestion/magic
 			sb := strings.Builder{}
-			for _, c := range cs {
+			for _, c := range configNames {
 				sb.WriteString(strcase.ToCamel(c))
 			}
 			protoMsgName := sb.String()
 			pdf := feature.NewProtoDefBuilder(protoMsgName)
-			protoFieldNames := make([]string, len(cs))
-			for i, c := range cs {
+			protoFieldNames := make([]string, len(configNames))
+			for i, c := range configNames {
 				pt, err := pdf.ToProtoTypeName(compiledMap[c].FeatureType)
 				if err != nil {
 					return err
 				}
-				protoFieldNames[i] = pdf.AddField(c, pt)
+				// Use original description as comment in generated proto
+				protoFieldNames[i] = pdf.AddField(c, pt, compiledMap[c].Description)
 			}
 			// Update proto file
 			protoPath := path.Join(rootMD.ProtoDirectory, strings.ReplaceAll(protoPkg, ".", "/"), "gen.proto")
@@ -413,7 +414,7 @@ func configGroup() *cobra.Command {
 			// Create new config using generated type
 			// TODO: name suggestion/magic
 			if outName == "" {
-				outName = strings.Join(cs, "-")
+				outName = strings.Join(configNames, "-")
 			}
 			protoFullName := strings.Join([]string{protoPkg, protoMsgName}, ".")
 			_, err = r.AddFeature(ctx, ns, outName, eval.ConfigTypeProto, protoFullName)
@@ -429,16 +430,16 @@ func configGroup() *cobra.Command {
 				return errors.Wrap(err, "add and compile new config")
 			}
 			newF := compileResults[0].CompiledFeature.Feature
-			// For updating default/override values, we need to statically parse after creation
-			// TODO: Handle overrides, precedence based on arg order
+			// Update default value based on original configs' default values
+			// TODO: Handle overrides, handling precedence based on arg order
 			mt, err := registry.FindMessageByName(protoreflect.FullName(protoFullName))
 			if err != nil {
 				return errors.Wrap(err, "find message")
 			}
 			defaultValue := mt.New()
-			for i, c := range cs {
-				f := compiledMap[c]
-				defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(f.Value))
+			for i, c := range configNames {
+				orig := compiledMap[c]
+				defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(orig.Value))
 			}
 			newF.Value = defaultValue
 			sf, err := r.Parse(ctx, ns, outName, registry)
@@ -457,6 +458,11 @@ func configGroup() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "read new config starlark")
 			}
+			// TODO: description suggestion
+			if description == "" {
+				description = fmt.Sprintf("Grouped from %s", strings.Join(configNames, ", "))
+			}
+			newFProto.Description = description
 			newFBytes, err = static.NewWalker(newFF.StarlarkFileName, newFBytes, registry, feature.NamespaceVersion(nsMDs[ns].Version)).Mutate(&featurev1beta1.StaticFeature{
 				Key:  newFProto.Key,
 				Type: newFProto.Type,
@@ -473,7 +479,7 @@ func configGroup() *cobra.Command {
 				return errors.Wrap(err, "write after mutation")
 			}
 			// Remove old configs
-			for _, c := range cs {
+			for _, c := range configNames {
 				if err := r.RemoveFeature(ctx, ns, c); err != nil {
 					return errors.Wrapf(err, "remove config %s/%s", ns, c)
 				}
@@ -493,9 +499,10 @@ func configGroup() *cobra.Command {
 	cmd.Flags().StringVarP(&outName, "out", "o", "", "name of grouped config")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace of configs to group together")
 	cmd.MarkFlagRequired("namespace")
-	cmd.Flags().StringSliceVarP(&cs, "configs", "c", []string{}, "comma-separated names of configs to group together")
+	cmd.Flags().StringSliceVarP(&configNames, "configs", "c", []string{}, "comma-separated names of configs to group together")
 	cmd.MarkFlagRequired("configs")
 	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
 	return cmd
 }
 

@@ -915,11 +915,14 @@ func (b *ProtoDefBuilder) ToProtoTypeName(ct eval.ConfigType) (string, error) {
 	}
 }
 
-func (b *ProtoDefBuilder) AddField(name string, typeName string) string {
+func (b *ProtoDefBuilder) AddField(name string, typeName string, comment string) string {
 	if b.done {
 		return ""
 	}
-	b.sb.WriteString(fmt.Sprintf("// Grouped from %s\n", name))
+	cls := strings.Split(comment, "\n")
+	for _, cl := range cls {
+		b.sb.WriteString(fmt.Sprintf("// %s\n", cl))
+	}
 	ffn := b.formatFieldName(name)
 	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldId))
 	b.curFieldId++
