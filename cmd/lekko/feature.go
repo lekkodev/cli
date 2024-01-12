@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path"
@@ -324,6 +325,11 @@ func configGroup() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Don't output for compilations
+			// Downside: for unhappy path, compile errors will be less obvious
+			r.ConfigureLogger(&repo.LoggingConfiguration{
+				Writer: io.Discard,
+			})
 			ctx := cmd.Context()
 			// Take namespace input if necessary
 			if ns == "" {
