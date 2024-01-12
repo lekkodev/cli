@@ -907,17 +907,17 @@ func SuggestGroupedNames(configs ...*Feature) []string {
 
 // Builder for a protobuf message definition string
 type ProtoDefBuilder struct {
-	sb         *strings.Builder
-	curFieldId int
-	done       bool
+	sb             *strings.Builder
+	curFieldNumber int
+	done           bool
 }
 
 func NewProtoDefBuilder(name string) *ProtoDefBuilder {
 	sb := &strings.Builder{}
 	sb.WriteString(fmt.Sprintf("message %s {\n", name))
 	return &ProtoDefBuilder{
-		sb:         sb,
-		curFieldId: 1,
+		sb:             sb,
+		curFieldNumber: 1,
 	}
 }
 
@@ -947,8 +947,8 @@ func (b *ProtoDefBuilder) AddField(name string, typeName string, comment string)
 		b.sb.WriteString(fmt.Sprintf("// %s\n", cl))
 	}
 	ffn := b.formatFieldName(name)
-	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldId))
-	b.curFieldId++
+	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldNumber))
+	b.curFieldNumber++
 	return ffn
 }
 

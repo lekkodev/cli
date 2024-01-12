@@ -451,7 +451,9 @@ func configGroup() *cobra.Command {
 				}
 				defer pf.Close()
 				// Write proto file preamble
-				pf.WriteString(fmt.Sprintf("syntax = \"proto3\";\n\npackage %s;\n\n", protoPkg))
+				if _, err := pf.WriteString(fmt.Sprintf("syntax = \"proto3\";\n\npackage %s;\n\n", protoPkg)); err != nil {
+					return errors.Wrap(err, "write preamble to destination proto file")
+				}
 			}
 			pf, err := os.OpenFile(protoPath, os.O_APPEND|os.O_WRONLY, 0644)
 			if err != nil {
