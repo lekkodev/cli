@@ -428,7 +428,6 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 	nsContextTypes := make(map[string]protoreflect.MessageType)
 	for ns, nsMd := range nsMDs {
 		if nsMd.ContextProto != "" {
-			r.Logf("%s: %s\n", ns, nsMd.ContextProto)
 			ct, err := registry.FindMessageByName(protoreflect.FullName(nsMd.ContextProto))
 			if err != nil {
 				return nil, err
@@ -442,7 +441,7 @@ func (r *repository) Compile(ctx context.Context, req *CompileRequest) ([]*Featu
 					"double",
 					"string":
 				default:
-					return nil, errors.New("Invalid context type thingy make this better")
+					return nil, errors.Errorf("proto message cannot be used as a context message because type: %v of key: %s is not allowed", f.Kind(), f.Name())
 				}
 			}
 			nsContextTypes[ns] = ct
