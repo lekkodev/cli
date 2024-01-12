@@ -25,6 +25,7 @@ import (
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/go-sdk/pkg/eval"
@@ -879,4 +880,60 @@ func toStarlarkValue(obj interface{}) (starlark.Value, error) {
 		}
 	}
 	return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
+}
+
+// Builder for a protobuf message definition string
+type ProtoDefBuilder struct {
+	sb         *strings.Builder
+	curFieldId int
+	done       bool
+}
+
+func NewProtoDefBuilder(name string) *ProtoDefBuilder {
+	sb := &strings.Builder{}
+	sb.WriteString(fmt.Sprintf("message %s {\n", name))
+	return &ProtoDefBuilder{
+		sb:         sb,
+		curFieldId: 1,
+	}
+}
+
+// Convert config type to applicable proto type name
+// Returns error if type is not supported
+func (b *ProtoDefBuilder) ToProtoTypeName(ct eval.ConfigType) (string, error) {
+	switch ct {
+	case eval.ConfigTypeBool:
+		return "bool", nil
+	case eval.ConfigTypeInt:
+		return "int64", nil
+	case eval.ConfigTypeFloat:
+		return "double", nil
+	case eval.ConfigTypeString:
+		return "string", nil
+	default:
+		return "", errors.Errorf("unsupported config type %v for proto def builder", ct)
+	}
+}
+
+func (b *ProtoDefBuilder) AddField(name string, typeName string) string {
+	if b.done {
+		return ""
+	}
+	b.sb.WriteString(fmt.Sprintf("// Grouped from %s\n", name))
+	ffn := b.formatFieldName(name)
+	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldId))
+	b.curFieldId++
+	return ffn
+}
+
+// TODO: Need to handle error cases such as language-reserved keywords
+func (b *ProtoDefBuilder) formatFieldName(name string) string {
+	return strcase.ToSnake(name)
+}
+
+func (b *ProtoDefBuilder) Build() string {
+	if !b.done {
+		b.sb.WriteString("}\n\n")
+	}
+	return b.sb.String()
 }
