@@ -22,7 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"slices"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -358,7 +358,7 @@ func configGroup() *cobra.Command {
 				for _, nsf := range allNsfs {
 					options = append(options, nsf.featureName)
 				}
-				slices.Sort(options)
+				sort.Strings(options)
 				// NOTE: Currently this doesn't respect selection order
 				// so if someone wants a specific order they have to pass the flag explicitly
 				if err := survey.AskOne(&survey.MultiSelect{
