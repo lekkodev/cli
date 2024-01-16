@@ -26,12 +26,12 @@ import (
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	strcase "github.com/stoewer/go-strcase"
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -426,7 +426,7 @@ func translateRule(rule *rulesv1beta3.Rule) string {
 	case *rulesv1beta3.Rule_Atom:
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			return fmt.Sprintf("ctx.%s == %s", strcase.UpperCamelCase(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("ctx.%s == %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			sliceType := "string"
 			switch v.Atom.ComparisonValue.GetListValue().GetValues()[0].GetKind().(type) {
@@ -443,7 +443,7 @@ func translateRule(rule *rulesv1beta3.Rule) string {
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
 				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
 			}
-			return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.UpperCamelCase(v.Atom.ContextKey))
+			return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.ToCamel(v.Atom.ContextKey))
 			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
@@ -481,7 +481,7 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 			valueStr = fmt.Sprintf(`"%s"`, val)
 		}
 
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.UpperCamelCase(f.TextName()), valueStr))
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
 		return true
 	})
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
