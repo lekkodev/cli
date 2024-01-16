@@ -16,7 +16,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,7 +35,12 @@ import (
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
+
+var typeRegistry *protoregistry.Types
 
 func genGoCmd() *cobra.Command {
 	var ns string
@@ -61,8 +65,9 @@ func genGoCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
-			_, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
-
+			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
+			// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
+			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
 			staticCtxType := unpackProtoType(moduleRoot, nsMDs[ns].ContextProto)
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
@@ -113,6 +118,7 @@ import (
 {{range  $.ProtoImports}}
 	{{ . }}{{end}}
 	"context"
+	"golang.org/x/exp/slices"
 	client "github.com/lekkodev/go-sdk/client"
 )
 
@@ -162,7 +168,8 @@ var StaticConfig = map[string]map[string][]byte{
 {{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
 }
 {{range  $.CodeStrings}}
-{{ . }}{{end}}`
+{{ . }}
+{{end}}`
 
 			// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
 			//
@@ -226,10 +233,8 @@ func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error)
 }
 
 // {{$.Description}}
-{{if $.NaturalLanguage}}func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
+func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
-{{end}}{{else}}func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 {{end}}}`
 
 	const protoTemplateBody = `// {{$.Description}}
@@ -272,30 +277,30 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		StaticContextType string
 	}
 	var staticContextInfo *StaticContextInfo
+	if staticCtxType != nil {
+		staticContextInfo = &StaticContextInfo{
+			Natty:             translateFeature(f),
+			StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
+		}
+	}
 
 	switch f.Type {
-	case 1:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		retType = "bool"
 		getFunction = "GetBool"
-	case 2:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
 		retType = "int64"
 		getFunction = "GetInt"
-	case 3:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
 		retType = "float64"
 		getFunction = "GetFloat"
-	case 4:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
 		retType = "string"
 		getFunction = "GetString"
-		if staticCtxType != nil {
-			staticContextInfo = &StaticContextInfo{
-				Natty:             translateFeature(f),
-				StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
-			}
-		}
-	case 5:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
-	case 6:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
 		templateBody = protoTemplateBody
 		// we don't need the import path so sending in empty string
@@ -343,8 +348,8 @@ type protoImport struct {
 }
 
 // This function handles both the google.protobuf.Any.TypeURL variable
-// which has the format of `types.googleapis.com/fully.qualified.Proto`
-// and purely `fully.qualified.Proto`
+// which has the format of `types.googleapis.com/fully.qualified.v1beta1.Proto`
+// and purely `fully.qualified.v1beta1.Proto`
 //
 // return nil if typeURL is empty. Panics on any problems like the rest of the file.
 func unpackProtoType(moduleRoot string, typeURL string) *protoImport {
@@ -389,13 +394,12 @@ func translateFeature(f *featurev1beta1.Feature) []string {
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", try.To1(protojson.Marshal(try.To1(constraint.Value.UnmarshalNew())))))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValue(constraint.Value)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", try.To1(protojson.Marshal(try.To1(f.Tree.Default.UnmarshalNew())))))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValue(f.GetTree().GetDefault())))
 	return buffer
 }
 
@@ -407,16 +411,52 @@ func translateRule(rule *rulesv1beta3.Rule) string {
 	case *rulesv1beta3.Rule_Atom:
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			b, err := json.Marshal(v.Atom.ComparisonValue)
-			if err != nil {
-				panic(err)
-			}
-			return fmt.Sprintf("ctx.%s == %s", strcase.UpperCamelCase(v.Atom.ContextKey), string(b))
+			return fmt.Sprintf("ctx.%s == %s", strcase.UpperCamelCase(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
+			sliceType := "string"
+			switch v.Atom.ComparisonValue.GetListValue().GetValues()[0].GetKind().(type) {
+			case *structpb.Value_NumberValue:
+				// technically doubles may not work for ints....
+				sliceType = "float64"
+			case *structpb.Value_BoolValue:
+				sliceType = "bool"
+			case *structpb.Value_StringValue:
+				// technically doubles may not work for ints....
+				sliceType = "string"
+			}
+			var elements []string
+			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
+				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
+			}
+			return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.UpperCamelCase(v.Atom.ContextKey))
 			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
-		// TODO do some ands and ors
+		operator := " && "
+		switch v.LogicalExpression.GetLogicalOperator() {
+		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR:
+			operator = " || "
+		}
+		var result []string
+		for _, rule := range v.LogicalExpression.Rules {
+			// worry about inner parens later
+			result = append(result, translateRule(rule))
+		}
+		return strings.Join(result, operator)
 	}
+
 	return ""
+}
+
+func translateRetValue(val *anypb.Any) string {
+	// protos
+	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
+	if err != nil {
+		panic(err)
+	}
+	res, err := protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+	return string(res)
 }
