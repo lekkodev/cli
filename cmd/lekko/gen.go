@@ -35,6 +35,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -239,18 +240,16 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
 
 	const protoTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
-	result := &{{$.RetType}}{}
-	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	return result, err
+       result := &{{$.RetType}}{}
+       err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
+       return result, err
 }
 
 // {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) *{{$.RetType}} {
-	result := &{{$.RetType}}{}
-	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	return result
-}
-`
+func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) *{{$.RetType}} {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}}`
+
 	const jsonTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) error {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
@@ -295,6 +294,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
+		templateBody = protoTemplateBody
 		getFunction = "GetProto"
 		//templateBody = protoTemplateBody
 		// we don't need the import path so sending in empty string
@@ -459,5 +459,11 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 	if protoType == nil {
 		return string(try.To1(protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)))
 	}
-	return fmt.Sprintf("&%s.%s{}", protoType.PackageAlias, protoType.Type)
+	// todo multiline formatting
+	var lines []string
+	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.UpperCamelCase(f.TextName()), val.String()))
+		return true
+	})
+	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
 }
