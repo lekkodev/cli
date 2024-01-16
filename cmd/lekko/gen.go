@@ -46,6 +46,10 @@ var typeRegistry *protoregistry.Types
 const StaticBytes = false
 const UnSafeClient = false
 
+// Natural language codegen is in super alpha, only handles a subset
+// of what is available, namely only supports protos that are one level
+// deep with non-repeated primitives, a subset of ruleslang (== and in ops)
+// Also doesn't support external types.
 func genGoCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -115,14 +119,18 @@ func genGoCmd() *cobra.Command {
 					protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
 				}
 			}
+			// TODOs for the template:
+			// proper handling of gofmt for imports, importing slices
+			// depending on the go version.
 			const templateBody = `package lekko{{$.Namespace}}
 
 import (
+	"context"
+
 {{range  $.ProtoImports}}
 	{{ . }}{{end}}
-	"context"
-	"golang.org/x/exp/slices"
 	client "github.com/lekkodev/go-sdk/client"
+	"golang.org/x/exp/slices"
 )
 
 type LekkoClient struct {
@@ -245,9 +253,9 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
 	const protoTemplateBody = `{{if $.UnSafeClient}}
 // {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
-       result := &{{$.RetType}}{}
-       err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-       return result, err
+	result := &{{$.RetType}}{}
+	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
+	return result, err
 }
 {{end}}
 // {{$.Description}}
