@@ -43,6 +43,9 @@ import (
 
 var typeRegistry *protoregistry.Types
 
+const StaticBytes = false
+const UnSafeClient = false
+
 func genGoCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -92,26 +95,25 @@ func genGoCmd() *cobra.Command {
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
 				}
-				codeString, err := genGoForFeature(f, ns, staticCtxType)
-				if err != nil {
-					return err
-				}
+				codeString := try.To1(genGoForFeature(f, ns, staticCtxType))
+				codeStrings = append(codeStrings, codeString)
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 					protoImport := unpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
 					protoImportSet[protoImport.ImportPath] = protoImport
 				}
-				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
-				for idx, b := range fff {
-					if idx%16 == 0 {
-						protoAsBytes += "\n\t\t\t"
-					} else {
-						protoAsBytes += " "
+				if StaticBytes {
+					protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
+					for idx, b := range fff {
+						if idx%16 == 0 {
+							protoAsBytes += "\n\t\t\t"
+						} else {
+							protoAsBytes += " "
+						}
+						protoAsBytes += fmt.Sprintf("0x%02x,", b)
 					}
-					protoAsBytes += fmt.Sprintf("0x%02x,", b)
+					protoAsBytes += "\n\t\t},\n"
+					protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
 				}
-				protoAsBytes += "\n\t\t},\n"
-				protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
-				codeStrings = append(codeStrings, codeString)
 			}
 			const templateBody = `package lekko{{$.Namespace}}
 
@@ -164,11 +166,11 @@ func (c *SafeLekkoClient) GetInt(ctx context.Context, namespace string, key stri
 	return res
 }
 
+{{if $.StaticConfig}}
 var StaticConfig = map[string]map[string][]byte{
 	"{{$.Namespace}}": {
 {{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
-}
-{{range  $.CodeStrings}}
+}{{end}}{{range  $.CodeStrings}}
 {{ . }}{{end}}`
 
 			// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
@@ -205,11 +207,13 @@ var StaticConfig = map[string]map[string][]byte{
 				Namespace          string
 				ProtoAsByteStrings []string
 				CodeStrings        []string
+				StaticConfig       bool
 			}{
 				protoImports,
 				ns,
 				protoAsByteStrings,
 				codeStrings,
+				StaticBytes,
 			}
 			templ := template.Must(template.New("").Parse(templateBody))
 			return templ.Execute(f, data)
@@ -227,23 +231,25 @@ var genCmd = &cobra.Command{
 }
 
 func genGoForFeature(f *featurev1beta1.Feature, ns string, staticCtxType *protoImport) (string, error) {
-	const defaultTemplateBody = `// {{$.Description}}
+	const defaultTemplateBody = `{{if $.UnSafeClient}}
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 }
-
+{{end}}
 // {{$.Description}}
 func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
 
-	const protoTemplateBody = `// {{$.Description}}
+	const protoTemplateBody = `{{if $.UnSafeClient}}
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
        result := &{{$.RetType}}{}
        err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
        return result, err
 }
-
+{{end}}
 // {{$.Description}}
 func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) *{{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
@@ -317,6 +323,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		Key             string
 		NaturalLanguage []string
 		StaticType      string
+		UnSafeClient    bool
 	}{
 		f.Description,
 		funcName,
@@ -326,6 +333,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		f.Key,
 		[]string{},
 		"",
+		UnSafeClient,
 	}
 	if staticContextInfo != nil {
 		data.NaturalLanguage = staticContextInfo.Natty
@@ -460,7 +468,12 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 	// todo multiline formatting
 	var lines []string
 	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.UpperCamelCase(f.TextName()), val.String()))
+		valueStr := val.String()
+		if val, ok := val.Interface().(string); ok {
+			valueStr = fmt.Sprintf(`"%s"`, val)
+		}
+
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.UpperCamelCase(f.TextName()), valueStr))
 		return true
 	})
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
