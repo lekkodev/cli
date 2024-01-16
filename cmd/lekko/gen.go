@@ -169,8 +169,7 @@ var StaticConfig = map[string]map[string][]byte{
 {{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
 }
 {{range  $.CodeStrings}}
-{{ . }}
-{{end}}`
+{{ . }}{{end}}`
 
 			// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
 			//
@@ -296,7 +295,6 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		templateBody = protoTemplateBody
 		getFunction = "GetProto"
-		//templateBody = protoTemplateBody
 		// we don't need the import path so sending in empty string
 		protoType = unpackProtoType("", f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
