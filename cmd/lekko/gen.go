@@ -277,13 +277,7 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		StaticContextType string
 	}
 	var staticContextInfo *StaticContextInfo
-	if staticCtxType != nil {
-		staticContextInfo = &StaticContextInfo{
-			Natty:             translateFeature(f),
-			StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
-		}
-	}
-
+	var protoType *protoImport
 	switch f.Type {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		retType = "bool"
@@ -302,11 +296,18 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		templateBody = jsonTemplateBody
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
-		templateBody = protoTemplateBody
+		//templateBody = protoTemplateBody
 		// we don't need the import path so sending in empty string
-		protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
+		protoType = unpackProtoType("", f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
 		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
+	}
+
+	if staticCtxType != nil {
+		staticContextInfo = &StaticContextInfo{
+			Natty:             translateFeature(f, protoType),
+			StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
+		}
 	}
 
 	data := struct {
@@ -383,7 +384,7 @@ func unpackProtoType(moduleRoot string, typeURL string) *protoImport {
 	return &protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
 }
 
-func translateFeature(f *featurev1beta1.Feature) []string {
+func translateFeature(f *featurev1beta1.Feature, protoType *protoImport) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
@@ -394,12 +395,12 @@ func translateFeature(f *featurev1beta1.Feature) []string {
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValue(constraint.Value)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValue(constraint.Value, protoType)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValue(f.GetTree().GetDefault())))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValue(f.GetTree().GetDefault(), protoType)))
 	return buffer
 }
 
@@ -448,15 +449,15 @@ func translateRule(rule *rulesv1beta3.Rule) string {
 	return ""
 }
 
-func translateRetValue(val *anypb.Any) string {
+func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 	if err != nil {
 		panic(err)
 	}
-	res, err := protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)
-	if err != nil {
-		panic(err)
+
+	if protoType == nil {
+		return string(try.To1(protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)))
 	}
-	return string(res)
+	return fmt.Sprintf("&%s.%s{}", protoType.PackageAlias, protoType.Type)
 }
