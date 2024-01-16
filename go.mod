@@ -7,11 +7,13 @@ require (
 	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.31.0-20231020162356-e763402ec965.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
+	github.com/briandowns/spinner v1.23.0
 	github.com/bufbuild/connect-go v1.10.0
 	github.com/cli/browser v1.0.0
 	github.com/go-git/go-billy/v5 v5.4.1
 	github.com/go-git/go-git/v5 v5.8.0
 	github.com/google/go-github/v52 v52.0.0
+	github.com/iancoleman/strcase v0.3.0
 	github.com/lekkodev/go-sdk v0.2.6-0.20230830172236-f072eb8bf64e
 	github.com/lekkodev/rules v1.5.3-0.20230724195144-d0ed93c3e218
 	github.com/migueleliasweb/go-github-mock v0.0.16
@@ -41,6 +43,7 @@ require (
 	github.com/cloudflare/circl v1.3.3 // indirect
 	github.com/emicklei/go-restful/v3 v3.8.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
+	github.com/fatih/color v1.7.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-openapi/jsonpointer v0.19.5 // indirect

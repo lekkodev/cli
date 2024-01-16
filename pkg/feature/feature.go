@@ -22,9 +22,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"time"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/go-sdk/pkg/eval"
@@ -879,4 +881,85 @@ func toStarlarkValue(obj interface{}) (starlark.Value, error) {
 		}
 	}
 	return nil, fmt.Errorf("%s (%v) is not a supported type", rt.Kind(), obj)
+}
+
+// Automagically suggest names for a grouped config based on the inputs
+// Should return options from highest to lowest confidence
+// Lowest confidence item will be a simple concatenation of names
+// TODO: take options like max len, call an API endpoint, etc.
+func SuggestGroupedNames(configs ...*Feature) []string {
+	var names []string
+	for _, c := range configs {
+		names = append(names, strcase.ToKebab(c.Key))
+	}
+	var suggestions []string
+	// Really complicated AI magic goes here (a.k.a. hardcoded fake demo entries)
+	time.Sleep(2 * time.Second)
+	suggestions = append(suggestions, "memcache-config")
+	suggestions = append(suggestions, "connection-options")
+	suggestions = append(suggestions, "network-config")
+	suggestions = append(suggestions, "grouped-conn-config")
+
+	suggestions = append(suggestions, strings.Join(names, "-"))
+
+	return suggestions
+}
+
+// Builder for a protobuf message definition string
+type ProtoDefBuilder struct {
+	sb             *strings.Builder
+	curFieldNumber int
+	done           bool
+}
+
+func NewProtoDefBuilder(name string) *ProtoDefBuilder {
+	sb := &strings.Builder{}
+	sb.WriteString(fmt.Sprintf("message %s {\n", name))
+	return &ProtoDefBuilder{
+		sb:             sb,
+		curFieldNumber: 1,
+	}
+}
+
+// Convert config type to applicable proto type name
+// Returns error if type is not supported
+func (b *ProtoDefBuilder) ToProtoTypeName(ct eval.ConfigType) (string, error) {
+	switch ct {
+	case eval.ConfigTypeBool:
+		return "bool", nil
+	case eval.ConfigTypeInt:
+		return "int64", nil
+	case eval.ConfigTypeFloat:
+		return "double", nil
+	case eval.ConfigTypeString:
+		return "string", nil
+	default:
+		return "", errors.Errorf("unsupported config type %v for proto def builder", ct)
+	}
+}
+
+func (b *ProtoDefBuilder) AddField(name string, typeName string, comment string) string {
+	if b.done {
+		return ""
+	}
+	cls := strings.Split(comment, "\n")
+	for _, cl := range cls {
+		b.sb.WriteString(fmt.Sprintf("// %s\n", cl))
+	}
+	ffn := b.formatFieldName(name)
+	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldNumber))
+	b.curFieldNumber++
+	return ffn
+}
+
+// TODO: Need to handle error cases such as language-reserved keywords
+func (b *ProtoDefBuilder) formatFieldName(name string) string {
+	return strcase.ToSnake(name)
+}
+
+func (b *ProtoDefBuilder) Build() string {
+	if !b.done {
+		b.sb.WriteString("}\n\n")
+	}
+	return b.sb.String()
 }

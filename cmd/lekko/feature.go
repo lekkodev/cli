@@ -18,19 +18,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path"
+	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/briandowns/spinner"
+	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
+	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -45,6 +55,7 @@ func featureCmd() *cobra.Command {
 		featureAdd(),
 		featureRemove(),
 		featureEval(),
+		configGroup(),
 	)
 	return cmd
 }
@@ -296,6 +307,257 @@ func featureEval() *cobra.Command {
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to evaluate")
 	cmd.Flags().StringVarP(&jsonContext, "context", "t", "", "context to evaluate with in json format")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
+	return cmd
+}
+
+func configGroup() *cobra.Command {
+	var ns, protoPkg, outName, description string
+	var configNames []string
+	cmd := &cobra.Command{
+		Use:   "group",
+		Short: "group multiple configs into 1 config",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			if err != nil {
+				return err
+			}
+			// Don't output for compilations
+			// Downside: for unhappy path, compile errors will be less obvious
+			r.ConfigureLogger(&repo.LoggingConfiguration{
+				Writer: io.Discard,
+			})
+			ctx := cmd.Context()
+			// Take namespace input if necessary
+			if ns == "" {
+				nss, err := r.ListNamespaces(ctx)
+				if err != nil {
+					return errors.Wrap(err, "list namespaces")
+				}
+				var options []string
+				for _, ns := range nss {
+					options = append(options, ns.Name)
+				}
+				if err := survey.AskOne(&survey.Select{
+					Message: "Namespace:",
+					Options: options,
+				}, &ns); err != nil {
+					return errors.Wrap(err, "prompt for namespace")
+				}
+			}
+			allNsfs, err := getNamespaceFeatures(ctx, r, ns, "")
+			if err != nil {
+				return err
+			}
+			// Take configs input if necessary
+			if len(configNames) == 0 {
+				var options []string
+				for _, nsf := range allNsfs {
+					options = append(options, nsf.featureName)
+				}
+				sort.Strings(options)
+				// NOTE: Currently this doesn't respect selection order
+				// so if someone wants a specific order they have to pass the flag explicitly
+				if err := survey.AskOne(&survey.MultiSelect{
+					Message: "Configs to group:",
+					Options: options,
+				}, &configNames, survey.WithValidator(survey.MinItems(2))); err != nil {
+					return errors.Wrap(err, "prompt for configs")
+				}
+			}
+			if len(configNames) < 2 {
+				return errors.New("at least 2 configs must be specified for grouping")
+			}
+			cMap := make(map[string]struct{})
+			for _, nsf := range allNsfs {
+				cMap[nsf.featureName] = struct{}{}
+			}
+			// Check all specified configs exist
+			for _, c := range configNames {
+				if _, ok := cMap[c]; !ok {
+					return errors.Errorf("config %s/%s not found", ns, c)
+				}
+			}
+			// Compile to check for healthy state and get compiled objects (for type info)
+			rootMD, nsMDs, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return errors.Wrap(err, "parse metadata")
+			}
+			// Can't support grouping if using external proto types
+			if rootMD.UseExternalTypes {
+				return errors.New("grouping is not supported with external protobuf types")
+			}
+			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			compileResults, err := r.Compile(ctx, &repo.CompileRequest{
+				Registry:        registry,
+				NamespaceFilter: ns,
+			})
+			if err != nil {
+				return errors.Wrap(err, "pre-group compile")
+			}
+			var compiledList []*feature.Feature
+			compiledMap := make(map[string]*feature.Feature)
+			for _, res := range compileResults {
+				compiledMap[res.FeatureName] = res.CompiledFeature.Feature
+			}
+			for _, c := range configNames {
+				compiledList = append(compiledList, compiledMap[c])
+			}
+			// Prompt for grouped name if necessary, using suggestion engine
+			if outName == "" {
+				// tab for suggestions?
+				if err := survey.AskOne(&survey.Input{
+					Message: "Grouped config name:",
+					Suggest: func(_ string) []string {
+						s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+						s.Suffix = " Generating AI suggestions..."
+						s.Start()
+						suggestions := feature.SuggestGroupedNames(compiledList...)
+						s.Stop()
+						return suggestions
+					},
+				}, &outName); err != nil {
+					return errors.Wrap(err, "prompt for grouped name")
+				}
+			}
+			// Generate new proto message def string based on config types
+			// TODO: handle name collisions
+			protoMsgName := strcase.ToCamel(outName)
+			pdf := feature.NewProtoDefBuilder(protoMsgName)
+			protoFieldNames := make([]string, len(configNames))
+			for i, c := range configNames {
+				pt, err := pdf.ToProtoTypeName(compiledMap[c].FeatureType)
+				if err != nil {
+					return err
+				}
+				// Use original description as comment in generated proto
+				protoFieldNames[i] = pdf.AddField(c, pt, compiledMap[c].Description)
+			}
+			// Update proto file
+			protoPath := path.Join(rootMD.ProtoDirectory, strings.ReplaceAll(protoPkg, ".", "/"), "gen.proto")
+			if _, err := os.Stat(protoPath); errors.Is(err, os.ErrNotExist) {
+				if err := os.MkdirAll(path.Dir(protoPath), 0775); err != nil {
+					return errors.Wrap(err, "create destination proto file")
+				}
+				pf, err := os.Create(protoPath)
+				if err != nil {
+					return errors.Wrap(err, "create destination proto file")
+				}
+				defer pf.Close()
+				// Write proto file preamble
+				if _, err := pf.WriteString(fmt.Sprintf("syntax = \"proto3\";\n\npackage %s;\n\n", protoPkg)); err != nil {
+					return errors.Wrap(err, "write preamble to destination proto file")
+				}
+			}
+			pf, err := os.OpenFile(protoPath, os.O_APPEND|os.O_WRONLY, 0644)
+			if err != nil {
+				return errors.Wrap(err, "open destination proto file for write")
+			}
+			defer pf.Close()
+			if _, err := pf.WriteString(pdf.Build()); err != nil {
+				return errors.Wrap(err, "write to destination proto file")
+			}
+			// Format & rebuild registry for new type
+			formatCmd := exec.Command("buf", "format", protoPath, "-w")
+			if err := formatCmd.Run(); err != nil {
+				return errors.Wrap(err, "buf format")
+			}
+			registry, err = r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
+			if err != nil {
+				return errors.Wrap(err, "rebuild type registry")
+			}
+			// Create new config using generated proto type
+			protoFullName := strings.Join([]string{protoPkg, protoMsgName}, ".")
+			_, err = r.AddFeature(ctx, ns, outName, eval.ConfigTypeProto, protoFullName)
+			if err != nil {
+				return errors.Wrap(err, "add new config")
+			}
+			compileResults, err = r.Compile(ctx, &repo.CompileRequest{
+				Registry:        registry,
+				NamespaceFilter: ns,
+				FeatureFilter:   outName,
+			})
+			if err != nil {
+				return errors.Wrap(err, "add and compile new config")
+			}
+			newF := compileResults[0].CompiledFeature.Feature
+			// Update default value based on original configs' default values
+			// TODO: Handle overrides, handling precedence based on arg order
+			mt, err := registry.FindMessageByName(protoreflect.FullName(protoFullName))
+			if err != nil {
+				return errors.Wrap(err, "find message")
+			}
+			defaultValue := mt.New()
+			for i, c := range configNames {
+				orig := compiledMap[c]
+				defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(orig.Value))
+			}
+			newF.Value = defaultValue
+			sf, err := r.Parse(ctx, ns, outName, registry)
+			if err != nil {
+				return errors.Wrap(err, "parse generated config")
+			}
+			newFProto, err := newF.ToProto()
+			if err != nil {
+				return errors.Wrap(err, "convert before mutation")
+			}
+			newFF, err := r.GetFeatureFile(ctx, ns, outName)
+			if err != nil {
+				return errors.Wrap(err, "get new config file")
+			}
+			newFBytes, err := os.ReadFile(path.Join(ns, newFF.StarlarkFileName))
+			if err != nil {
+				return errors.Wrap(err, "read new config starlark")
+			}
+			// TODO: description suggestion
+			if description == "" {
+				description = fmt.Sprintf("Grouped from %s", strings.Join(configNames, ", "))
+			}
+			newFProto.Description = description
+			newFBytes, err = static.NewWalker(newFF.StarlarkFileName, newFBytes, registry, feature.NamespaceVersion(nsMDs[ns].Version)).Mutate(&featurev1beta1.StaticFeature{
+				Key:  newFProto.Key,
+				Type: newFProto.Type,
+				Feature: &featurev1beta1.FeatureStruct{
+					Description: newFProto.Description,
+				},
+				FeatureOld: newFProto,
+				Imports:    sf.Imports,
+			})
+			if err != nil {
+				return errors.Wrap(err, "mutate new config")
+			}
+			if err := r.WriteFile(path.Join(ns, newFF.StarlarkFileName), newFBytes, 0600); err != nil {
+				return errors.Wrap(err, "write after mutation")
+			}
+			// Remove old configs
+			for _, c := range configNames {
+				if err := r.RemoveFeature(ctx, ns, c); err != nil {
+					return errors.Wrapf(err, "remove config %s/%s", ns, c)
+				}
+			}
+			// Final compile
+			_, err = r.Compile(ctx, &repo.CompileRequest{
+				Registry:        registry,
+				NamespaceFilter: ns,
+			})
+			if err != nil {
+				return errors.Wrap(err, "compile after mutation")
+			}
+			return nil
+		},
+	}
+	// This might not be the cleanest CLI design, but not sure how to do it cleaner
+	cmd.Flags().StringVarP(&outName, "out", "o", "", "name of grouped config")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace of configs to group together")
+	cmd.Flags().StringSliceVarP(&configNames, "configs", "c", []string{}, "comma-separated names of configs to group together")
+	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
 	return cmd
 }
 
