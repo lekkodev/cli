@@ -25,14 +25,31 @@ import (
 	"text/template"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/iancoleman/strcase"
+	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
+var typeRegistry *protoregistry.Types
+
+const StaticBytes = false
+const UnSafeClient = false
+
+// Natural language codegen is in super alpha, only handles a subset
+// of what is available, namely only supports protos that are one level
+// deep with non-repeated primitives, a subset of ruleslang (== and in ops)
+// Also doesn't support external types.
 func genGoCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -56,6 +73,10 @@ func genGoCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
+			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
+			// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
+			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
+			staticCtxType := unpackProtoType(moduleRoot, nsMDs[ns].ContextProto)
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
 				return err
@@ -66,6 +87,9 @@ func genGoCmd() *cobra.Command {
 			var protoAsByteStrings []string
 			var codeStrings []string
 			protoImportSet := make(map[string]*protoImport)
+			if staticCtxType != nil {
+				protoImportSet[staticCtxType.ImportPath] = staticCtxType
+			}
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
 				if err != nil {
@@ -75,34 +99,38 @@ func genGoCmd() *cobra.Command {
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
 				}
-				codeString, err := genGoForFeature(f, ns)
-				if err != nil {
-					return err
-				}
+				codeString := try.To1(genGoForFeature(f, ns, staticCtxType))
+				codeStrings = append(codeStrings, codeString)
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 					protoImport := unpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
-					protoImportSet[protoImport.ImportPath] = &protoImport
+					protoImportSet[protoImport.ImportPath] = protoImport
 				}
-				protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
-				for idx, b := range fff {
-					if idx%16 == 0 {
-						protoAsBytes += "\n\t\t\t"
-					} else {
-						protoAsBytes += " "
+				if StaticBytes {
+					protoAsBytes := fmt.Sprintf("\t\t\"%s\": []byte{", f.Key)
+					for idx, b := range fff {
+						if idx%16 == 0 {
+							protoAsBytes += "\n\t\t\t"
+						} else {
+							protoAsBytes += " "
+						}
+						protoAsBytes += fmt.Sprintf("0x%02x,", b)
 					}
-					protoAsBytes += fmt.Sprintf("0x%02x,", b)
+					protoAsBytes += "\n\t\t},\n"
+					protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
 				}
-				protoAsBytes += "\n\t\t},\n"
-				protoAsByteStrings = append(protoAsByteStrings, protoAsBytes)
-				codeStrings = append(codeStrings, codeString)
 			}
+			// TODOs for the template:
+			// proper handling of gofmt for imports, importing slices
+			// depending on the go version.
 			const templateBody = `package lekko{{$.Namespace}}
 
 import (
+	"context"
+
 {{range  $.ProtoImports}}
 	{{ . }}{{end}}
-	"context"
 	client "github.com/lekkodev/go-sdk/client"
+	"golang.org/x/exp/slices"
 )
 
 type LekkoClient struct {
@@ -146,11 +174,11 @@ func (c *SafeLekkoClient) GetInt(ctx context.Context, namespace string, key stri
 	return res
 }
 
+{{if $.StaticConfig}}
 var StaticConfig = map[string]map[string][]byte{
 	"{{$.Namespace}}": {
 {{range  $.ProtoAsByteStrings}}{{ . }}{{end}}	},
-}
-{{range  $.CodeStrings}}
+}{{end}}{{range  $.CodeStrings}}
 {{ . }}{{end}}`
 
 			// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
@@ -187,11 +215,13 @@ var StaticConfig = map[string]map[string][]byte{
 				Namespace          string
 				ProtoAsByteStrings []string
 				CodeStrings        []string
+				StaticConfig       bool
 			}{
 				protoImports,
 				ns,
 				protoAsByteStrings,
 				codeStrings,
+				StaticBytes,
 			}
 			templ := template.Must(template.New("").Parse(templateBody))
 			return templ.Execute(f, data)
@@ -208,32 +238,31 @@ var genCmd = &cobra.Command{
 	Short: "generate library code from configs",
 }
 
-func genGoForFeature(f *featurev1beta1.Feature, ns string) (string, error) {
-	const defaultTemplateBody = `// {{$.Description}}
+func genGoForFeature(f *featurev1beta1.Feature, ns string, staticCtxType *protoImport) (string, error) {
+	const defaultTemplateBody = `{{if $.UnSafeClient}}
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 }
-
+{{end}}
 // {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) {{$.RetType}} {
-	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
-}
-`
+func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}}`
 
-	const protoTemplateBody = `// {{$.Description}}
+	const protoTemplateBody = `{{if $.UnSafeClient}}
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) (*{{$.RetType}}, error) {
 	result := &{{$.RetType}}{}
 	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
 	return result, err
 }
-
+{{end}}
 // {{$.Description}}
-func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context) *{{$.RetType}} {
-	result := &{{$.RetType}}{}
-	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	return result
-}
-`
+func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) *{{$.RetType}} {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}}`
+
 	const jsonTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) error {
 	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
@@ -253,38 +282,56 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	var retType string
 	var getFunction string
 	templateBody := defaultTemplateBody
+
+	type StaticContextInfo struct {
+		// natural language lines
+		Natty             []string
+		StaticContextType string
+	}
+	var staticContextInfo *StaticContextInfo
+	var protoType *protoImport
 	switch f.Type {
-	case 1:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		retType = "bool"
 		getFunction = "GetBool"
-	case 2:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
 		retType = "int64"
 		getFunction = "GetInt"
-	case 3:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
 		retType = "float64"
 		getFunction = "GetFloat"
-	case 4:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
 		retType = "string"
 		getFunction = "GetString"
-	case 5:
+	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
-	case 6:
-		getFunction = "GetProto"
+	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		templateBody = protoTemplateBody
+		getFunction = "GetProto"
 		// we don't need the import path so sending in empty string
-		protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
+		protoType = unpackProtoType("", f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
 		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
 	}
 
+	if staticCtxType != nil {
+		staticContextInfo = &StaticContextInfo{
+			Natty:             translateFeature(f, protoType),
+			StaticContextType: fmt.Sprintf("%s.%s", staticCtxType.PackageAlias, staticCtxType.Type),
+		}
+	}
+
 	data := struct {
-		Description string
-		FuncName    string
-		GetFunction string
-		RetType     string
-		Namespace   string
-		Key         string
+		Description     string
+		FuncName        string
+		GetFunction     string
+		RetType         string
+		Namespace       string
+		Key             string
+		NaturalLanguage []string
+		StaticType      string
+		UnSafeClient    bool
 	}{
 		f.Description,
 		funcName,
@@ -292,6 +339,13 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		retType,
 		ns,
 		f.Key,
+		[]string{},
+		"",
+		UnSafeClient,
+	}
+	if staticContextInfo != nil {
+		data.NaturalLanguage = staticContextInfo.Natty
+		data.StaticType = staticContextInfo.StaticContextType
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -308,26 +362,127 @@ type protoImport struct {
 	Type         string
 }
 
-func unpackProtoType(moduleRoot string, typeURL string) protoImport {
-	anyURLSplit := strings.Split(typeURL, "/")
-	if anyURLSplit[0] != "type.googleapis.com" {
-		panic("invalid any type url: " + typeURL)
+// This function handles both the google.protobuf.Any.TypeURL variable
+// which has the format of `types.googleapis.com/fully.qualified.v1beta1.Proto`
+// and purely `fully.qualified.v1beta1.Proto`
+//
+// return nil if typeURL is empty. Panics on any problems like the rest of the file.
+func unpackProtoType(moduleRoot string, typeURL string) *protoImport {
+	if typeURL == "" {
+		return nil
 	}
+	anyURLSplit := strings.Split(typeURL, "/")
+	fqType := anyURLSplit[0]
+	if len(anyURLSplit) > 1 {
+		if anyURLSplit[0] != "type.googleapis.com" {
+			panic("invalid any type url: " + typeURL)
+		}
+		fqType = anyURLSplit[1]
+	}
+
 	// turn default.config.v1beta1.DBConfig into:
 	// moduleRoot/internal/lekko/proto/default/config/v1beta1
-	typeParts := strings.Split(anyURLSplit[1], ".")
+	typeParts := strings.Split(fqType, ".")
 
 	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
 
 	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
 
 	// TODO do google.protobuf.X
-	switch anyURLSplit[1] {
+	switch fqType {
 	case "google.protobuf.Duration":
 		importPath = "google.golang.org/protobuf/types/known/durationpb"
 		prefix = "durationpb"
 	default:
 	}
+	return &protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
+}
 
-	return protoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
+func translateFeature(f *featurev1beta1.Feature, protoType *protoImport) []string {
+	var buffer []string
+	for i, constraint := range f.Tree.Constraints {
+		ifToken := "} else if"
+		if i == 0 {
+			ifToken = "if"
+		}
+		rule := translateRule(constraint.GetRuleAstNew())
+		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
+
+		// TODO this doesn't work for proto, but let's try
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValue(constraint.Value, protoType)))
+	}
+	if len(f.Tree.Constraints) > 0 {
+		buffer = append(buffer, "\t}")
+	}
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValue(f.GetTree().GetDefault(), protoType)))
+	return buffer
+}
+
+func translateRule(rule *rulesv1beta3.Rule) string {
+	if rule == nil {
+		return ""
+	}
+	switch v := rule.GetRule().(type) {
+	case *rulesv1beta3.Rule_Atom:
+		switch v.Atom.GetComparisonOperator() {
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
+			return fmt.Sprintf("ctx.%s == %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
+			sliceType := "string"
+			switch v.Atom.ComparisonValue.GetListValue().GetValues()[0].GetKind().(type) {
+			case *structpb.Value_NumberValue:
+				// technically doubles may not work for ints....
+				sliceType = "float64"
+			case *structpb.Value_BoolValue:
+				sliceType = "bool"
+			case *structpb.Value_StringValue:
+				// technically doubles may not work for ints....
+				sliceType = "string"
+			}
+			var elements []string
+			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
+				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
+			}
+			return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.ToCamel(v.Atom.ContextKey))
+			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
+		}
+	case *rulesv1beta3.Rule_LogicalExpression:
+		operator := " && "
+		switch v.LogicalExpression.GetLogicalOperator() {
+		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR:
+			operator = " || "
+		}
+		var result []string
+		for _, rule := range v.LogicalExpression.Rules {
+			// worry about inner parens later
+			result = append(result, translateRule(rule))
+		}
+		return strings.Join(result, operator)
+	}
+
+	return ""
+}
+
+func translateRetValue(val *anypb.Any, protoType *protoImport) string {
+	// protos
+	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
+	if err != nil {
+		panic(err)
+	}
+
+	if protoType == nil {
+		return string(try.To1(protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)))
+	}
+	// todo multiline formatting
+	var lines []string
+	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		valueStr := val.String()
+		if val, ok := val.Interface().(string); ok {
+			valueStr = fmt.Sprintf(`"%s"`, val)
+		}
+
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
+		return true
+	})
+	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
 }
