@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -39,6 +40,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 var typeRegistry *protoregistry.Types
@@ -471,7 +473,16 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 	}
 
 	if protoType == nil {
-		return string(try.To1(protojson.MarshalOptions{Resolver: typeRegistry}.Marshal(msg)))
+		// TODO we may need more special casing here for primitive types.
+		// This feels like horrific syntax, but I needed this because
+		// Int64 was somehow serializing to "1" instead of 1, and typechecking
+		// doesn't seem to work since `UnmarshalNew` returns a `dynamicpb.Message` which doesn't work with go's type casing.
+		if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
+			var i64 wrapperspb.Int64Value
+			try.To(val.UnmarshalTo(&i64))
+			return strconv.FormatInt(i64.Value, 10)
+		}
+		return string(try.To1(protojson.Marshal(msg)))
 	}
 	// todo multiline formatting
 	var lines []string
