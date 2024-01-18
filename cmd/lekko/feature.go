@@ -340,6 +340,7 @@ func featureEval() *cobra.Command {
 func configGroup() *cobra.Command {
 	var ns, protoPkg, outName, description string
 	var configNames []string
+	var disableGenEnum bool
 	cmd := &cobra.Command{
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
@@ -436,6 +437,33 @@ func configGroup() *cobra.Command {
 			for _, c := range configNames {
 				compiledList = append(compiledList, compiledMap[c])
 			}
+			// For now, it's required to statically parse configs to get metadata info
+			// which we use to determine if a config is an enum config
+			// Keep map of (enum) config names to translated enum name and values
+			// We'll build up the values lookup map in a later stage
+			enumLookupMap := make(map[string]struct {
+				name   string
+				values map[string]string
+			})
+			for _, cn := range configNames {
+				sf, err := r.Parse(ctx, ns, cn, registry)
+				if err != nil {
+					return errors.Wrap(err, "pre-group static parsing")
+				}
+				c := compiledMap[cn]
+				if genEnum, ok := sf.Feature.Metadata.AsMap()["gen-enum"]; ok && c.FeatureType == eval.ConfigTypeString && !disableGenEnum {
+					if genEnumBool, ok := genEnum.(bool); ok && genEnumBool {
+						enumLookupMap[cn] = struct {
+							name   string
+							values map[string]string
+						}{
+							name:   strcase.ToCamel(cn),
+							values: make(map[string]string),
+						}
+					}
+				}
+			}
+
 			// Prompt for grouped name if necessary, using suggestion engine
 			if outName == "" {
 				// tab for suggestions?
@@ -458,13 +486,34 @@ func configGroup() *cobra.Command {
 			protoMsgName := strcase.ToCamel(outName)
 			pdf := feature.NewProtoDefBuilder(protoMsgName)
 			protoFieldNames := make([]string, len(configNames))
-			for i, c := range configNames {
-				pt, err := pdf.ToProtoTypeName(compiledMap[c].FeatureType)
+			for i, cn := range configNames {
+				c := compiledMap[cn]
+				// Handle "enum" string configs
+				if enumLookup, ok := enumLookupMap[cn]; ok {
+					pedf := feature.NewProtoEnumDefBuilder(enumLookup.name)
+					if defaultVal, ok := c.Value.(string); ok {
+						enumLookup.values[defaultVal] = pedf.AddValue(defaultVal)
+					}
+					for _, o := range c.Overrides {
+						if val, ok := o.Value.(string); ok {
+							// Check to prevent duplicate values
+							if _, ok := enumLookup.values[val]; !ok {
+								enumLookup.values[val] = pedf.AddValue(val)
+							}
+						}
+					}
+					enumDefStr := pedf.Build()
+					pdf.AddEnum(enumDefStr)
+					protoFieldNames[i] = pdf.AddField(cn, enumLookup.name, c.Description)
+					continue
+				}
+
+				pt, err := pdf.ToProtoTypeName(c.FeatureType)
 				if err != nil {
 					return err
 				}
 				// Use original description as comment in generated proto
-				protoFieldNames[i] = pdf.AddField(c, pt, compiledMap[c].Description)
+				protoFieldNames[i] = pdf.AddField(cn, pt, c.Description)
 			}
 			// Update proto file
 			protoPath := path.Join(rootMD.ProtoDirectory, strings.ReplaceAll(protoPkg, ".", "/"), "gen.proto")
@@ -521,8 +570,25 @@ func configGroup() *cobra.Command {
 				return errors.Wrap(err, "find message")
 			}
 			defaultValue := mt.New()
-			for i, c := range configNames {
-				orig := compiledMap[c]
+			for i, cn := range configNames {
+				orig := compiledMap[cn]
+				// If we converted to an enum, need to set the enum number value accordingly
+				if enumLookup, ok := enumLookupMap[cn]; ok {
+					if origVal, ok := orig.Value.(string); ok {
+						enumDescriptor := mt.Descriptor().Enums().ByName(protoreflect.Name(enumLookup.name))
+						if enumDescriptor == nil {
+							return errors.Errorf("missing enum descriptor for %s", enumLookup.name)
+						}
+						valueDescriptor := enumDescriptor.Values().ByName(protoreflect.Name(enumLookup.values[origVal]))
+						if valueDescriptor == nil {
+							return errors.Errorf("missing enum value for %s", enumLookup.values[origVal])
+						}
+						defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(valueDescriptor.Number()))
+						continue
+					} else {
+						return errors.New("unexpected non-string original value")
+					}
+				}
 				defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(orig.Value))
 			}
 			newF.Value = defaultValue
@@ -585,6 +651,7 @@ func configGroup() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&configNames, "configs", "c", []string{}, "comma-separated names of configs to group together")
 	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
+	cmd.Flags().BoolVar(&disableGenEnum, "disable-gen-enum", false, "whether to disable conversion of protobuf enums from string enum configs")
 	return cmd
 }
 

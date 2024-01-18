@@ -21,7 +21,10 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
+	"sort"
 	"strings"
+	"text/template"
 	"time"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -907,17 +910,44 @@ func SuggestGroupedNames(configs ...*Feature) []string {
 
 // Builder for a protobuf message definition string
 type ProtoDefBuilder struct {
-	sb             *strings.Builder
-	curFieldNumber int
-	done           bool
+	template string
+	data     struct {
+		Name   string
+		Enums  []string
+		Fields []struct {
+			Name    string
+			Type    string
+			Comment string
+		}
+	}
+	done bool
 }
 
 func NewProtoDefBuilder(name string) *ProtoDefBuilder {
+	// This template is not perfect - relies on post-formatting
+	template := `message {{$.Name}} {
+	{{range $.Enums}}{{.}}
+	{{end}}
+
+	{{range $index, $field := $.Fields}}{{- if eq $field.Comment ""}}{{- else }}
+	{{$field.Comment}}{{end}}{{$field.Type}} {{$field.Name}} = {{plusOne $index}};
+	{{end}}
+}`
 	sb := &strings.Builder{}
 	sb.WriteString(fmt.Sprintf("message %s {\n", name))
 	return &ProtoDefBuilder{
-		sb:             sb,
-		curFieldNumber: 1,
+		template: template,
+		data: struct {
+			Name   string
+			Enums  []string
+			Fields []struct {
+				Name    string
+				Type    string
+				Comment string
+			}
+		}{
+			Name: name,
+		},
 	}
 }
 
@@ -942,14 +972,29 @@ func (b *ProtoDefBuilder) AddField(name string, typeName string, comment string)
 	if b.done {
 		return ""
 	}
+	field := struct {
+		Name    string
+		Type    string
+		Comment string
+	}{
+		Name: b.formatFieldName(name),
+		Type: typeName,
+	}
 	cls := strings.Split(comment, "\n")
 	for _, cl := range cls {
-		b.sb.WriteString(fmt.Sprintf("// %s\n", cl))
+		field.Comment += fmt.Sprintf("// %s\n", cl)
 	}
-	ffn := b.formatFieldName(name)
-	b.sb.WriteString(fmt.Sprintf("%s %s = %d;\n", typeName, ffn, b.curFieldNumber))
-	b.curFieldNumber++
-	return ffn
+	b.data.Fields = append(b.data.Fields, field)
+
+	return field.Name
+}
+
+// Use ProtoEnumDefBuilder to get the enum definition string
+func (b *ProtoDefBuilder) AddEnum(enumDefStr string) {
+	if b.done {
+		return
+	}
+	b.data.Enums = append(b.data.Enums, enumDefStr)
 }
 
 // TODO: Need to handle error cases such as language-reserved keywords
@@ -958,8 +1003,86 @@ func (b *ProtoDefBuilder) formatFieldName(name string) string {
 }
 
 func (b *ProtoDefBuilder) Build() string {
-	if !b.done {
-		b.sb.WriteString("}\n\n")
+	tFuncs := template.FuncMap{
+		"plusOne": func(i int) int {
+			return i + 1
+		},
 	}
-	return b.sb.String()
+	t, err := template.New("proto message").Funcs(tFuncs).Parse(b.template)
+	if err != nil {
+		panic(err)
+	}
+	var ret bytes.Buffer
+	err = t.Execute(&ret, b.data)
+	if err != nil {
+		panic(err)
+	}
+	return ret.String()
+}
+
+// Builder for a protobuf enum definition string
+type ProtoEnumDefBuilder struct {
+	template string
+	data     struct {
+		Name   string
+		Values []string
+	}
+	done bool
+}
+
+func NewProtoEnumDefBuilder(name string) *ProtoEnumDefBuilder {
+	// This template is not perfect - relies on post-formatting
+	template := `enum {{$.Name}} {
+	{{range $index, $value := $.Values}}{{$value}} = {{$index}};
+	{{end}}
+}`
+	return &ProtoEnumDefBuilder{
+		template: template,
+		data: struct {
+			Name   string
+			Values []string
+		}{Name: name, Values: make([]string, 0)},
+		done: false,
+	}
+}
+
+// Returns the canonical translated enum field name
+func (b *ProtoEnumDefBuilder) AddValue(value string) string {
+	if b.done {
+		return ""
+	}
+	// If value is empty string, we don't have to do anything
+	// because we can count it as the UNSPECIFIED value which
+	// we automatically add when building
+	if value == "" {
+		return b.formatValue("unspecified")
+	}
+	valueName := b.formatValue(value)
+	b.data.Values = append(b.data.Values, valueName)
+	return valueName
+}
+
+func (b *ProtoEnumDefBuilder) Build() string {
+	// Sort & prepend UNSPECIFIED value before building
+	sort.Strings(b.data.Values)
+	b.data.Values = append([]string{b.formatValue("unspecified")}, b.data.Values...)
+	t, err := template.New("proto enum").Parse(b.template)
+	if err != nil {
+		panic(err)
+	}
+	var ret bytes.Buffer
+	err = t.Execute(&ret, b.data)
+	if err != nil {
+		panic(err)
+	}
+	return ret.String()
+}
+
+// e.g. "hello goodbye" -> "<ENUM_NAME>_HELLO_GOODBYE"
+// Removes special characters (TODO: consider erroring instead)
+// TODO: handle conflicts gracefully
+func (b *ProtoEnumDefBuilder) formatValue(value string) string {
+	replaced := regexp.MustCompile(`[^a-zA-Z0-9 ]+`).ReplaceAllString(value, " ")
+	replaced = strings.Join(strings.Fields(replaced), " ") // Handle continuous whitespace
+	return strcase.ToScreamingSnake(fmt.Sprintf("%s_%s", b.data.Name, replaced))
 }

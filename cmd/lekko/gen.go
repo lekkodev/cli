@@ -16,7 +16,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"go/format"
 	"os"
 	"os/exec"
 	"regexp"
@@ -101,7 +103,7 @@ func genGoCmd() *cobra.Command {
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
 				}
-				codeString := try.To1(genGoForFeature(f, ns, staticCtxType))
+				codeString := try.To1(genGoForFeature(cmd.Context(), r, f, ns, staticCtxType))
 				codeStrings = append(codeStrings, codeString)
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 					protoImport := unpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
@@ -240,7 +242,7 @@ var genCmd = &cobra.Command{
 	Short: "generate library code from configs",
 }
 
-func genGoForFeature(f *featurev1beta1.Feature, ns string, staticCtxType *protoImport) (string, error) {
+func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *protoImport) (string, error) {
 	const defaultTemplateBody = `{{if $.UnSafeClient}}
 // {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
@@ -275,6 +277,25 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
 }
 `
+
+	// Generate an enum type and const declarations
+	const stringEnumTemplateBody = `type {{$.EnumTypeName}} string
+const (
+	{{range $index, $field := $.EnumFields}}{{$field.Name}} {{$.EnumTypeName}} = "{{$field.Value}}"
+	{{end}}
+)
+
+{{if $.UnSafeClient}}
+// {{$.Description}}
+func (c *LekkoClient) {{$.FuncName}}(ctx context.Context) ({{$.RetType}}, error) {
+	return c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
+}
+{{end}}
+// {{$.Description}}
+func (c *SafeLekkoClient) {{$.FuncName}}(ctx *{{$.StaticType}}) {{$.RetType}} {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}}`
+
 	var funcNameBuilder strings.Builder
 	funcNameBuilder.WriteString("Get")
 	for _, word := range regexp.MustCompile("[_-]+").Split(f.Key, -1) {
@@ -283,6 +304,12 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	funcName := funcNameBuilder.String()
 	var retType string
 	var getFunction string
+	var enumTypeName string
+	type EnumField struct {
+		Name  string
+		Value string
+	}
+	var enumFields []EnumField
 	templateBody := defaultTemplateBody
 
 	type StaticContextInfo struct {
@@ -305,6 +332,37 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
 		retType = "string"
 		getFunction = "GetString"
+		// HACK: The metadata field is only for presentation at the moment
+		// so is not part of the compiled object - need to statically parse
+		// This also means that this only works for statically parseable
+		// configs
+		sf, err := r.Parse(ctx, ns, f.Key, typeRegistry)
+		if err != nil {
+			return "", errors.Wrap(err, "static parsing")
+		}
+		fm := sf.Feature.Metadata.AsMap()
+		// TODO: This enum codegen does not handle possible conflicts at all
+		if genEnum, ok := fm["gen-enum"]; ok {
+			if genEnumBool, ok := genEnum.(bool); ok && genEnumBool {
+				enumTypeName = strcase.ToCamel(f.Key)
+				retType = enumTypeName
+				templateBody = stringEnumTemplateBody
+				for _, ret := range getStringRetValues(f) {
+					// Result of translating ret values is wrapped in quotes
+					ret = ret[1 : len(ret)-1]
+					name := enumTypeName
+					if ret == "" {
+						name += "Unspecified"
+					} else {
+						name += strcase.ToCamel(ret)
+					}
+					enumFields = append(enumFields, EnumField{
+						Name:  name,
+						Value: ret,
+					})
+				}
+			}
+		}
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		getFunction = "GetJSON"
 		templateBody = jsonTemplateBody
@@ -334,6 +392,8 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		NaturalLanguage []string
 		StaticType      string
 		UnSafeClient    bool
+		EnumTypeName    string
+		EnumFields      []EnumField
 	}{
 		f.Description,
 		funcName,
@@ -344,6 +404,8 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 		[]string{},
 		"",
 		UnSafeClient,
+		enumTypeName,
+		enumFields,
 	}
 	if staticContextInfo != nil {
 		data.NaturalLanguage = staticContextInfo.Natty
@@ -355,7 +417,15 @@ func (c *SafeLekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}
 	}
 	var ret bytes.Buffer
 	err = templ.Execute(&ret, data)
-	return ret.String(), err
+	if err != nil {
+		return "", err
+	}
+	// Final canonical Go format
+	formatted, err := format.Source(ret.Bytes())
+	if err != nil {
+		return "", errors.Wrap(err, "format")
+	}
+	return string(formatted), nil
 }
 
 type protoImport struct {
@@ -496,4 +566,24 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 		return true
 	})
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
+}
+
+// TODO: Generify
+// Get all unique possible return values of a config
+func getStringRetValues(f *featurev1beta1.Feature) []string {
+	if f.Type != featurev1beta1.FeatureType_FEATURE_TYPE_STRING {
+		return []string{}
+	}
+	valSet := make(map[string]bool)
+	valSet[translateRetValue(f.Tree.Default, nil)] = true
+	for _, constraint := range f.Tree.Constraints {
+		ret := translateRetValue(constraint.Value, nil)
+		valSet[ret] = true
+	}
+	var rets []string
+	for val := range valSet {
+		rets = append(rets, val)
+	}
+	sort.Strings(rets)
+	return rets
 }
