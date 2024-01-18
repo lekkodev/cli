@@ -52,7 +52,7 @@ type ConfigurationStore interface {
 	ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error)
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
 	Format(ctx context.Context, verbose bool) error
-	AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string) (string, error)
+	AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string, defaultValue interface{}) (string, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
@@ -765,7 +765,7 @@ func (r *repository) FormatFeature(ctx context.Context, ff *feature.FeatureFile,
 // the namespace doesn't exist, or
 // a feature named featureName already exists
 // Returns the path to the feature file that was written to disk.
-func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string) (string, error) {
+func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string, defaultValue interface{}) (string, error) {
 	if !isValidName(featureName) {
 		return "", errors.Wrap(ErrInvalidName, "config")
 	}
@@ -791,7 +791,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 			return "", errors.Wrap(err, "add config from proto")
 		}
 	} else {
-		template, err = star.GetTemplate(fType, nv)
+		template, err = star.GetTemplate(fType, nv, defaultValue)
 		if err != nil {
 			return "", errors.Wrap(err, "get template")
 		}

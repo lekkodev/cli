@@ -17,10 +17,14 @@ package star
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+	"strings"
 	"text/template"
 
+	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/go-sdk/pkg/eval"
+	"github.com/pkg/errors"
 )
 
 const featureTemplate = `result = feature(
@@ -94,25 +98,62 @@ func RenderExistingProtoTemplate(inputs ProtoStarInputs, nv feature.NamespaceVer
 	return buf.Bytes(), nil
 }
 
-func GetTemplate(fType eval.ConfigType, nv feature.NamespaceVersion) ([]byte, error) {
+func GetTemplate(fType eval.ConfigType, nv feature.NamespaceVersion, defaultValue interface{}) ([]byte, error) {
 	var templateBody string
 	if nv >= feature.NamespaceVersionV1Beta6 {
 		templateBody = configTemplate
 	} else {
 		templateBody = featureTemplate
 	}
+	var valStr string
+	var err error
+	if defaultValue == nil {
+		valStr, err = getDefaultValStr(fType)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		valStr, err = ValToStarStr(defaultValue)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return []byte(fmt.Sprintf(templateBody, valStr)), nil
+}
+
+// Converts arbitrary value to Starlark equivalent representation
+func ValToStarStr(value interface{}) (string, error) {
+	switch v := value.(type) {
+	case bool:
+		return strcase.ToCamel((strconv.FormatBool(v))), nil
+	case int64:
+		return strconv.FormatInt(v, 10), nil
+	case float64:
+		formatted := strconv.FormatFloat(v, 'f', -1, 64)
+		if !strings.Contains(formatted, ".") {
+			formatted += ".0" // For floats we need decimal points
+		}
+		return formatted, nil
+	case string:
+		return fmt.Sprintf("'%s'", v), nil
+	default:
+		return "", errors.Errorf("unsupported type %T", value)
+	}
+}
+
+func getDefaultValStr(fType eval.ConfigType) (string, error) {
 	switch fType {
 	case eval.ConfigTypeBool:
-		return []byte(fmt.Sprintf(templateBody, "False")), nil
+		return "False", nil
 	case eval.ConfigTypeInt:
-		return []byte(fmt.Sprintf(templateBody, "1")), nil
+		return "1", nil
 	case eval.ConfigTypeFloat:
-		return []byte(fmt.Sprintf(templateBody, "1.0")), nil
+		return "1.0", nil
 	case eval.ConfigTypeString:
-		return []byte(fmt.Sprintf(templateBody, "''")), nil
+		return "''", nil
 	case eval.ConfigTypeJSON:
-		return []byte(fmt.Sprintf(templateBody, "{}")), nil
+		return "{}", nil
 	default:
-		return nil, fmt.Errorf("templating is not supported for config type %s", fType)
+		return "", errors.Errorf("unsupported config type %s", fType)
 	}
 }

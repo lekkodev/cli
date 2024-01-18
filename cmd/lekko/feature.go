@@ -23,6 +23,7 @@ import (
 	"os/exec"
 	"path"
 	"sort"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -103,7 +104,7 @@ func featureList() *cobra.Command {
 }
 
 func featureAdd() *cobra.Command {
-	var ns, featureName, fType, fProtoMessage string
+	var ns, featureName, fType, fProtoMessage, valueStr string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add config",
@@ -148,6 +149,31 @@ func featureAdd() *cobra.Command {
 				}
 			}
 
+			var defaultValue interface{} = nil
+			if len(valueStr) != 0 {
+				switch fType {
+				case string(eval.ConfigTypeBool):
+					defaultValue, err = strconv.ParseBool(valueStr)
+					if err != nil {
+						return errors.Errorf("invalid bool value %s", valueStr)
+					}
+				case string(eval.ConfigTypeString):
+					defaultValue = valueStr
+				case string(eval.ConfigTypeInt):
+					defaultValue, err = strconv.ParseInt(valueStr, 10, 64)
+					if err != nil {
+						return errors.Errorf("invalid int value %s", valueStr)
+					}
+				case string(eval.ConfigTypeFloat):
+					defaultValue, err = strconv.ParseFloat(valueStr, 64)
+					if err != nil {
+						return errors.Errorf("invalid float value %s", valueStr)
+					}
+				default:
+					return errors.Errorf("--value is not supported for type %s", fType)
+				}
+			}
+
 			if fType == string(eval.ConfigTypeProto) && len(fProtoMessage) == 0 {
 				protos, err := r.GetProtoMessages(cmd.Context())
 				if err != nil {
@@ -162,7 +188,7 @@ func featureAdd() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			if path, err := r.AddFeature(ctx, ns, featureName, eval.ConfigType(fType), fProtoMessage); err != nil {
+			if path, err := r.AddFeature(ctx, ns, featureName, eval.ConfigType(fType), fProtoMessage, defaultValue); err != nil {
 				return errors.Wrap(err, "add config")
 			} else {
 				fmt.Printf("Successfully added config %s/%s at path %s\n", ns, featureName, path)
@@ -176,7 +202,8 @@ func featureAdd() *cobra.Command {
 	_ = cmd.Flags().MarkHidden("feature")
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to add")
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of config to create")
-	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create")
+	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create, if type is proto")
+	cmd.Flags().StringVarP(&valueStr, "value", "v", "", "default value of config (not supported for json and proto types)")
 	return cmd
 }
 
@@ -474,7 +501,7 @@ func configGroup() *cobra.Command {
 			}
 			// Create new config using generated proto type
 			protoFullName := strings.Join([]string{protoPkg, protoMsgName}, ".")
-			_, err = r.AddFeature(ctx, ns, outName, eval.ConfigTypeProto, protoFullName)
+			_, err = r.AddFeature(ctx, ns, outName, eval.ConfigTypeProto, protoFullName, nil)
 			if err != nil {
 				return errors.Wrap(err, "add new config")
 			}
