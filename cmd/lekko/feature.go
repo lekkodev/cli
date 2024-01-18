@@ -439,8 +439,7 @@ func configGroup() *cobra.Command {
 			}
 			// For now, it's required to statically parse configs to get metadata info
 			// which we use to determine if a config is an enum config
-			staticMap := make(map[string]*featurev1beta1.StaticFeature)
-			// Map of (enum) config names to translated enum name and values
+			// Keep map of (enum) config names to translated enum name and values
 			// We'll build up the values lookup map in a later stage
 			enumLookupMap := make(map[string]struct {
 				name   string
@@ -451,7 +450,6 @@ func configGroup() *cobra.Command {
 				if err != nil {
 					return errors.Wrap(err, "pre-group static parsing")
 				}
-				staticMap[cn] = sf
 				c := compiledMap[cn]
 				if genEnum, ok := sf.Feature.Metadata.AsMap()["gen-enum"]; ok && c.FeatureType == eval.ConfigTypeString && !disableGenEnum {
 					if genEnumBool, ok := genEnum.(bool); ok && genEnumBool {
@@ -582,7 +580,6 @@ func configGroup() *cobra.Command {
 						if valueDescriptor == nil {
 							return errors.Errorf("missing enum value for %s", enumLookup.values[origVal])
 						}
-						// value := dynamicpb.NewEnumType(enumDescriptor).New(valueDescriptor.Number())
 						defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(valueDescriptor.Number()))
 						continue
 					} else {
