@@ -116,7 +116,7 @@ func testReview(ctx context.Context, t *testing.T, r *repository, ghCli *gh.Gith
 		if eval.ConfigType(fType) == eval.ConfigTypeProto {
 			protoMessageName = "google.protobuf.BoolValue"
 		}
-		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.ConfigType(fType), protoMessageName)
+		path, err := r.AddFeature(ctx, namespace, getFeatureName(fType), eval.ConfigType(fType), protoMessageName, nil)
 		require.NoError(t, err)
 		t.Logf("wrote config to path %s\n", path)
 	}

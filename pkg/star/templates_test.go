@@ -24,7 +24,7 @@ import (
 )
 
 func TestGetTemplate(t *testing.T) {
-	template, err := GetTemplate(eval.ConfigTypeBool, feature.NamespaceVersionV1Beta5)
+	template, err := GetTemplate(eval.ConfigTypeBool, feature.NamespaceVersionV1Beta5, nil)
 
 	require.NoError(t, err)
 	goldenFile, err := os.ReadFile("./testdata/test_get_template.star")
@@ -33,7 +33,7 @@ func TestGetTemplate(t *testing.T) {
 }
 
 func TestGetTemplateV1Beta6(t *testing.T) {
-	template, err := GetTemplate(eval.ConfigTypeBool, feature.NamespaceVersionV1Beta6)
+	template, err := GetTemplate(eval.ConfigTypeBool, feature.NamespaceVersionV1Beta6, nil)
 
 	require.NoError(t, err)
 	goldenFile, err := os.ReadFile("./testdata/test_get_template_config.star")
