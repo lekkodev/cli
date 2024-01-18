@@ -340,6 +340,7 @@ func featureEval() *cobra.Command {
 func configGroup() *cobra.Command {
 	var ns, protoPkg, outName, description string
 	var configNames []string
+	var disableGenEnum bool
 	cmd := &cobra.Command{
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
@@ -452,7 +453,7 @@ func configGroup() *cobra.Command {
 				}
 				staticMap[cn] = sf
 				c := compiledMap[cn]
-				if genEnum, ok := sf.Feature.Metadata.AsMap()["gen-enum"]; ok && c.FeatureType == eval.ConfigTypeString {
+				if genEnum, ok := sf.Feature.Metadata.AsMap()["gen-enum"]; ok && c.FeatureType == eval.ConfigTypeString && !disableGenEnum {
 					if genEnumBool, ok := genEnum.(bool); ok && genEnumBool {
 						enumLookupMap[cn] = struct {
 							name   string
@@ -650,6 +651,7 @@ func configGroup() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&configNames, "configs", "c", []string{}, "comma-separated names of configs to group together")
 	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
+	cmd.Flags().BoolVar(&disableGenEnum, "disable-gen-enum", false, "whether to disable conversion of protobuf enums from string enum configs")
 	return cmd
 }
 
