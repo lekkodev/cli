@@ -581,7 +581,7 @@ func getStringRetValues(f *featurev1beta1.Feature) []string {
 		valSet[ret] = true
 	}
 	var rets []string
-	for val, _ := range valSet {
+	for val := range valSet {
 		rets = append(rets, val)
 	}
 	sort.Strings(rets)
