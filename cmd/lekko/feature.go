@@ -441,6 +441,7 @@ func configGroup() *cobra.Command {
 			// which we use to determine if a config is an enum config
 			// Keep map of (enum) config names to translated enum name and values
 			// We'll build up the values lookup map in a later stage
+			// TODO: maybe cleanup into a proper type
 			enumLookupMap := make(map[string]struct {
 				name   string
 				values map[string]string
@@ -592,6 +593,62 @@ func configGroup() *cobra.Command {
 				defaultValue.Set(mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i])), protoreflect.ValueOf(orig.Value))
 			}
 			newF.Value = defaultValue
+			// TODO: Should probably extract this/enum handling logic out for better code org...
+			// Handle overrides using the following logic:
+			// 1. Flatten out all overrides
+			// 2. Scan rules to check if any are identical to a previous one, note
+			// 3. Merge overrides with the same rules "upwards"
+			// 4. Write into overall overrides
+			overrides := make([]*feature.Override, 0)
+			ruleFirsts := make(map[string]*feature.Override) // Map of rulestrings to pointers of the first override that has them
+			for i, cn := range configNames {
+				orig := compiledMap[cn]
+				enumLookup, isEnum := enumLookupMap[cn]
+				for _, origOverride := range orig.Overrides {
+					var origValProto protoreflect.Value
+					if isEnum {
+						if origVal, ok := origOverride.Value.(string); ok {
+							enumDescriptor := mt.Descriptor().Enums().ByName(protoreflect.Name(enumLookup.name))
+							if enumDescriptor == nil {
+								return errors.Errorf("missing enum descriptor for %s", enumLookup.name)
+							}
+							valueDescriptor := enumDescriptor.Values().ByName(protoreflect.Name(enumLookup.values[origVal]))
+							if valueDescriptor == nil {
+								return errors.Errorf("missing enum value for %s", enumLookup.values[origVal])
+							}
+							origValProto = protoreflect.ValueOf(valueDescriptor.Number())
+						} else {
+							return errors.New("unexpected non-string original value")
+						}
+					} else {
+						origValProto = protoreflect.ValueOf(origOverride.Value)
+					}
+					protoField := mt.Descriptor().Fields().ByName(protoreflect.Name(protoFieldNames[i]))
+					// Check if an earlier override had this rule, if so merge into it
+					ruleFirst, ruleSeen := ruleFirsts[origOverride.Rule]
+					if ruleSeen {
+						if value, ok := ruleFirst.Value.(protoreflect.Message); ok {
+							value.Set(protoField, origValProto)
+						} else {
+							return errors.Errorf("unexpected type while merging overrides %T", ruleFirst.Value)
+						}
+					} else {
+						value := mt.New()
+						value.Set(protoField, origValProto)
+						override := &feature.Override{
+							Rule:      origOverride.Rule,
+							RuleASTV3: origOverride.RuleASTV3,
+							Value:     value,
+						}
+						overrides = append(overrides, override)
+						if _, ok := ruleFirsts[origOverride.Rule]; !ok {
+							ruleFirsts[origOverride.Rule] = override
+						}
+						ruleFirsts[override.Rule] = override
+					}
+				}
+			}
+			newF.Overrides = overrides
 			sf, err := r.Parse(ctx, ns, outName, registry)
 			if err != nil {
 				return errors.Wrap(err, "parse generated config")
