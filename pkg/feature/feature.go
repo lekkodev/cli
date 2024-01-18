@@ -1078,8 +1078,9 @@ func (b *ProtoEnumDefBuilder) Build() string {
 	return ret.String()
 }
 
-// e.g. "hello goodbye" -> "HELLO_GOODBYE"
+// e.g. "hello goodbye" -> "<ENUM_NAME>_HELLO_GOODBYE"
 // Removes special characters (TODO: consider erroring instead)
+// TODO: handle conflicts gracefully
 func (b *ProtoEnumDefBuilder) formatValue(value string) string {
 	replaced := regexp.MustCompile(`[^a-zA-Z0-9 ]+`).ReplaceAllString(value, " ")
 	replaced = strings.Join(strings.Fields(replaced), " ") // Handle continuous whitespace

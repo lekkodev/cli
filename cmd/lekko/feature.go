@@ -496,7 +496,10 @@ func configGroup() *cobra.Command {
 					}
 					for _, o := range c.Overrides {
 						if val, ok := o.Value.(string); ok {
-							enumLookup.values[val] = pedf.AddValue(val)
+							// Check to prevent duplicate values
+							if _, ok := enumLookup.values[val]; !ok {
+								enumLookup.values[val] = pedf.AddValue(val)
+							}
 						}
 					}
 					enumDefStr := pedf.Build()

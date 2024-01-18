@@ -569,15 +569,20 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 }
 
 // TODO: Generify
-// Get all possible return values of a config
+// Get all unique possible return values of a config
 func getStringRetValues(f *featurev1beta1.Feature) []string {
-	var rets []string
 	if f.Type != featurev1beta1.FeatureType_FEATURE_TYPE_STRING {
-		return rets
+		return []string{}
 	}
-	rets = append(rets, translateRetValue(f.Tree.Default, nil))
+	valSet := make(map[string]bool)
+	valSet[translateRetValue(f.Tree.Default, nil)] = true
 	for _, constraint := range f.Tree.Constraints {
-		rets = append(rets, translateRetValue(constraint.Value, nil))
+		ret := translateRetValue(constraint.Value, nil)
+		valSet[ret] = true
+	}
+	var rets []string
+	for val, _ := range valSet {
+		rets = append(rets, val)
 	}
 	sort.Strings(rets)
 	return rets
