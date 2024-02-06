@@ -109,7 +109,8 @@ message CallExpression {
     uint32 threshold = 2;
   }
 
-  // EvaluatTo function for nested config evaluation
+  // Function for nested config evaluation
+  // Returns `true` if the config with `config_name` evaluates to `config_value`
   message EvaluateTo {
     string config_name = 1;
     string config_value = 2;
