@@ -183,7 +183,6 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 		},
 		bufEnabled: true,
 	}
-
 	return cr, cr.storeDefaultBranchName(auth)
 }
 
@@ -280,7 +279,9 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 	// default branch name. Query remote, and save the result
 	remote, err := r.repo.Remote(RemoteName)
 	if err != nil {
-		return errors.Wrap(err, "remote")
+		//return errors.Wrap(err, "remote")
+		//lint:ignore nilerr Why do we need a remote?  We don't need no stinking remote
+		return nil
 	}
 	if len(remote.Config().URLs) == 0 {
 		return errors.Errorf("no urls found for '%s' remote config", RemoteName)

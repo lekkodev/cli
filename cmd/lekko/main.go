@@ -91,14 +91,11 @@ func rootCmd() *cobra.Command {
 
 func formatCmd() *cobra.Command {
 	var verbose bool
+	var wd string
 	cmd := &cobra.Command{
 		Use:   "format",
 		Short: "format star files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail()
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -108,19 +105,17 @@ func formatCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
 func compileCmd() *cobra.Command {
 	var force, dryRun, upgrade, verbose bool
+	var wd string
 	cmd := &cobra.Command{
 		Use:   "compile [namespace[/config]]",
 		Short: "compiles configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail()
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -163,18 +158,16 @@ func compileCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&dryRun, "dry-run", "d", false, "skip persisting any newly compiled changes to disk.")
 	cmd.Flags().BoolVarP(&upgrade, "upgrade", "u", false, "upgrade any of the requested namespaces that are behind the latest version.")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose error logging.")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
 func verifyCmd() *cobra.Command {
+	var wd string
 	cmd := &cobra.Command{
 		Use:   "verify [namespace[/config]]",
 		Short: "verifies configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail()
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -203,20 +196,17 @@ func verifyCmd() *cobra.Command {
 			})
 		},
 	}
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
 func parseCmd() *cobra.Command {
-	var ns, featureName string
+	var wd, ns, featureName string
 	var all, printFeature bool
 	cmd := &cobra.Command{
 		Use:   "parse",
 		Short: "parse a feature file using static analysis, and rewrite the starlark",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return errors.Wrap(err, "new repo")
@@ -269,20 +259,17 @@ func parseCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "parse all configs")
 	cmd.Flags().BoolVarP(&printFeature, "print", "p", false, "print parsed config(s)")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return cmd
 }
 
 func reviewCmd() *cobra.Command {
-	var title string
+	var title, wd string
 	cmd := &cobra.Command{
 		Use:   "review",
 		Short: "creates a pr with your changes",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -311,6 +298,7 @@ func reviewCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&title, "title", "t", "", "Title of pull request")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
@@ -422,18 +410,13 @@ func localKubeParams(cmd *cobra.Command, kubeConfig *string) {
 }
 
 func applyCmd() *cobra.Command {
-	var kubeConfig string
+	var kubeConfig, wd string
 	ret := &cobra.Command{
 		Use:   "apply",
 		Short: "apply local configurations to kubernetes configmaps",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := cmd.ParseFlags(args); err != nil {
 				return errors.Wrap(err, "failed to parse flags")
-			}
-
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
 			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			r, err := repo.NewLocal(wd, rs)
@@ -456,6 +439,7 @@ func applyCmd() *cobra.Command {
 		},
 	}
 	localKubeParams(ret, &kubeConfig)
+	ret.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return ret
 }
 
@@ -489,15 +473,11 @@ var experimentalCmd = &cobra.Command{
 }
 
 func commitCmd() *cobra.Command {
-	var message string
+	var message, wd string
 	cmd := &cobra.Command{
 		Use:   "commit",
 		Short: "commits local changes to the remote branch",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -518,6 +498,7 @@ func commitCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&message, "message", "m", "config change commit", "commit message")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
@@ -548,15 +529,12 @@ var cleanupCmd = &cobra.Command{
 
 func restoreCmd() *cobra.Command {
 	var force bool
+	var wd string
 	cmd := &cobra.Command{
 		Use:   "restore [hash]",
 		Short: "restores repo to a particular hash",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			r, err := repo.NewLocal(wd, rs)
 			if err != nil {
@@ -587,6 +565,7 @@ func restoreCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "force compilation, ignoring validation check failures.")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 

@@ -63,14 +63,11 @@ func featureCmd() *cobra.Command {
 
 func featureList() *cobra.Command {
 	var ns string
+	var wd string
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "list all configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -100,19 +97,16 @@ func featureList() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "name of namespace to filter by")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
 func featureAdd() *cobra.Command {
-	var ns, featureName, fType, fProtoMessage, valueStr string
+	var ns, featureName, fType, fProtoMessage, valueStr, wd string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -204,19 +198,16 @@ func featureAdd() *cobra.Command {
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of config to create")
 	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create, if type is proto")
 	cmd.Flags().StringVarP(&valueStr, "value", "v", "", "default value of config (not supported for json and proto types)")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return cmd
 }
 
 func featureRemove() *cobra.Command {
-	var ns, featureName string
+	var wd, ns, featureName string
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "remove config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -243,20 +234,17 @@ func featureRemove() *cobra.Command {
 	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to remove")
 	_ = cmd.Flags().MarkHidden("feature")
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
 
 func featureEval() *cobra.Command {
-	var ns, featureName, jsonContext string
+	var ns, featureName, jsonContext, wd string
 	var verbose bool
 	cmd := &cobra.Command{
 		Use:   "eval",
 		Short: "evaluate config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -334,21 +322,18 @@ func featureEval() *cobra.Command {
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to evaluate")
 	cmd.Flags().StringVarP(&jsonContext, "context", "t", "", "context to evaluate with in json format")
 	cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print verbose evaluation information")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
 
 func configGroup() *cobra.Command {
-	var ns, protoPkg, outName, description string
+	var wd, ns, protoPkg, outName, description string
 	var configNames []string
 	var disableGenEnum bool
 	cmd := &cobra.Command{
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -709,6 +694,7 @@ func configGroup() *cobra.Command {
 	cmd.Flags().StringVarP(&protoPkg, "proto-pkg", "p", "default.config.v1beta1", "package for generated protobuf type(s)")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "description for the grouped config")
 	cmd.Flags().BoolVar(&disableGenEnum, "disable-gen-enum", false, "whether to disable conversion of protobuf enums from string enum configs")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
 
@@ -729,7 +715,7 @@ var nsList = &cobra.Command{
 	Use:   "list",
 	Short: "list namespaces in the current repository",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		wd, err := os.Getwd()
+		wd, err := os.Getwd() // TODO
 		if err != nil {
 			return err
 		}
@@ -752,15 +738,11 @@ var nsList = &cobra.Command{
 }
 
 func nsAdd() *cobra.Command {
-	var name string
+	var name, wd string
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "add namespace",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -780,19 +762,16 @@ func nsAdd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
 
 func nsRemove() *cobra.Command {
-	var name string
+	var name, wd string
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "remove namespace",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
 			if err != nil {
 				return err
@@ -839,6 +818,7 @@ func nsRemove() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
 

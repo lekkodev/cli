@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -47,6 +48,7 @@ func repoCmd() *cobra.Command {
 		repoCloneCmd(),
 		repoDeleteCmd(),
 		repoInitCmd(),
+		defaultRepoInitCmd(),
 	)
 	return cmd
 }
@@ -130,15 +132,11 @@ func repoCreateCmd() *cobra.Command {
 }
 
 func repoCloneCmd() *cobra.Command {
-	var url string
+	var url, wd string
 	cmd := &cobra.Command{
 		Use:   "clone",
 		Short: "Clone an existing configuration repository to local disk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			r := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			ctx := cmd.Context()
@@ -165,7 +163,7 @@ func repoCloneCmd() *cobra.Command {
 			}
 			repoName := path.Base(url)
 			fmt.Printf("Cloning %s into '%s'...\n", url, repoName)
-			_, err = repo.NewLocalClone(path.Join(wd, repoName), url, rs)
+			_, err := repo.NewLocalClone(path.Join(wd, repoName), url, rs)
 			if err != nil {
 				return errors.Wrap(err, "new local clone")
 			}
@@ -173,6 +171,7 @@ func repoCloneCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&url, "url", "u", "", "url of GitHub-hosted configuration repository to clone")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
@@ -260,5 +259,43 @@ func repoInitCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
+	return cmd
+}
+
+func defaultRepoInitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init-default",
+		Short: "Initialize a new template git repository in the detault location",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			var defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
+			err = os.MkdirAll(defaultLocation, 0777)
+			if err != nil {
+				return err
+			}
+			entries, err := os.ReadDir(defaultLocation)
+			if err != nil {
+				return err
+			}
+			if len(entries) > 0 {
+				return nil // assum that everything is fine
+			}
+
+			r, err := git.PlainClone(defaultLocation, false, &git.CloneOptions{
+				URL: "https://github.com/lekkodev/template.git",
+			})
+			if err != nil {
+				return err
+			}
+			err = r.DeleteRemote("origin")
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
 	return cmd
 }
