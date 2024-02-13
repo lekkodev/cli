@@ -287,7 +287,10 @@ func defaultRepoInitCmd() *cobra.Command {
 			r, err := git.PlainClone(defaultLocation, false, &git.CloneOptions{
 				URL: "https://github.com/lekkodev/template.git",
 			})
-			r.DeleteRemote("origin")
+			if err != nil {
+				return err
+			}
+			err = r.DeleteRemote("origin")
 			if err != nil {
 				return err
 			}
