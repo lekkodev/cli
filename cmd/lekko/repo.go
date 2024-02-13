@@ -130,15 +130,11 @@ func repoCreateCmd() *cobra.Command {
 }
 
 func repoCloneCmd() *cobra.Command {
-	var url string
+	var url, wd string
 	cmd := &cobra.Command{
 		Use:   "clone",
 		Short: "Clone an existing configuration repository to local disk",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			r := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			ctx := cmd.Context()
@@ -165,7 +161,7 @@ func repoCloneCmd() *cobra.Command {
 			}
 			repoName := path.Base(url)
 			fmt.Printf("Cloning %s into '%s'...\n", url, repoName)
-			_, err = repo.NewLocalClone(path.Join(wd, repoName), url, rs)
+			_, err := repo.NewLocalClone(path.Join(wd, repoName), url, rs)
 			if err != nil {
 				return errors.Wrap(err, "new local clone")
 			}
@@ -173,6 +169,7 @@ func repoCloneCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&url, "url", "u", "", "url of GitHub-hosted configuration repository to clone")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
 	return cmd
 }
 
