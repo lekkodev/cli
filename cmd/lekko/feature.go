@@ -198,7 +198,7 @@ func featureAdd() *cobra.Command {
 	cmd.Flags().StringVarP(&fType, "type", "t", "", "type of config to create")
 	cmd.Flags().StringVarP(&fProtoMessage, "proto-message", "m", "", "protobuf message of config to create, if type is proto")
 	cmd.Flags().StringVarP(&valueStr, "value", "v", "", "default value of config (not supported for json and proto types)")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return cmd
 }
 

@@ -259,7 +259,7 @@ func parseCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "parse all configs")
 	cmd.Flags().BoolVarP(&printFeature, "print", "p", false, "print parsed config(s)")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
+	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return cmd
 }
 
@@ -439,7 +439,7 @@ func applyCmd() *cobra.Command {
 		},
 	}
 	localKubeParams(ret, &kubeConfig)
-	ret.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
+	ret.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
 	return ret
 }
 
