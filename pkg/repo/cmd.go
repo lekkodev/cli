@@ -93,3 +93,16 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	}
 	return nil
 }
+
+func (r *RepoCmd) Import(ctx context.Context, owner, repo string) error {
+	_, err := r.lekkoBFFClient.ImportRepository(ctx, connect_go.NewRequest(&bffv1beta1.ImportRepositoryRequest{
+		RepoKey: &bffv1beta1.RepositoryKey{
+			OwnerName: owner,
+			RepoName:  repo,
+		},
+	}))
+	if err != nil {
+		return errors.Wrap(err, "import repository")
+	}
+	return nil
+}

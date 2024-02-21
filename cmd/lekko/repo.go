@@ -20,9 +20,11 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/go-git/go-git/config"
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
@@ -49,6 +51,7 @@ func repoCmd() *cobra.Command {
 		repoDeleteCmd(),
 		repoInitCmd(),
 		defaultRepoInitCmd(),
+		convertToRemoteCmd(),
 	)
 	return cmd
 }
@@ -263,16 +266,20 @@ func repoInitCmd() *cobra.Command {
 }
 
 func defaultRepoInitCmd() *cobra.Command {
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "init-default",
 		Short: "Initialize a new template git repository in the detault location",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return err
+			var defaultLocation = repoPath
+			if len(repoPath) == 0 {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
 			}
-			var defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
-			err = os.MkdirAll(defaultLocation, 0777)
+			err := os.MkdirAll(defaultLocation, 0777)
 			if err != nil {
 				return err
 			}
@@ -297,5 +304,61 @@ func defaultRepoInitCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	return cmd
+}
+
+func importCmd() *cobra.Command {
+	var owner, repoName, description string
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import local repo to Lekko (backed by GitHub)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			if len(owner) == 0 {
+				return errors.Errorf("Must provide owner and repo name")
+			}
+			if len(repoName) == 0 {
+				// try using current dir as a repo name
+				wd, err := os.Getwd()
+				if err == nil {
+					repoName = filepath.Base(wd)
+				}
+			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
+			if rs.GetGithubUser() == owner {
+				owner = "" // create repo expects an empty owner for personal accounts
+			}
+
+			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
+			if err != nil {
+				return errors.Wrap(err, "Failed to create GitHub repository")
+			}
+			r, err := git.PlainOpen(".")
+			if err != nil {
+				return errors.Errorf("Can't open repo")
+			}
+			r.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
+			})
+			err = r.Push(&git.PushOptions{})
+			if err != nil {
+				return errors.Errorf("failed to push to remote")
+			}
+
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			err = repo.Import(cmd.Context(), owner, repoName)
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
 	return cmd
 }
