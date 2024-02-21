@@ -695,7 +695,8 @@ func (f *Feature) ToEvaluableConfig() (eval.EvaluableConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	return eval.NewV1Beta3(res, f.Namespace), nil
+	// TODO: pass referenced configs to support `evaluate_to`
+	return eval.NewV1Beta3(res, f.Namespace, nil), nil
 }
 
 // Contains the compiled feature model, along with any

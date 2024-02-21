@@ -50,7 +50,8 @@ func ParseFeature(ctx context.Context, rootPath string, featureFile feature.Feat
 		if err := proto.Unmarshal(contents, &f); err != nil {
 			return nil, err
 		}
-		return eval.NewV1Beta3(&f, nsMD.Name), nil
+		// TODO: pass referenced configs to support `evaluate_to`
+		return eval.NewV1Beta3(&f, nsMD.Name, nil), nil
 	default:
 		return nil, fmt.Errorf("unknown version when parsing config: %s", nsMD.Version)
 	}
