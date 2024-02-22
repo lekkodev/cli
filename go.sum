@@ -1,7 +1,7 @@
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240220224358-3afe4cd18e4d.1 h1:3YB5DjBjHZYUa2tK1kOsT5BhL4EvCUmD4DtElyTve2E=
-buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240220224358-3afe4cd18e4d.1/go.mod h1:g2nFqYt7HtBcMouR0hO3qCjGX5V1KhU7v27zhXVKNRo=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.32.0-20240220224358-3afe4cd18e4d.1 h1:wPBTirh2BLEiNYvnMIK7t/6z+uDXgixAj53oMMRy2P8=
-buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.32.0-20240220224358-3afe4cd18e4d.1/go.mod h1:LNkM4Gj80nlWRQQixb04OUCROr44A0dIe5g03kF/wIg=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240222223259-f63df0f4810c.1 h1:wGS4sg14/mIWwpGqjgTBd2d0hcm4ULkXCllgrDz/2ww=
+buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240222223259-f63df0f4810c.1/go.mod h1:L/i64EKlLNN+J3giB8EBqhccZnwGtJYrEmfT4YpA4mk=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.32.0-20240222223259-f63df0f4810c.1 h1:lKGh72SUtRsEOmIVTpQudd+JCNmO0QACM/WmSQhxBj8=
+buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.32.0-20240222223259-f63df0f4810c.1/go.mod h1:LNkM4Gj80nlWRQQixb04OUCROr44A0dIe5g03kF/wIg=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.32.0-20230419180142-0694c10ef23c.1/go.mod h1:ggCoYXofBw/AXklHwuCrDgGRfcKCc/mnna2/yFMpR34=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.32.0-20230810202034-1c821065b9a0.1 h1:96XyepbNRieE4Do4Y7Im7E40avRxJR6any7lPV96OnM=
 buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.32.0-20230810202034-1c821065b9a0.1/go.mod h1:ggCoYXofBw/AXklHwuCrDgGRfcKCc/mnna2/yFMpR34=
