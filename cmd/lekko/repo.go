@@ -24,8 +24,9 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/go-git/go-git/config"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -51,7 +52,7 @@ func repoCmd() *cobra.Command {
 		repoDeleteCmd(),
 		repoInitCmd(),
 		defaultRepoInitCmd(),
-		convertToRemoteCmd(),
+		importCmd(),
 	)
 	return cmd
 }
@@ -312,11 +313,11 @@ func importCmd() *cobra.Command {
 	var owner, repoName, description string
 	cmd := &cobra.Command{
 		Use:   "import",
-		Short: "Import local repo to Lekko (backed by GitHub)",
+		Short: "Import local repo into GitHub and Lekko",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if len(owner) == 0 {
-				return errors.Errorf("Must provide owner and repo name")
+				return errors.Errorf("Must provide owner")
 			}
 			if len(repoName) == 0 {
 				// try using current dir as a repo name
@@ -330,30 +331,63 @@ func importCmd() *cobra.Command {
 			if rs.GetGithubUser() == owner {
 				owner = "" // create repo expects an empty owner for personal accounts
 			}
-
+			// create empty repo on GitHub
 			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
-			if err != nil {
-				return errors.Wrap(err, "Failed to create GitHub repository")
+			if !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+				return err
 			}
 			r, err := git.PlainOpen(".")
 			if err != nil {
-				return errors.Errorf("Can't open repo")
+				return err
 			}
-			r.CreateRemote(&config.RemoteConfig{
+			// create remote pointing to GitHub (if it not exists)
+			_, err = r.CreateRemote(&config.RemoteConfig{
 				Name: "origin",
 				URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
 			})
-			err = r.Push(&git.PushOptions{})
-			if err != nil {
-				return errors.Errorf("failed to push to remote")
+			if !errors.Is(err, git.ErrRemoteExists) {
+				return err
 			}
-
+			// push to GitHub
+			err = r.Push(&git.PushOptions{
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return err
+			}
+			// Pull to get remote branches
+			w, err := r.Worktree()
+			if err != nil {
+				return err
+			}
+			err = w.Pull(&git.PullOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return err
+			}
+			// Create branch config tracking remote
+			err = r.CreateBranch(&config.Branch{
+				Name:   "main",
+				Remote: "origin",
+				Merge:  "refs/heads/main",
+			})
+			if !errors.Is(err, git.ErrBranchExists) {
+				return err
+			}
+			// Import new repo into Lekko
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
 			err = repo.Import(cmd.Context(), owner, repoName)
 			if err != nil {
 				return err
 			}
-
 			return nil
 		},
 	}
