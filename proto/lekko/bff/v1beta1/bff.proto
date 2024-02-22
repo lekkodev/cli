@@ -69,6 +69,7 @@ service BFFService {
   rpc CreateRepository(CreateRepositoryRequest) returns (CreateRepositoryResponse) {}
   rpc DeleteRepository(DeleteRepositoryRequest) returns (DeleteRepositoryResponse) {}
   rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse) {}
+  rpc ImportRepository(ImportRepositoryRequest) returns (ImportRepositoryResponse) {}
 
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
   rpc GetFeatureHistory(GetFeatureHistoryRequest) returns (GetFeatureHistoryResponse) {}
@@ -333,6 +334,12 @@ message DeleteRepositoryRequest {
 message DeleteRepositoryResponse {}
 
 message ListRepositoriesRequest {}
+
+message ImportRepositoryRequest {
+  RepositoryKey repo_key = 1;
+}
+
+message ImportRepositoryResponse {}
 
 enum GithubInstallationStatus {
   GITHUB_INSTALLATION_STATUS_UNSPECIFIED = 0;

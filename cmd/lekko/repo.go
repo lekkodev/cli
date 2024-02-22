@@ -20,10 +20,13 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -49,6 +52,7 @@ func repoCmd() *cobra.Command {
 		repoDeleteCmd(),
 		repoInitCmd(),
 		defaultRepoInitCmd(),
+		importCmd(),
 	)
 	return cmd
 }
@@ -263,16 +267,20 @@ func repoInitCmd() *cobra.Command {
 }
 
 func defaultRepoInitCmd() *cobra.Command {
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "init-default",
 		Short: "Initialize a new template git repository in the detault location",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			home, err := os.UserHomeDir()
-			if err != nil {
-				return err
+			var defaultLocation = repoPath
+			if len(repoPath) == 0 {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
 			}
-			var defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
-			err = os.MkdirAll(defaultLocation, 0777)
+			err := os.MkdirAll(defaultLocation, 0777)
 			if err != nil {
 				return err
 			}
@@ -297,5 +305,94 @@ func defaultRepoInitCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	return cmd
+}
+
+func importCmd() *cobra.Command {
+	var owner, repoName, description string
+	cmd := &cobra.Command{
+		Use:   "import",
+		Short: "Import local repo into GitHub and Lekko",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			if len(owner) == 0 {
+				return errors.Errorf("Must provide owner")
+			}
+			if len(repoName) == 0 {
+				// try using current dir as a repo name
+				wd, err := os.Getwd()
+				if err == nil {
+					repoName = filepath.Base(wd)
+				}
+			}
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
+			if rs.GetGithubUser() == owner {
+				owner = "" // create repo expects an empty owner for personal accounts
+			}
+			// create empty repo on GitHub
+			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
+			if !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+				return err
+			}
+			r, err := git.PlainOpen(".")
+			if err != nil {
+				return err
+			}
+			// create remote pointing to GitHub (if it not exists)
+			_, err = r.CreateRemote(&config.RemoteConfig{
+				Name: "origin",
+				URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
+			})
+			if !errors.Is(err, git.ErrRemoteExists) {
+				return err
+			}
+			// push to GitHub
+			err = r.Push(&git.PushOptions{
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return err
+			}
+			// Pull to get remote branches
+			w, err := r.Worktree()
+			if err != nil {
+				return err
+			}
+			err = w.Pull(&git.PullOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return err
+			}
+			// Create branch config tracking remote
+			err = r.CreateBranch(&config.Branch{
+				Name:   "main",
+				Remote: "origin",
+				Merge:  "refs/heads/main",
+			})
+			if !errors.Is(err, git.ErrBranchExists) {
+				return err
+			}
+			// Import new repo into Lekko
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			err = repo.Import(cmd.Context(), owner, repoName)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
+	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
+	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
 	return cmd
 }
