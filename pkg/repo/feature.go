@@ -787,7 +787,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 
 	var template []byte
 	if fType == eval.ConfigTypeProto {
-		template, err = r.AddFeatureFromProto(ctx, protoMessageName, nv)
+		template, err = r.addFeatureFromProto(ctx, protoMessageName, nv)
 		if err != nil {
 			return "", errors.Wrap(err, "add config from proto")
 		}
@@ -806,7 +806,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 }
 
 // uses reflection to generate a Starlark feature template specific to the message descriptor
-func (r *repository) AddFeatureFromProto(ctx context.Context, messageName string, nv feature.NamespaceVersion) ([]byte, error) {
+func (r *repository) addFeatureFromProto(ctx context.Context, messageName string, nv feature.NamespaceVersion) ([]byte, error) {
 	inputs, err := r.BuildProtoStarInputs(ctx, messageName, nv)
 	if err != nil {
 		return nil, err
