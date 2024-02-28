@@ -70,7 +70,7 @@ func generateCmd() *cobra.Command {
 	var ns string
 	var configName string
 	cmd := &cobra.Command{
-		Use: "gen",
+		Use:   "gen",
 		Short: "generate starlark from proto",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
@@ -91,7 +91,7 @@ func generateCmd() *cobra.Command {
 			configFile := feature.NewFeatureFile(ns, configName)
 			var configProto featurev1beta1.Feature
 
-			contents, err := r.GetFileContents(ctx, filepath.Join("", ns, configFile.CompiledJSONFileName))
+			contents, err := r.GetFileContents(ctx, filepath.Join(ns, configFile.CompiledJSONFileName))
 			if err != nil {
 				return err
 			}
@@ -105,10 +105,10 @@ func generateCmd() *cobra.Command {
 			starImports := make([]*featurev1beta1.ImportStatement, 0)
 
 			if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-				typeUrl := configProto.GetTree().GetDefault().GetTypeUrl()
-				messageType, found := strings.CutPrefix(typeUrl, "type.googleapis.com/")
+				typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
+				messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
 				if !found {
-					return fmt.Errorf("can't parse type url: %s", typeUrl)
+					return fmt.Errorf("can't parse type url: %s", typeURL)
 				}
 				starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
 				if err != nil {
@@ -123,7 +123,7 @@ func generateCmd() *cobra.Command {
 						Lhs: &featurev1beta1.IdentExpr{
 							Token: importAlias,
 						},
-						Operator:  "=",
+						Operator: "=",
 						Rhs: &featurev1beta1.ImportExpr{
 							Dot: &featurev1beta1.DotExpr{
 								X:    "proto",
@@ -136,10 +136,10 @@ func generateCmd() *cobra.Command {
 			} else {
 				starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
 				if err != nil {
-					return err 
+					return err
 				}
 			}
-					
+
 			// mutate star template with actual config
 			walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
 			newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
@@ -155,7 +155,7 @@ func generateCmd() *cobra.Command {
 				return errors.Wrap(err, "walker mutate")
 			}
 
-			fmt.Printf("path: %s",path.Join(ns, configFile.StarlarkFileName))
+			fmt.Printf("path: %s", path.Join(ns, configFile.StarlarkFileName))
 			if err := r.WriteFile(path.Join(ns, configFile.StarlarkFileName), newBytes, 0600); err != nil {
 				return errors.Wrap(err, "write after mutation")
 			}
@@ -165,12 +165,12 @@ func generateCmd() *cobra.Command {
 			_, err = r.Compile(ctx, &repo.CompileRequest{
 				Registry:        registry,
 				NamespaceFilter: ns,
-				FeatureFilter: configName,
+				FeatureFilter:   configName,
 			})
 			if err != nil {
 				return errors.Wrap(err, "compile after mutation")
 			}
-	
+
 			return nil
 		},
 	}
