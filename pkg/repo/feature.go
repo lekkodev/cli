@@ -53,6 +53,7 @@ type ConfigurationStore interface {
 	GetFileDescriptorSet(ctx context.Context, protoDirPath string) (*descriptorpb.FileDescriptorSet, error)
 	Format(ctx context.Context, verbose bool) error
 	AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string, defaultValue interface{}) (string, error)
+	BuildProtoStarInputs(ctx context.Context, messageName string, nv feature.NamespaceVersion) (*star.ProtoStarInputs, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
@@ -786,7 +787,7 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 
 	var template []byte
 	if fType == eval.ConfigTypeProto {
-		template, err = r.addFeatureFromProto(ctx, protoMessageName, nv)
+		template, err = r.AddFeatureFromProto(ctx, protoMessageName, nv)
 		if err != nil {
 			return "", errors.Wrap(err, "add config from proto")
 		}
@@ -804,8 +805,16 @@ func (r *repository) AddFeature(ctx context.Context, ns, featureName string, fTy
 	return featurePath, nil
 }
 
-// addFeatureFromProto uses reflection to generate a Starlark feature template specific to the message descriptor
-func (r *repository) addFeatureFromProto(ctx context.Context, messageName string, nv feature.NamespaceVersion) ([]byte, error) {
+// uses reflection to generate a Starlark feature template specific to the message descriptor
+func (r *repository) AddFeatureFromProto(ctx context.Context, messageName string, nv feature.NamespaceVersion) ([]byte, error) {
+	inputs, err := r.BuildProtoStarInputs(ctx, messageName, nv)
+	if err != nil {
+		return nil, err
+	}
+	return star.RenderExistingProtoTemplate(*inputs, nv)
+}
+
+func (r *repository) BuildProtoStarInputs(ctx context.Context, messageName string, nv feature.NamespaceVersion) (*star.ProtoStarInputs, error) {
 	// Get the MessageType from the name, it involves loading the type registry again. This can probably be cached
 	// from the initial call when the type names were computed
 	rootMD, _, err := r.ParseMetadata(ctx)
@@ -887,11 +896,11 @@ func (r *repository) addFeatureFromProto(ctx context.Context, messageName string
 		fieldDefaults[i] = res
 	}
 
-	return star.RenderExistingProtoTemplate(star.ProtoStarInputs{
+	return &star.ProtoStarInputs{
 		Message:  descriptorName,
 		Packages: packageMap,
 		Fields:   fieldDefaults,
-	}, nv)
+	}, nil
 }
 
 func packageAlias(pkgName string) string {
