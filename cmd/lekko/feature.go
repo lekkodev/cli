@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,12 +37,10 @@ import (
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
-	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -60,123 +57,7 @@ func featureCmd() *cobra.Command {
 		featureRemove(),
 		featureEval(),
 		configGroup(),
-		generateStarlarkCmd(),
 	)
-	return cmd
-}
-
-func generateStarlarkCmd() *cobra.Command {
-	var wd string
-	var ns string
-	var configName string
-	cmd := &cobra.Command{
-		Use:   "generate-starlark",
-		Short: "generate starlark from the json representation and compile it",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
-			if err != nil {
-				return errors.Wrap(err, "failed to open config repo")
-			}
-			rootMD, _, err := r.ParseMetadata(ctx)
-			if err != nil {
-				return errors.Wrap(err, "failed to parse config repo metadata")
-			}
-			// re-build proto
-			registry, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
-			if err != nil {
-				return errors.Wrap(err, "rebuild type registry")
-			}
-
-			// read compiled proto from json
-			configFile := feature.NewFeatureFile(ns, configName)
-			contents, err := r.GetFileContents(ctx, filepath.Join(ns, configFile.CompiledJSONFileName))
-			if err != nil {
-				return err
-			}
-			var configProto featurev1beta1.Feature
-			err = protojson.UnmarshalOptions{Resolver: registry}.Unmarshal(contents, &configProto)
-			if err != nil {
-				return err
-			}
-
-			// create a new starlark file from a template (based on the config type)
-			var starBytes []byte
-			starImports := make([]*featurev1beta1.ImportStatement, 0)
-
-			if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-				typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
-				messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
-				if !found {
-					return fmt.Errorf("can't parse type url: %s", typeURL)
-				}
-				starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
-				if err != nil {
-					return err
-				}
-				starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
-				if err != nil {
-					return err
-				}
-				for importPackage, importAlias := range starInputs.Packages {
-					starImports = append(starImports, &featurev1beta1.ImportStatement{
-						Lhs: &featurev1beta1.IdentExpr{
-							Token: importAlias,
-						},
-						Operator: "=",
-						Rhs: &featurev1beta1.ImportExpr{
-							Dot: &featurev1beta1.DotExpr{
-								X:    "proto",
-								Name: "package",
-							},
-							Args: []string{importPackage},
-						},
-					})
-				}
-			} else {
-				starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
-				if err != nil {
-					return err
-				}
-			}
-
-			// mutate starlark with the actual config
-			walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
-			newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
-				Key:  configProto.Key,
-				Type: configProto.GetType(),
-				Feature: &featurev1beta1.FeatureStruct{
-					Description: configProto.GetDescription(),
-				},
-				FeatureOld: &configProto,
-				Imports:    starImports,
-			})
-			if err != nil {
-				return errors.Wrap(err, "walker mutate")
-			}
-			// write starlark to disk
-			if err := r.WriteFile(path.Join(ns, configFile.StarlarkFileName), newBytes, 0600); err != nil {
-				return errors.Wrap(err, "write after mutation")
-			}
-
-			// compile newly generated starlark file
-			_, err = r.Compile(ctx, &repo.CompileRequest{
-				Registry:        registry,
-				NamespaceFilter: ns,
-				FeatureFilter:   configName,
-			})
-			if err != nil {
-				return errors.Wrap(err, "compile after mutation")
-			}
-
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to add config in")
-	cmd.Flags().StringVarP(&configName, "config", "c", "", "name of config to add")
-	// TODO: this doesn't fully work, as it's not propagated everywhere
-	// for example `buf lint` when openning the repo
-	cmd.Flags().StringVarP(&wd, "repo-path", "r", ".", "path to configuration repository")
 	return cmd
 }
 
