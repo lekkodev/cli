@@ -66,8 +66,7 @@ func main() {
 	experimentalCmd.AddCommand(cleanupCmd)
 	experimentalCmd.AddCommand(formatCmd())
 	// code generation
-	genCmd.AddCommand(genGoCmd())
-	experimentalCmd.AddCommand(genCmd)
+	experimentalCmd.AddCommand(genCmd())
 	rootCmd.AddCommand(experimentalCmd)
 
 	logging.InitColors()
