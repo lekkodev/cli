@@ -761,7 +761,7 @@ func nsAdd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to delete")
+	cmd.Flags().StringVarP(&name, "name", "n", "", "name of namespace to add")
 	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }

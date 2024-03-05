@@ -84,6 +84,20 @@ func geneStarlarkCmd() *cobra.Command {
 				return errors.Wrap(err, "rebuild type registry")
 			}
 
+			// check that namespace exists and create it if it doesn't
+			nsExists := false
+			for _, nsFromMeta := range rootMD.Namespaces {
+				if ns == nsFromMeta {
+					nsExists = true
+					break
+				}
+			}
+			if !nsExists {
+				if err := r.AddNamespace(cmd.Context(), ns); err != nil {
+					return errors.Wrap(err, "add namespace")
+				}
+			}
+
 			// read compiled proto from json
 			configFile := feature.NewFeatureFile(ns, configName)
 			contents, err := r.GetFileContents(ctx, filepath.Join(ns, configFile.CompiledJSONFileName))
