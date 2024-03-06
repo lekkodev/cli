@@ -333,7 +333,7 @@ func importCmd() *cobra.Command {
 			}
 			// create empty repo on GitHub
 			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
-			if !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+			if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
 				return err
 			}
 			r, err := git.PlainOpen(".")
@@ -345,7 +345,7 @@ func importCmd() *cobra.Command {
 				Name: "origin",
 				URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
 			})
-			if !errors.Is(err, git.ErrRemoteExists) {
+			if err != nil && !errors.Is(err, git.ErrRemoteExists) {
 				return err
 			}
 			// push to GitHub
@@ -355,7 +355,7 @@ func importCmd() *cobra.Command {
 					Password: rs.GetGithubToken(),
 				},
 			})
-			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 				return err
 			}
 			// Pull to get remote branches
@@ -370,7 +370,7 @@ func importCmd() *cobra.Command {
 					Password: rs.GetGithubToken(),
 				},
 			})
-			if !errors.Is(err, git.NoErrAlreadyUpToDate) {
+			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 				return err
 			}
 			// Create branch config tracking remote
@@ -379,7 +379,7 @@ func importCmd() *cobra.Command {
 				Remote: "origin",
 				Merge:  "refs/heads/main",
 			})
-			if !errors.Is(err, git.ErrBranchExists) {
+			if err != nil && !errors.Is(err, git.ErrBranchExists) {
 				return err
 			}
 			// Import new repo into Lekko
