@@ -1,10 +1,10 @@
 module github.com/lekkodev/cli
 
-go 1.20
+go 1.22
 
 require (
-	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240222223259-f63df0f4810c.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.32.0-20240222223259-f63df0f4810c.1
+	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240308232356-cf7cd50461b8.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.33.0-20240308232356-cf7cd50461b8.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/briandowns/spinner v1.23.0
@@ -26,13 +26,13 @@ require (
 	github.com/whilp/git-urls v1.0.0
 	golang.org/x/mod v0.12.0
 	golang.org/x/oauth2 v0.7.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.25.0
 )
 
 require (
-	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.32.0-20230810202034-1c821065b9a0.1 // indirect
+	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.33.0-20230419180142-0694c10ef23c.1 // indirect
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect

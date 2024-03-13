@@ -33,9 +33,10 @@ func NewAPIKey(bff bffv1beta1connect.BFFServiceClient) *APIKeyManager {
 	return &APIKeyManager{bff: bff}
 }
 
-func (a *APIKeyManager) Create(ctx context.Context, nickname string) (*bffv1beta1.GenerateAPIKeyResponse, error) {
+func (a *APIKeyManager) Create(ctx context.Context, teamname, nickname string) (*bffv1beta1.GenerateAPIKeyResponse, error) {
 	resp, err := a.bff.GenerateAPIKey(ctx, connect_go.NewRequest(&bffv1beta1.GenerateAPIKeyRequest{
 		Nickname: nickname,
+		TeamName: teamname,
 	}))
 	if err != nil {
 		return nil, errors.Wrap(err, "generate api key")
@@ -43,8 +44,8 @@ func (a *APIKeyManager) Create(ctx context.Context, nickname string) (*bffv1beta
 	return resp.Msg, nil
 }
 
-func (a *APIKeyManager) List(ctx context.Context) ([]*bffv1beta1.APIKey, error) {
-	resp, err := a.bff.ListAPIKeys(ctx, connect_go.NewRequest(&bffv1beta1.ListAPIKeysRequest{}))
+func (a *APIKeyManager) List(ctx context.Context, teamname string) ([]*bffv1beta1.APIKey, error) {
+	resp, err := a.bff.ListAPIKeys(ctx, connect_go.NewRequest(&bffv1beta1.ListAPIKeysRequest{ TeamName: teamname }))
 	if err != nil {
 		return nil, errors.Wrap(err, "list api keys")
 	}

@@ -60,7 +60,7 @@ func createAPIKeyCmd() *cobra.Command {
 				}
 			}
 			fmt.Printf("Generating api key for team '%s'...\n", rs.GetLekkoTeam())
-			resp, err := a.Create(cmd.Context(), name)
+			resp, err := a.Create(cmd.Context(), rs.GetLekkoTeam(), name)
 			if err != nil {
 				return err
 			}
@@ -81,7 +81,7 @@ func listAPIKeysCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
-			keys, err := a.List(cmd.Context())
+			keys, err := a.List(cmd.Context(), rs.GetLekkoTeam())
 			if err != nil {
 				return errors.Wrap(err, "list")
 			}
@@ -141,7 +141,7 @@ func deleteAPIKeyCmd() *cobra.Command {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
-				keys, err := a.List(cmd.Context())
+				keys, err := a.List(cmd.Context(), rs.GetLekkoTeam())
 				if err != nil {
 					return errors.Wrap(err, "list")
 				}

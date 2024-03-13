@@ -70,13 +70,14 @@ func (a *OAuth) Login(ctx context.Context, ws secrets.WriteSecrets) error {
 	return nil
 }
 
-func maskToken(token string) string {
+func maskToken(token, prefix string) string {
 	if len(token) == 0 {
 		return ""
 	}
-	parts := strings.Split(token, "_")
-	parts[len(parts)-1] = "**********"
-	return strings.Join(parts, "_")
+	if !strings.HasPrefix(token, prefix) {
+		return "**********"
+	}
+	return prefix + token[len(prefix):min(len(token), len(prefix)+4)] + "**********"
 }
 
 // Logout implicitly expires the relevant credentials by
@@ -91,6 +92,7 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 		ws.SetLekkoUsername("")
 		ws.SetLekkoTeam("")
 		ws.SetLekkoToken("")
+		ws.SetLekkoApiKey("")
 	}
 	if provider == "github" {
 		ws.SetGithubToken("")
@@ -98,6 +100,14 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 	}
 	a.Status(ctx, true, ws)
 	return nil
+}
+
+type ErrUserAlreadyExists struct {
+	username string
+}
+
+func (e ErrUserAlreadyExists) Error() string {
+	return fmt.Sprintf("Account with user '%s' already exists", e.username)
 }
 
 func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
@@ -110,7 +120,7 @@ func (a *OAuth) Register(ctx context.Context, username, password, confirmPasswor
 		return errors.Wrap(err, "register user")
 	}
 	if resp.Msg.GetAccountExisted() {
-		return errors.Errorf("Account with user '%s' already exists", username)
+		return ErrUserAlreadyExists{username: username}
 	}
 	return nil
 }
@@ -187,12 +197,13 @@ func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool, rs secrets.ReadS
 	if lekkoAuthErr == nil {
 		lines = append(lines, fmt.Sprintf("  Logged in to Lekko as %s%s", logging.Bold(rs.GetLekkoUsername()), teamSuffix))
 	}
-	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetLekkoToken())))
+	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetLekkoToken(), "lekko_oauth_")))
+	lines = append(lines, fmt.Sprintf("  API Key: %s", maskToken(rs.GetLekkoApiKey(), "lekko_")))
 	lines = append(lines, fmt.Sprintf("%s %s", logging.Bold("github.com"), authStatus(ghAuthErr)))
 	if ghAuthErr == nil {
 		lines = append(lines, fmt.Sprintf("  Logged in to GitHub as %s", logging.Bold(rs.GetGithubUser())))
 	}
-	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetGithubToken())))
+	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetGithubToken(), "ghu_")))
 
 	fmt.Println(strings.Join(lines, "\n"))
 }
