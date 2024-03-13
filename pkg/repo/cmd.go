@@ -35,13 +35,13 @@ import (
 // e.g. create/delete/list repos.
 type RepoCmd struct {
 	lekkoBFFClient bffv1beta1connect.BFFServiceClient
-	rs secrets.ReadSecrets
+	rs             secrets.ReadSecrets
 }
 
 func NewRepoCmd(bff bffv1beta1connect.BFFServiceClient, rs secrets.ReadSecrets) *RepoCmd {
 	return &RepoCmd{
 		lekkoBFFClient: bff,
-		rs: rs,
+		rs:             rs,
 	}
 }
 

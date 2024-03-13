@@ -118,9 +118,9 @@ func setupCmd() *cobra.Command {
 						Message: "GitHub Repo:",
 					}, &githubRepo); err != nil {
 						return errors.Wrap(err, "prompt")
-					}	
+					}
 				}
-			}		
+			}
 
 			if len(teamName) == 0 {
 				if err := survey.AskOne(&survey.Input{
