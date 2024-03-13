@@ -38,7 +38,7 @@ type WriteSecrets interface {
 	SetLekkoTeam(team string)
 	SetGithubToken(token string)
 	SetGithubUser(user string)
-	SetLekkoApiKey(apikey string)
+	SetLekkoAPIKey(apikey string)
 }
 
 type ReadSecrets interface {
@@ -46,8 +46,8 @@ type ReadSecrets interface {
 	GetLekkoToken() string
 	HasLekkoToken() bool
 	GetLekkoTeam() string
-	HasLekkoApiKey() bool
-	GetLekkoApiKey() string
+	HasLekkoAPIKey() bool
+	GetLekkoAPIKey() string
 	GetGithubToken() string
 	GetGithubUser() string
 	HasGithubToken() bool
@@ -59,7 +59,7 @@ type secrets struct {
 	LekkoUsername string `json:"lekko_username,omitempty" yaml:"lekko_username,omitempty"`
 	LekkoToken    string `json:"lekko_token,omitempty" yaml:"lekko_token,omitempty"`
 	LekkoTeam     string `json:"lekko_team,omitempty" yaml:"lekko_team,omitempty"`
-	LekkoApiKey   string `json:"lekko_api_key,omitempty" yaml:"lekko_api_key,omitempty"`
+	LekkoAPIKey   string `json:"lekko_api_key,omitempty" yaml:"lekko_api_key,omitempty"`
 	GithubUser    string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
 	GithubToken   string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
 	// Deprecated
@@ -224,21 +224,21 @@ func (s *secrets) SetLekkoTeam(team string) {
 	s.LekkoTeam = team
 }
 
-func (s *secrets) HasLekkoApiKey() bool {
-	return len(s.GetLekkoApiKey()) > 0
+func (s *secrets) HasLekkoAPIKey() bool {
+	return len(s.GetLekkoAPIKey()) > 0
 }
 
-func (s *secrets) GetLekkoApiKey() string {
+func (s *secrets) GetLekkoAPIKey() string {
 	s.RLock()
 	defer s.RUnlock()
-	return s.LekkoApiKey
+	return s.LekkoAPIKey
 }
 
-func (s *secrets) SetLekkoApiKey(apikey string) {
+func (s *secrets) SetLekkoAPIKey(apikey string) {
 	s.Lock()
 	defer s.Unlock()
 	s.changed = true
-	s.LekkoApiKey = apikey
+	s.LekkoAPIKey = apikey
 }
 
 func (s *secrets) HasGithubToken() bool {

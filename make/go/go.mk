@@ -17,7 +17,7 @@ GO_TEST_BINS ?=
 # Settable
 GO_GET_PKGS ?=
 # Settable
-GO_MOD_VERSION ?= 1.20
+GO_MOD_VERSION ?= 1.22
 # Settable
 GO_ALL_REPO_PKGS ?= ./cmd/... ./internal/...
 # Settable

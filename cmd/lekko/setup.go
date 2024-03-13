@@ -133,14 +133,14 @@ func setupCmd() *cobra.Command {
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekko())
 			bff = lekko.NewBFFClient(rs)
 
-			if !rs.HasLekkoApiKey() {
+			if !rs.HasLekkoAPIKey() {
 				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 					resp, err := apikey.NewAPIKey(bff).Create(cmd.Context(), rs.GetLekkoTeam(), "")
 					if err != nil {
 						return err
 					}
 					fmt.Printf("Generated api key named '%s'\n", resp.GetNickname())
-					ws.SetLekkoApiKey(resp.GetApiKey())
+					ws.SetLekkoAPIKey(resp.GetApiKey())
 					return nil
 				}, secrets.RequireLekko()); err != nil {
 					return err

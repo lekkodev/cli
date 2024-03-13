@@ -92,7 +92,7 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 		ws.SetLekkoUsername("")
 		ws.SetLekkoTeam("")
 		ws.SetLekkoToken("")
-		ws.SetLekkoApiKey("")
+		ws.SetLekkoAPIKey("")
 	}
 	if provider == "github" {
 		ws.SetGithubToken("")
@@ -198,7 +198,7 @@ func (a *OAuth) Status(ctx context.Context, skipAuthCheck bool, rs secrets.ReadS
 		lines = append(lines, fmt.Sprintf("  Logged in to Lekko as %s%s", logging.Bold(rs.GetLekkoUsername()), teamSuffix))
 	}
 	lines = append(lines, fmt.Sprintf("  Token: %s", maskToken(rs.GetLekkoToken(), "lekko_oauth_")))
-	lines = append(lines, fmt.Sprintf("  API Key: %s", maskToken(rs.GetLekkoApiKey(), "lekko_")))
+	lines = append(lines, fmt.Sprintf("  API Key: %s", maskToken(rs.GetLekkoAPIKey(), "lekko_")))
 	lines = append(lines, fmt.Sprintf("%s %s", logging.Bold("github.com"), authStatus(ghAuthErr)))
 	if ghAuthErr == nil {
 		lines = append(lines, fmt.Sprintf("  Logged in to GitHub as %s", logging.Bold(rs.GetGithubUser())))

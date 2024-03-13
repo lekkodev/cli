@@ -39,6 +39,7 @@ func apikeyCmd() *cobra.Command {
 		listAPIKeysCmd(),
 		checkAPIKeyCmd(),
 		deleteAPIKeyCmd(),
+		showAPIKeyCmd(),
 	)
 	return cmd
 }
@@ -169,5 +170,18 @@ func deleteAPIKeyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name of api key to delete")
+	return cmd
+}
+
+func showAPIKeyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show the locally stored API key",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			fmt.Println(rs.GetLekkoAPIKey())
+			return nil
+		},
+	}
 	return cmd
 }
