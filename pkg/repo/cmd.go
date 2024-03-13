@@ -16,10 +16,18 @@ package repo
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	connect_go "github.com/bufbuild/connect-go"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 )
 
@@ -27,11 +35,13 @@ import (
 // e.g. create/delete/list repos.
 type RepoCmd struct {
 	lekkoBFFClient bffv1beta1connect.BFFServiceClient
+	rs secrets.ReadSecrets
 }
 
-func NewRepoCmd(bff bffv1beta1connect.BFFServiceClient) *RepoCmd {
+func NewRepoCmd(bff bffv1beta1connect.BFFServiceClient, rs secrets.ReadSecrets) *RepoCmd {
 	return &RepoCmd{
 		lekkoBFFClient: bff,
+		rs: rs,
 	}
 }
 
@@ -94,11 +104,78 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	return nil
 }
 
-func (r *RepoCmd) Import(ctx context.Context, owner, repo string) error {
-	_, err := r.lekkoBFFClient.ImportRepository(ctx, connect_go.NewRequest(&bffv1beta1.ImportRepositoryRequest{
+func (r *RepoCmd) Import(ctx context.Context, owner, repoName, description string) error {
+	if len(owner) == 0 {
+		return errors.Errorf("Must provide owner")
+	}
+	if len(repoName) == 0 {
+		// try using current dir as a repo name
+		wd, err := os.Getwd()
+		if err == nil {
+			repoName = filepath.Base(wd)
+		}
+	}
+	ghCli := gh.NewGithubClientFromToken(ctx, r.rs.GetGithubToken())
+	if r.rs.GetGithubUser() == owner {
+		owner = "" // create repo expects an empty owner for personal accounts
+	}
+	// create empty repo on GitHub
+	_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
+	if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+		return err
+	}
+	gitRepo, err := git.PlainOpen(".")
+	if err != nil {
+		return err
+	}
+	// create remote pointing to GitHub (if it not exists)
+	_, err = gitRepo.CreateRemote(&config.RemoteConfig{
+		Name: "origin",
+		URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
+	})
+	if err != nil && !errors.Is(err, git.ErrRemoteExists) {
+		return err
+	}
+	// push to GitHub
+	err = gitRepo.Push(&git.PushOptions{
+		Auth: &http.BasicAuth{
+			Username: r.rs.GetGithubUser(),
+			Password: r.rs.GetGithubToken(),
+		},
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	// Pull to get remote branches
+	w, err := gitRepo.Worktree()
+	if err != nil {
+		return err
+	}
+	err = w.Pull(&git.PullOptions{
+		RemoteName: "origin",
+		Auth: &http.BasicAuth{
+			Username: r.rs.GetGithubUser(),
+			Password: r.rs.GetGithubToken(),
+		},
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	// Create branch config tracking remote
+	err = gitRepo.CreateBranch(&config.Branch{
+		Name:   "main",
+		Remote: "origin",
+		Merge:  "refs/heads/main",
+	})
+	if err != nil && !errors.Is(err, git.ErrBranchExists) {
+		return err
+	}
+
+	// Import new repo into Lekko
+	_, err = r.lekkoBFFClient.ImportRepository(ctx, connect_go.NewRequest(&bffv1beta1.ImportRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
-			RepoName:  repo,
+			RepoName:  repoName,
 		},
 	}))
 	if err != nil {

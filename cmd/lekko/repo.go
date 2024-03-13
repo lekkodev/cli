@@ -20,13 +20,10 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -62,7 +59,7 @@ var repoListCmd = &cobra.Command{
 	Short: "List the config repositories in the currently active team",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-		repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+		repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 		repos, err := repo.List(cmd.Context())
 		if err != nil {
 			return err
@@ -119,7 +116,7 @@ func repoCreateCmd() *cobra.Command {
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)
 
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			url, err := repo.Create(cmd.Context(), owner, repoName, description)
 			if err != nil {
 				return err
@@ -142,7 +139,7 @@ func repoCloneCmd() *cobra.Command {
 		Short: "Clone an existing configuration repository to local disk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			r := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			r := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			ctx := cmd.Context()
 			if len(url) == 0 {
 				var options []string
@@ -185,7 +182,7 @@ func repoDeleteCmd() *cobra.Command {
 		Short: "Delete an existing config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			ctx := cmd.Context()
 			repos, err := repo.List(ctx)
 			if err != nil {
@@ -315,80 +312,9 @@ func importCmd() *cobra.Command {
 		Use:   "import",
 		Short: "Import local repo into GitHub and Lekko",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			if len(owner) == 0 {
-				return errors.Errorf("Must provide owner")
-			}
-			if len(repoName) == 0 {
-				// try using current dir as a repo name
-				wd, err := os.Getwd()
-				if err == nil {
-					repoName = filepath.Base(wd)
-				}
-			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
-			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
-			if rs.GetGithubUser() == owner {
-				owner = "" // create repo expects an empty owner for personal accounts
-			}
-			// create empty repo on GitHub
-			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
-			if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
-				return err
-			}
-			r, err := git.PlainOpen(".")
-			if err != nil {
-				return err
-			}
-			// create remote pointing to GitHub (if it not exists)
-			_, err = r.CreateRemote(&config.RemoteConfig{
-				Name: "origin",
-				URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
-			})
-			if err != nil && !errors.Is(err, git.ErrRemoteExists) {
-				return err
-			}
-			// push to GitHub
-			err = r.Push(&git.PushOptions{
-				Auth: &http.BasicAuth{
-					Username: rs.GetGithubUser(),
-					Password: rs.GetGithubToken(),
-				},
-			})
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return err
-			}
-			// Pull to get remote branches
-			w, err := r.Worktree()
-			if err != nil {
-				return err
-			}
-			err = w.Pull(&git.PullOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: rs.GetGithubUser(),
-					Password: rs.GetGithubToken(),
-				},
-			})
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return err
-			}
-			// Create branch config tracking remote
-			err = r.CreateBranch(&config.Branch{
-				Name:   "main",
-				Remote: "origin",
-				Merge:  "refs/heads/main",
-			})
-			if err != nil && !errors.Is(err, git.ErrBranchExists) {
-				return err
-			}
-			// Import new repo into Lekko
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
-			err = repo.Import(cmd.Context(), owner, repoName)
-			if err != nil {
-				return err
-			}
-			return nil
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
+			return repo.Import(cmd.Context(), owner, repoName, description)
 		},
 	}
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")

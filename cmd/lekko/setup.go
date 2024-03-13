@@ -19,9 +19,11 @@ import (
 	"net/mail"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/apikey"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/oauth"
+	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/team"
 	"github.com/pkg/errors"
@@ -29,10 +31,10 @@ import (
 )
 
 func setupCmd() *cobra.Command {
-	var teamName, email, password, confirmPassword string
+	var teamName, email, password, confirmPassword, githubOwner, githubRepo string
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "setup lekko",
+		Short: "Setup Lekko for a new user",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail()
 			bff := lekko.NewBFFClient(rs)
@@ -102,9 +104,28 @@ func setupCmd() *cobra.Command {
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekkoToken())
 			bff = lekko.NewBFFClient(rs)
 
+			if _, err := git.PlainOpen("."); err == nil {
+				// git repo detected
+				if len(githubOwner) == 0 {
+					if err := survey.AskOne(&survey.Input{
+						Message: "GitHub Owner:",
+					}, &githubOwner); err != nil {
+						return errors.Wrap(err, "prompt")
+					}
+				}
+				if len(githubRepo) == 0 {
+					if err := survey.AskOne(&survey.Input{
+						Message: "GitHub Repo:",
+					}, &githubRepo); err != nil {
+						return errors.Wrap(err, "prompt")
+					}	
+				}
+			}		
+
 			if len(teamName) == 0 {
 				if err := survey.AskOne(&survey.Input{
 					Message: "Team Name:",
+					Default: githubOwner,
 				}, &teamName); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
@@ -130,7 +151,7 @@ func setupCmd() *cobra.Command {
 				return err
 			}
 
-			rs = secrets.NewSecretsOrFail(secrets.RequireLekko())
+			rs = secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
 			bff = lekko.NewBFFClient(rs)
 
 			if !rs.HasLekkoAPIKey() {
@@ -147,10 +168,17 @@ func setupCmd() *cobra.Command {
 				}
 			}
 
+			if len(githubRepo) > 0 {
+				repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
+				return repo.Import(cmd.Context(), githubOwner, githubRepo, "")
+			}
+
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create lekko account with")
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create Lekko account with")
 	cmd.Flags().StringVarP(&teamName, "team", "t", "", "name of team to create")
+	cmd.Flags().StringVarP(&githubOwner, "owner", "o", "", "GitHub owner to house repository in")
+	cmd.Flags().StringVarP(&githubRepo, "repo", "r", "", "GitHub repository name")
 	return cmd
 }
