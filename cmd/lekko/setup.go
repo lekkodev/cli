@@ -170,7 +170,18 @@ func setupCmd() *cobra.Command {
 
 			if len(githubRepo) > 0 {
 				repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-				return repo.Import(cmd.Context(), githubOwner, githubRepo, "")
+				err = repo.Import(cmd.Context(), githubOwner, githubRepo, "")
+				if err != nil {
+					return errors.Wrap(err, "import repo")
+				}
+				err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					ws.SetGithubOwner(githubOwner)
+					ws.SetGithubRepo(githubRepo)
+					return nil
+				})
+				if err != nil {
+					return err
+				}
 			}
 
 			return nil
