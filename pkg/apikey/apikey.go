@@ -45,7 +45,7 @@ func (a *APIKeyManager) Create(ctx context.Context, teamname, nickname string) (
 }
 
 func (a *APIKeyManager) List(ctx context.Context, teamname string) ([]*bffv1beta1.APIKey, error) {
-	resp, err := a.bff.ListAPIKeys(ctx, connect_go.NewRequest(&bffv1beta1.ListAPIKeysRequest{ TeamName: teamname }))
+	resp, err := a.bff.ListAPIKeys(ctx, connect_go.NewRequest(&bffv1beta1.ListAPIKeysRequest{TeamName: teamname}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list api keys")
 	}
