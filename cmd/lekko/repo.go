@@ -327,31 +327,31 @@ func importCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-      list, err := r.Remotes()
-      if len(list) > 0 {
-        return errors.New("Remote already exists, import manually");
-      }
-      worktree, err := r.Worktree()
-      if err != nil {
-        return err
-      }
-      _, err = worktree.Add(".")
-      if err != nil {
-        return err
-      }
-      _, err = worktree.Commit("Configs commit", &git.CommitOptions{
-        All: true,
-      })
-      if err != nil {
-        return err
-      }
+			list, err := r.Remotes()
+			if len(list) > 0 {
+				return errors.New("Remote already exists, import manually")
+			}
+			worktree, err := r.Worktree()
+			if err != nil {
+				return err
+			}
+			_, err = worktree.Add(".")
+			if err != nil {
+				return err
+			}
+			_, err = worktree.Commit("Configs commit", &git.CommitOptions{
+				All: true,
+			})
+			if err != nil {
+				return err
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
 			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
 			if len(repoName) == 0 {
-        repoName = filepath.Base(repoPath)
+				repoName = filepath.Base(repoPath)
 			}
 			// create empty repo on GitHub
-      // an empty owner is fine, since it default to a personal repo
+			// an empty owner is fine, since it default to a personal repo
 			_, err = ghCli.CreateRepo(ctx, owner, repoName, description, true)
 			if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
 				return err
