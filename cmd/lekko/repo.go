@@ -310,34 +310,50 @@ func defaultRepoInitCmd() *cobra.Command {
 }
 
 func importCmd() *cobra.Command {
-	var owner, repoName, description string
+	var owner, repoName, description, repoPath string
 	cmd := &cobra.Command{
 		Use:   "import",
 		Short: "Import local repo into GitHub and Lekko",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			if len(owner) == 0 {
-				return errors.Errorf("Must provide owner")
-			}
-			if len(repoName) == 0 {
-				// try using current dir as a repo name
-				wd, err := os.Getwd()
-				if err == nil {
-					repoName = filepath.Base(wd)
+			if len(repoPath) == 0 {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
 				}
+				repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
 			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
-			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
-			if rs.GetGithubUser() == owner {
-				owner = "" // create repo expects an empty owner for personal accounts
-			}
-			// create empty repo on GitHub
-			_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
-			if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
+			r, err := git.PlainOpen(repoPath)
+			if err != nil {
 				return err
 			}
-			r, err := git.PlainOpen(".")
-			if err != nil {
+      list, err := r.Remotes()
+      if len(list) > 0 {
+        return errors.New("Remote already exists, import manually");
+      }
+      worktree, err := r.Worktree()
+      if err != nil {
+        return err
+      }
+      _, err = worktree.Add(".")
+      if err != nil {
+        return err
+      }
+      _, err = worktree.Commit("Configs commit", &git.CommitOptions{
+        All: true,
+      })
+      if err != nil {
+        return err
+      }
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
+			ghCli := gh.NewGithubClientFromToken(ctx, rs.GetGithubToken())
+			if len(repoName) == 0 {
+        repoName = filepath.Base(repoPath)
+			}
+			// create empty repo on GitHub
+      // an empty owner is fine, since it default to a personal repo
+			_, err = ghCli.CreateRepo(ctx, owner, repoName, description, true)
+			if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
 				return err
 			}
 			// create remote pointing to GitHub (if it not exists)
@@ -394,5 +410,6 @@ func importCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
 	return cmd
 }
