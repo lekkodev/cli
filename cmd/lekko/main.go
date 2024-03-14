@@ -68,6 +68,7 @@ func main() {
 	// code generation
 	experimentalCmd.AddCommand(genCmd())
 	rootCmd.AddCommand(experimentalCmd)
+	rootCmd.AddCommand(setupCmd())
 
 	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {

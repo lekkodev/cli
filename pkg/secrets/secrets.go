@@ -38,6 +38,9 @@ type WriteSecrets interface {
 	SetLekkoTeam(team string)
 	SetGithubToken(token string)
 	SetGithubUser(user string)
+	SetLekkoAPIKey(apikey string)
+	SetGithubOwner(githubOwner string)
+	SetGithubRepo(githubRepo string)
 }
 
 type ReadSecrets interface {
@@ -45,19 +48,27 @@ type ReadSecrets interface {
 	GetLekkoToken() string
 	HasLekkoToken() bool
 	GetLekkoTeam() string
+	HasLekkoAPIKey() bool
+	GetLekkoAPIKey() string
 	GetGithubToken() string
 	GetGithubUser() string
 	HasGithubToken() bool
 	GetUsername() string
 	GetToken() string
+	GetGithubOwner() string
+	GetGithubRepo() string
 }
 
 type secrets struct {
 	LekkoUsername string `json:"lekko_username,omitempty" yaml:"lekko_username,omitempty"`
 	LekkoToken    string `json:"lekko_token,omitempty" yaml:"lekko_token,omitempty"`
 	LekkoTeam     string `json:"lekko_team,omitempty" yaml:"lekko_team,omitempty"`
+	LekkoAPIKey   string `json:"lekko_api_key,omitempty" yaml:"lekko_api_key,omitempty"`
 	GithubUser    string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
 	GithubToken   string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
+	GithubOwner   string `json:"github_owner,omitempty" yaml:"github_owner,omitempty"`
+	GithubRepo    string `json:"github_repo,omitempty" yaml:"github_repo,omitempty"`
+
 	// Deprecated
 	GithubEmail string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
 
@@ -177,6 +188,32 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
+func (s *secrets) GetGithubOwner() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.GithubOwner
+}
+
+func (s *secrets) SetGithubOwner(user string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.GithubOwner = user
+}
+
+func (s *secrets) GetGithubRepo() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.GithubRepo
+}
+
+func (s *secrets) SetGithubRepo(user string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.GithubRepo = user
+}
+
 func (s *secrets) GetLekkoUsername() string {
 	s.RLock()
 	defer s.RUnlock()
@@ -218,6 +255,23 @@ func (s *secrets) SetLekkoTeam(team string) {
 	defer s.Unlock()
 	s.changed = true
 	s.LekkoTeam = team
+}
+
+func (s *secrets) HasLekkoAPIKey() bool {
+	return len(s.GetLekkoAPIKey()) > 0
+}
+
+func (s *secrets) GetLekkoAPIKey() string {
+	s.RLock()
+	defer s.RUnlock()
+	return s.LekkoAPIKey
+}
+
+func (s *secrets) SetLekkoAPIKey(apikey string) {
+	s.Lock()
+	defer s.Unlock()
+	s.changed = true
+	s.LekkoAPIKey = apikey
 }
 
 func (s *secrets) HasGithubToken() bool {

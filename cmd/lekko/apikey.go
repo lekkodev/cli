@@ -39,6 +39,7 @@ func apikeyCmd() *cobra.Command {
 		listAPIKeysCmd(),
 		checkAPIKeyCmd(),
 		deleteAPIKeyCmd(),
+		showAPIKeyCmd(),
 	)
 	return cmd
 }
@@ -60,7 +61,7 @@ func createAPIKeyCmd() *cobra.Command {
 				}
 			}
 			fmt.Printf("Generating api key for team '%s'...\n", rs.GetLekkoTeam())
-			resp, err := a.Create(cmd.Context(), name)
+			resp, err := a.Create(cmd.Context(), rs.GetLekkoTeam(), name)
 			if err != nil {
 				return err
 			}
@@ -81,7 +82,7 @@ func listAPIKeysCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
-			keys, err := a.List(cmd.Context())
+			keys, err := a.List(cmd.Context(), rs.GetLekkoTeam())
 			if err != nil {
 				return errors.Wrap(err, "list")
 			}
@@ -141,7 +142,7 @@ func deleteAPIKeyCmd() *cobra.Command {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
-				keys, err := a.List(cmd.Context())
+				keys, err := a.List(cmd.Context(), rs.GetLekkoTeam())
 				if err != nil {
 					return errors.Wrap(err, "list")
 				}
@@ -169,5 +170,18 @@ func deleteAPIKeyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&name, "name", "n", "", "Name of api key to delete")
+	return cmd
+}
+
+func showAPIKeyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show",
+		Short: "Show the locally stored API key",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			fmt.Println(rs.GetLekkoAPIKey())
+			return nil
+		},
+	}
 	return cmd
 }
