@@ -50,6 +50,7 @@ func repoCmd() *cobra.Command {
 		repoInitCmd(),
 		defaultRepoInitCmd(),
 		importCmd(),
+		remoteCmd(),
 	)
 	return cmd
 }
@@ -320,5 +321,21 @@ func importCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
 	cmd.Flags().StringVarP(&repoName, "repo", "r", "", "GitHub repository name")
 	cmd.Flags().StringVarP(&description, "description", "d", "", "GitHub repository description")
+	return cmd
+}
+
+func remoteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "remote",
+		Short: "Show the remote Lekko repo currently in use",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
+			if len(rs.GetGithubOwner()) == 0 || len(rs.GetGithubRepo()) == 0 {
+				return errors.New("no remote repo info in Lekko config")
+			}
+			fmt.Printf("%s/%s", rs.GetGithubOwner(), rs.GetGithubRepo())
+			return nil
+		},
+	}
 	return cmd
 }
