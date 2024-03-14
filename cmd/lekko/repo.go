@@ -328,6 +328,9 @@ func importCmd() *cobra.Command {
 				return err
 			}
 			list, err := r.Remotes()
+			if err != nil {
+				return err
+			}
 			if len(list) > 0 {
 				return errors.New("Remote already exists, import manually")
 			}
