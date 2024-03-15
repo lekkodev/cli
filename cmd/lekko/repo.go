@@ -62,7 +62,7 @@ var repoListCmd = &cobra.Command{
 	Short: "List the config repositories in the currently active team",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-		repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+		repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 		repos, err := repo.List(cmd.Context())
 		if err != nil {
 			return err
@@ -119,7 +119,7 @@ func repoCreateCmd() *cobra.Command {
 			fmt.Printf("Once done, press [Enter] to continue...")
 			_ = waitForEnter(os.Stdin)
 
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			url, err := repo.Create(cmd.Context(), owner, repoName, description)
 			if err != nil {
 				return err
@@ -142,7 +142,7 @@ func repoCloneCmd() *cobra.Command {
 		Short: "Clone an existing configuration repository to local disk",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			r := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			r := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			ctx := cmd.Context()
 			if len(url) == 0 {
 				var options []string
@@ -185,7 +185,7 @@ func repoDeleteCmd() *cobra.Command {
 		Short: "Delete an existing config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 			ctx := cmd.Context()
 			repos, err := repo.List(ctx)
 			if err != nil {
@@ -402,12 +402,8 @@ func importCmd() *cobra.Command {
 				return err
 			}
 			// Import new repo into Lekko
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs))
-			err = repo.Import(cmd.Context(), owner, repoName)
-			if err != nil {
-				return err
-			}
-			return nil
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
+			return repo.Import(cmd.Context(), owner, repoName, description)
 		},
 	}
 	cmd.Flags().StringVarP(&owner, "owner", "o", "", "GitHub owner to house repository in")
