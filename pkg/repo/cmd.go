@@ -104,28 +104,51 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	return nil
 }
 
-func (r *RepoCmd) Import(ctx context.Context, owner, repoName, description string) error {
-	if len(owner) == 0 {
-		return errors.Errorf("Must provide owner")
-	}
-	if len(repoName) == 0 {
-		// try using current dir as a repo name
-		wd, err := os.Getwd()
-		if err == nil {
-			repoName = filepath.Base(wd)
+func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
+	if len(repoPath) == 0 {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
 		}
+		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
+	}
+	gitRepo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return err
+	}
+	list, err := gitRepo.Remotes()
+	if err != nil {
+		return err
+	}
+	if len(list) > 0 {
+		return errors.New("Remote already exists, import manually")
+	}
+	worktree, err := gitRepo.Worktree()
+	if err != nil {
+		return err
+	}
+	_, err = worktree.Add(".")
+	if err != nil {
+		return err
+	}
+	_, err = worktree.Commit("Configs commit", &git.CommitOptions{
+		All: true,
+	})
+	if err != nil {
+		return err
 	}
 	ghCli := gh.NewGithubClientFromToken(ctx, r.rs.GetGithubToken())
 	if r.rs.GetGithubUser() == owner {
 		owner = "" // create repo expects an empty owner for personal accounts
 	}
-	// create empty repo on GitHub
-	_, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
-	if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
-		return err
+	// try using current dir as a repo name
+	if len(repoName) == 0 {
+		repoName = filepath.Base(repoPath)
 	}
-	gitRepo, err := git.PlainOpen(".")
-	if err != nil {
+	// create empty repo on GitHub
+	// an empty owner is fine, since it default to a personal repo
+	_, err = ghCli.CreateRepo(ctx, owner, repoName, description, true)
+	if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
 		return err
 	}
 	// create remote pointing to GitHub (if it not exists)
