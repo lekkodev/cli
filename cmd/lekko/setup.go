@@ -31,7 +31,7 @@ import (
 )
 
 func setupCmd() *cobra.Command {
-	var teamName, email, password, confirmPassword, githubOwner, githubRepo string
+	var repoPath, teamName, email, password, confirmPassword, githubOwner, githubRepo string
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Setup Lekko for a new user",
@@ -170,7 +170,7 @@ func setupCmd() *cobra.Command {
 
 			if len(githubRepo) > 0 {
 				repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-				err = repo.Import(cmd.Context(), githubOwner, githubRepo, "")
+				err = repo.Import(cmd.Context(), repoPath, githubOwner, githubRepo, "")
 				if err != nil {
 					return errors.Wrap(err, "import repo")
 				}
@@ -191,5 +191,6 @@ func setupCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&teamName, "team", "t", "", "name of team to create")
 	cmd.Flags().StringVarP(&githubOwner, "owner", "o", "", "GitHub owner to house repository in")
 	cmd.Flags().StringVarP(&githubRepo, "repo", "r", "", "GitHub repository name")
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
 	return cmd
 }
