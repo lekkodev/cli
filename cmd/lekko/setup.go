@@ -108,7 +108,7 @@ func setupCmd() *cobra.Command {
 					if err := browser.OpenURL(url); err != nil {
 						return err
 					}
-					fmt.Printf("Press [Enter] to refresh the list of organizations")
+					fmt.Printf("Press %s to refresh the list of organizations", logging.Bold("[Enter]"))
 					_ = waitForEnter(os.Stdin)
 				}
 			}
@@ -171,7 +171,7 @@ func setupCmd() *cobra.Command {
 						return err
 					}
 					// TODO: consolidate with create api key command
-					fmt.Printf("Generated api key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
+					fmt.Printf("Generated API key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
 					ws.SetLekkoAPIKey(resp.GetApiKey())
 					return nil
 				}, secrets.RequireLekko()); err != nil {
