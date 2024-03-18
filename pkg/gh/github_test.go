@@ -57,9 +57,9 @@ func TestGetUserOrganizations(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Len(t, result, 3)
-	require.Equal(t, "lekkodev1", result[0])
-	require.Equal(t, "lekkodev2", result[1])
-	require.Equal(t, "lekkodev3", result[2])
+	require.Equal(t, "lekkodev1", result[0].GetLogin())
+	require.Equal(t, "lekkodev2", result[1].GetLogin())
+	require.Equal(t, "lekkodev3", result[2].GetLogin())
 }
 
 func TestGetAllUserRepositories(t *testing.T) {
