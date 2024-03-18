@@ -25,6 +25,7 @@ import (
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	"github.com/briandowns/spinner"
 	connect_go "github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -119,8 +120,9 @@ func (a *OAuth) PreRegister(ctx context.Context, username string) (*AuthCredenti
 		return nil, errors.Wrap(err, "Failed to get device code")
 	}
 	_, err = a.lekkoAuthClient.PreRegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.PreRegisterUserRequest{
-		Username:   username,
-		DeviceCode: dcResp.Msg.DeviceCode,
+		Username: username,
+		// We're passing in user code just because that's what backend handles better at the moment
+		DeviceCode: dcResp.Msg.UserCode,
 	}))
 	// TODO: Better error handling for different error types
 	if err != nil {
@@ -128,6 +130,12 @@ func (a *OAuth) PreRegister(ctx context.Context, username string) (*AuthCredenti
 	}
 	// Wait for user to finish registration step, which will make an access token available
 	// TODO: Handle cancellations gracefully
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = " Check your email address for a sign-up link. Waiting for registration to complete, do not close this session..."
+	s.Start()
+	defer func() {
+		s.Stop()
+	}()
 	df := NewDeviceFlow(lekko.URL)
 	return df.pollToken(ctx, dcResp.Msg.DeviceCode, time.Second*time.Duration(dcResp.Msg.IntervalS))
 }

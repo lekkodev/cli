@@ -31,7 +31,7 @@ import (
 )
 
 func setupCmd() *cobra.Command {
-	var repoPath, teamName, email, password, confirmPassword, githubOwner, githubRepo string
+	var repoPath, teamName, email, githubOwner, githubRepo string
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Setup Lekko for a new user",
@@ -57,44 +57,15 @@ func setupCmd() *cobra.Command {
 				return errors.New("invalid email address")
 			}
 
-			// prompt password
-			if err := survey.AskOne(&survey.Password{
-				Message: "Password:",
-			}, &password); err != nil {
-				return errors.Wrap(err, "prompt password")
-			}
-			if err := survey.AskOne(&survey.Password{
-				Message: "Confirm Password:",
-			}, &confirmPassword); err != nil {
-				return errors.Wrap(err, "prompt confirm password")
-			}
-			if password != confirmPassword {
-				return errors.New("passwords don't match")
-			}
-
-			err = auth.Register(cmd.Context(), email, password, confirmPassword)
+			// Trigger pre-registration, wait for signup & oauth
+			creds, err := auth.PreRegister(cmd.Context(), email)
 			if err != nil {
-				userExistsErr := oauth.ErrUserAlreadyExists{}
-				if errors.As(err, &userExistsErr) {
-					fmt.Printf("User %s already exists, skipping registration\n", email)
-				} else {
-					return errors.Wrap(err, "setup: register")
-				}
-			} else {
-				fmt.Println("Please check you email and enter verification code below.")
-				var code string
-				err := survey.AskOne(&survey.Input{
-					Message: "Verification Code:",
-				}, &code)
-				if err != nil {
-					return err
-				}
-				if err := auth.ConfirmUser(cmd.Context(), email, code); err != nil {
-					return err
-				}
+				return err
 			}
+			fmt.Printf("Sign-up complete! You are now logged into Lekko as %s.\n", email)
 
 			err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				ws.SetLekkoToken(creds.Token)
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
 				return auth.Login(cmd.Context(), ws)
 			})
