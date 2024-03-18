@@ -26,6 +26,9 @@ service AuthService {
   rpc ConfirmForgotPassword(ConfirmForgotPasswordRequest) returns (ConfirmForgotPasswordResponse) {}
   // ForgotPassword starts a password reset flow for a user
   rpc ForgotPassword(ForgotPasswordRequest) returns (ForgotPasswordResponse) {}
+  // If the request is valid, the service will send an email with a registration
+  // to the email specified. If a user with that email exists, this will be a no-op.
+  rpc PreRegisterUser(PreRegisterUserRequest) returns (PreRegisterUserResponse) {}
   // We will return required auth info in a cookie
   // that is sent to the same origin for other requests
   // inside the bff service.
@@ -40,8 +43,8 @@ service AuthService {
   rpc ResendVerificationCode(ResendVerificationCodeRequest) returns (ResendVerificationCodeResponse) {}
 
   /* The following rpcs implement part of the OAuth 2.0 Device Authorization Grant
-     * https://www.ietf.org/rfc/rfc8628.html
-  */
+   * https://www.ietf.org/rfc/rfc8628.html
+   */
   // An rpc that a 3rd party device makes to our backend to obtain device and user
   // codes to complete device oauth.
   rpc GetDeviceCode(GetDeviceCodeRequest) returns (GetDeviceCodeResponse) {}
@@ -49,6 +52,15 @@ service AuthService {
   // the user has completed authentication through a browser-based user agent.
   rpc GetAccessToken(GetAccessTokenRequest) returns (GetAccessTokenResponse) {}
 }
+
+message PreRegisterUserRequest {
+  string username = 1;
+  // If a device code is sent with the request, it should be passed along
+  // to the RegisterUser call.
+  string device_code = 2;
+}
+
+message PreRegisterUserResponse {}
 
 message LoginRequest {
   string username = 1;
@@ -87,6 +99,10 @@ message RegisterUserRequest {
   string username = 1;
   string password = 2;
   string confirm_password = 3;
+  // An encrypted token issued by the backend. If this token is present, valid,
+  // and not expired, the created user account will be confirmed and their email
+  // address verified.
+  string registration_token = 4;
 }
 
 message RegisterUserResponse {
