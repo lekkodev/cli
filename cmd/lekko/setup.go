@@ -34,7 +34,8 @@ import (
 )
 
 func setupCmd() *cobra.Command {
-	var repoPath, teamName, email, githubOwner, githubRepo string
+	var repoPath, email, githubOrgName, githubRepo string
+	var resume bool
 	cmd := &cobra.Command{
 		Use:   "setup",
 		Short: "Setup Lekko for a new user",
@@ -43,43 +44,48 @@ func setupCmd() *cobra.Command {
 			bff := lekko.NewBFFClient(rs)
 			auth := oauth.NewOAuth(bff)
 
-			if len(rs.GetLekkoUsername()) > 0 {
+			if len(rs.GetLekkoUsername()) > 0 && !resume {
 				return fmt.Errorf("logged in as %s, please log out first (`lekko auth logout -p lekko`)", rs.GetLekkoUsername())
 			}
 
 			var err error
 
-			if len(email) == 0 {
-				if err := survey.AskOne(&survey.Input{
-					Message: "Email:",
-				}, &email); err != nil {
-					return errors.Wrap(err, "prompt email")
+			if !resume {
+				if len(email) == 0 {
+					if err := survey.AskOne(&survey.Input{
+						Message: "Email:",
+					}, &email); err != nil {
+						return errors.Wrap(err, "prompt email")
+					}
 				}
-			}
-			if _, err := mail.ParseAddress(email); err != nil {
-				return errors.New("invalid email address")
-			}
+				if _, err := mail.ParseAddress(email); err != nil {
+					return errors.New("invalid email address")
+				}
 
-			err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				// Trigger pre-registration, wait for signup & device auth
-				err := auth.PreRegister(cmd.Context(), email, ws)
+				err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					// Trigger pre-registration, wait for signup & device auth
+					err := auth.PreRegister(cmd.Context(), email, ws)
+					if err != nil {
+						return err
+					}
+
+					auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
+					return auth.Login(cmd.Context(), ws)
+				})
 				if err != nil {
 					return err
 				}
-
-				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
-				return auth.Login(cmd.Context(), ws)
-			})
-			if err != nil {
-				return err
 			}
+
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekkoToken(), secrets.RequireGithub())
 			bff = lekko.NewBFFClient(rs)
 
 			ghCli := gh.NewGithubClientFromToken(cmd.Context(), rs.GetGithubToken())
 
-			var githubOrgName string
 			for {
+				if len(githubOrgName) > 0 {
+					break
+				}
 				orgs, err := ghCli.GetUserOrganizations(cmd.Context())
 				if err != nil {
 					return err
@@ -91,20 +97,19 @@ func setupCmd() *cobra.Command {
 					orgNames[i+1] = org.GetLogin()
 				}
 				if err := survey.AskOne(&survey.Select{
-					Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house your new config repo:",
+					Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house a new config repo:",
 					Options: orgNames,
 				}, &githubOrgName); err != nil {
 					return errors.Wrap(err, "prompt")
 				}
 				if githubOrgName == authorizeNewOrg {
+					githubOrgName = ""
 					url := "https://github.com/apps/lekko-app/installations/new"
 					if err := browser.OpenURL(url); err != nil {
 						return err
 					}
 					fmt.Printf("Press [Enter] to refresh the list of organizations")
 					_ = waitForEnter(os.Stdin)
-				} else {
-					break
 				}
 			}
 			if len(githubOrgName) == 0 {
@@ -119,17 +124,17 @@ func setupCmd() *cobra.Command {
 			}
 			teamExists := false
 			for _, existingTeam := range teams {
-				if existingTeam.TeamName == teamName {
+				if existingTeam.TeamName == githubOrgName {
 					teamExists = true
 				}
 			}
 			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				if teamExists {
 					// TODO: send a request to join the team
-					ws.SetLekkoTeam(teamName)
+					ws.SetLekkoTeam(githubOrgName)
 					return nil
 				}
-				return t.Create(cmd.Context(), teamName, ws)
+				return t.Create(cmd.Context(), githubOrgName, ws)
 			}, secrets.RequireLekkoToken()); err != nil {
 				return err
 			}
@@ -144,6 +149,20 @@ func setupCmd() *cobra.Command {
 
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
 			bff = lekko.NewBFFClient(rs)
+
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
+			err = repo.Import(cmd.Context(), repoPath, githubOrgName, githubRepo, "")
+			if err != nil {
+				return errors.Wrap(err, "import repo")
+			}
+			err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				ws.SetGithubOwner(githubOrgName)
+				ws.SetGithubRepo(githubRepo)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
 
 			if !rs.HasLekkoAPIKey() {
 				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
@@ -160,27 +179,13 @@ func setupCmd() *cobra.Command {
 				}
 			}
 
-			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-			err = repo.Import(cmd.Context(), repoPath, githubOwner, githubRepo, "")
-			if err != nil {
-				return errors.Wrap(err, "import repo")
-			}
-			err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				ws.SetGithubOwner(githubOwner)
-				ws.SetGithubRepo(githubRepo)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create Lekko account with")
-	cmd.Flags().StringVarP(&teamName, "team", "t", "", "name of team to create")
-	cmd.Flags().StringVarP(&githubOwner, "owner", "o", "", "GitHub owner to house repository in")
+	cmd.Flags().StringVarP(&githubOrgName, "org", "o", "", "GitHub organization to house repository in")
 	cmd.Flags().StringVarP(&githubRepo, "repo", "r", "", "GitHub repository name")
 	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	cmd.Flags().BoolVar(&resume, "resume", false, "resume setup using currently authenticated user")
 	return cmd
 }
