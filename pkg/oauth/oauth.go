@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -110,8 +111,29 @@ func (e ErrUserAlreadyExists) Error() string {
 	return fmt.Sprintf("Account with user '%s' already exists", e.username)
 }
 
+func (a *OAuth) PreRegister(ctx context.Context, username string) (*AuthCredentials, error) {
+	dcResp, err := a.lekkoAuthClient.GetDeviceCode(ctx, connect_go.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
+		ClientId: LekkoClientID,
+	}))
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to get device code")
+	}
+	_, err = a.lekkoAuthClient.PreRegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.PreRegisterUserRequest{
+		Username:   username,
+		DeviceCode: dcResp.Msg.DeviceCode,
+	}))
+	// TODO: Better error handling for different error types
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed pre-registration step for user")
+	}
+	// Wait for user to finish registration step, which will make an access token available
+	// TODO: Handle cancellations gracefully
+	df := NewDeviceFlow(lekko.URL)
+	return df.pollToken(ctx, dcResp.Msg.DeviceCode, time.Second*time.Duration(dcResp.Msg.IntervalS))
+}
+
 func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
-	resp, err := a.lekkoAuthClient.RegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.RegisterUserRequest{
+	registerResp, err := a.lekkoAuthClient.RegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.RegisterUserRequest{
 		Username:        username,
 		Password:        password,
 		ConfirmPassword: confirmPassword,
@@ -119,7 +141,7 @@ func (a *OAuth) Register(ctx context.Context, username, password, confirmPasswor
 	if err != nil {
 		return errors.Wrap(err, "register user")
 	}
-	if resp.Msg.GetAccountExisted() {
+	if registerResp.Msg.GetAccountExisted() {
 		return ErrUserAlreadyExists{username: username}
 	}
 	return nil

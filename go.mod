@@ -3,8 +3,8 @@ module github.com/lekkodev/cli
 go 1.22
 
 require (
-	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240308232356-cf7cd50461b8.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.33.0-20240308232356-cf7cd50461b8.1
+	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240315184309-655c9c725f17.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.33.0-20240315184309-655c9c725f17.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/briandowns/spinner v1.23.0
