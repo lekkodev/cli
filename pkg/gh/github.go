@@ -115,19 +115,13 @@ func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, 
 }
 
 // GetUserOrganizations uses an authenticated call to get the users private and public organizations
-func (gc *GithubClient) GetUserOrganizations(ctx context.Context) ([]string, error) {
+func (gc *GithubClient) GetUserOrganizations(ctx context.Context) ([]*github.Organization, error) {
 	// TODO: may need pagination if user is in more than 100 orgs
-	orgs, _, err := gc.Organizations.List(ctx, "", nil)
+	orgs, _, err := gc.Organizations.List(ctx, "", &github.ListOptions{PerPage: 100})
 	if err != nil {
 		return nil, errors.New(SanitizedErrorMessage(err))
 	}
-	var result = make([]string, 0, len(orgs))
-	for _, org := range orgs {
-		if org.Login != nil {
-			result = append(result, *org.Login)
-		}
-	}
-	return result, nil
+	return orgs, nil
 }
 
 // GetAuthenticatedRepos gets all repos for a user. Passing the empty string will list

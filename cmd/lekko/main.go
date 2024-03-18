@@ -68,6 +68,8 @@ func main() {
 	// code generation
 	experimentalCmd.AddCommand(genCmd())
 	rootCmd.AddCommand(experimentalCmd)
+
+	// setup
 	rootCmd.AddCommand(setupCmd())
 
 	logging.InitColors()

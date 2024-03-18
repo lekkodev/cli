@@ -22,6 +22,7 @@ import (
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	"github.com/AlecAivazis/survey/v2"
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
@@ -116,6 +117,15 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	if err != nil {
 		return err
 	}
+
+	var createGitHubRepo bool
+	if err := survey.AskOne(&survey.Confirm{Message: fmt.Sprintf("Create a new repository %s/%s on GitHub?", owner, repoName)}, &createGitHubRepo); err != nil {
+		return errors.Wrap(err, "prompt")
+	}
+	if !createGitHubRepo {
+		return errors.New("Cancelled")
+	}
+
 	list, err := gitRepo.Remotes()
 	if err != nil {
 		return err
@@ -127,15 +137,21 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	if err != nil {
 		return err
 	}
-	_, err = worktree.Add(".")
+	status, err := worktree.Status()
 	if err != nil {
 		return err
 	}
-	_, err = worktree.Commit("Configs commit", &git.CommitOptions{
-		All: true,
-	})
-	if err != nil {
-		return err
+	if !status.IsClean() {
+		_, err = worktree.Add(".")
+		if err != nil {
+			return err
+		}
+		_, err = worktree.Commit("Configs commit", &git.CommitOptions{
+			All: true,
+		})
+		if err != nil {
+			return err
+		}
 	}
 	ghCli := gh.NewGithubClientFromToken(ctx, r.rs.GetGithubToken())
 	if r.rs.GetGithubUser() == owner {
