@@ -140,11 +140,7 @@ func setupCmd() *cobra.Command {
 			}
 
 			if len(githubRepo) == 0 {
-				if err := survey.AskOne(&survey.Input{
-					Message: "Name of a new GitHub repository to create:",
-				}, &githubRepo); err != nil {
-					return errors.Wrap(err, "prompt")
-				}
+				githubRepo = "lekko-configs"
 			}
 
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
