@@ -57,15 +57,13 @@ func setupCmd() *cobra.Command {
 				return errors.New("invalid email address")
 			}
 
-			// Trigger pre-registration, wait for signup & oauth
-			creds, err := auth.PreRegister(cmd.Context(), email)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Sign-up complete! You are now logged into Lekko as %s.\n", email)
-
 			err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				ws.SetLekkoToken(creds.Token)
+				// Trigger pre-registration, wait for signup & device auth
+				err := auth.PreRegister(cmd.Context(), email, ws)
+				if err != nil {
+					return err
+				}
+
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
 				return auth.Login(cmd.Context(), ws)
 			})

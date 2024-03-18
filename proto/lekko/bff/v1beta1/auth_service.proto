@@ -103,11 +103,6 @@ message RegisterUserRequest {
   // and not expired, the created user account will be confirmed and their email
   // address verified.
   string registration_token = 4;
-  // If a device code is passed to this request, the user should be guided to
-  // complete the rest of the registration/onboarding on the device if their
-  // account is successfully created. As a side effect, the service will
-  // create an access token for the device.
-  string device_code = 5;
 }
 
 message RegisterUserResponse {

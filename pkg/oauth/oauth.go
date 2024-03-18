@@ -112,32 +112,44 @@ func (e ErrUserAlreadyExists) Error() string {
 	return fmt.Sprintf("Account with user '%s' already exists", e.username)
 }
 
-func (a *OAuth) PreRegister(ctx context.Context, username string) (*AuthCredentials, error) {
+func (a *OAuth) PreRegister(ctx context.Context, username string, ws secrets.WriteSecrets) error {
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = " Generating OAuth code..."
+	s.Start()
 	dcResp, err := a.lekkoAuthClient.GetDeviceCode(ctx, connect_go.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
 		ClientId: LekkoClientID,
 	}))
+	s.Stop()
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to get device code")
+		return errors.Wrap(err, "Failed to get device code")
 	}
+	s.Suffix = " Connecting to Lekko..."
+	s.Start()
 	_, err = a.lekkoAuthClient.PreRegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.PreRegisterUserRequest{
 		Username: username,
 		// We're passing in user code just because that's what backend handles better at the moment
 		DeviceCode: dcResp.Msg.UserCode,
 	}))
+	s.Stop()
 	// TODO: Better error handling for different error types
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed pre-registration step for user")
+		return errors.Wrap(err, "Failed pre-registration step for user")
 	}
 	// Wait for user to finish registration step, which will make an access token available
 	// TODO: Handle cancellations gracefully
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	s.Suffix = " Check your email address for a sign-up link. Waiting for registration to complete, do not close this session..."
 	s.Start()
-	defer func() {
-		s.Stop()
-	}()
 	df := NewDeviceFlow(lekko.URL)
-	return df.pollToken(ctx, dcResp.Msg.DeviceCode, time.Second*time.Duration(dcResp.Msg.IntervalS))
+	creds, err := df.pollToken(ctx, dcResp.Msg.DeviceCode, time.Second*time.Duration(dcResp.Msg.IntervalS))
+	s.Stop()
+	if err != nil {
+		return errors.Wrap(err, "Failed to login to Lekko")
+	}
+	ws.SetLekkoUsername(username)
+	ws.SetLekkoToken(creds.Token)
+
+	fmt.Printf("Sign-up complete! You are now logged into Lekko as %s.\n", logging.Bold(username))
+	return nil
 }
 
 func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
