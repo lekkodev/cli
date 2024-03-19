@@ -746,8 +746,19 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 			t = "boolean"
 		case protoreflect.DoubleKind:
 			t = "number"
+		case protoreflect.Int64Kind:
+			t = "number"
+		case protoreflect.EnumKind:
+			t = "string"
+		case protoreflect.MessageKind:
+			t = string(f.Message().Name())
 			// TODO add more
+    default:
+      t = f.Kind().String()
 		}
+    if f.Cardinality() == protoreflect.Repeated {
+      t = "[]" + t
+    }
 		fields = append(fields, fmt.Sprintf("%s: %s;", f.TextName(), t))
 	}
 
