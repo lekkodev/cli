@@ -730,6 +730,37 @@ func getStringRetValues(f *featurev1beta1.Feature) []string {
 	return rets
 }
 
+func getTsInterface(d protoreflect.MessageDescriptor) (string, error) {
+	const templateBody = `export interface {{$.Name}} {
+{{range  $.Fields}}{{ . }}
+{{end}}
+}`
+
+  var fields []string
+  for i := 0; i < d.Fields().Len(); i++ {
+    fields = append(fields, string(d.Fields().Get(i).TextName()))
+  }
+
+	data := struct {
+    Name            string
+		Fields []string
+	}{
+    string(d.Name()),
+    fields,
+	}
+	templ, err := template.New("go func").Parse(templateBody)
+	if err != nil {
+		return "", err
+	}
+	var ret bytes.Buffer
+	err = templ.Execute(&ret, data)
+	if err != nil {
+		return "", err
+	}
+  return ret.String(), nil
+}
+
+
 func genTsCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -744,11 +775,19 @@ func genTsCmd() *cobra.Command {
 				return errors.Wrap(err, "new repo")
 			}
 			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
-			// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
 			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
 			staticCtxType := unpackProtoType("", nsMDs[ns].ContextProto)
 
       fmt.Printf("%+v\n", staticCtxType)
+      //fmt.Printf("%+v\n", typeRegistry)
+      ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
+      if err != nil {
+        return err
+      }
+      fmt.Printf("%+v\n", ptype)
+      fmt.Printf("%+v\n", ptype.Descriptor())
+      face, _ := getTsInterface(ptype.Descriptor())
+      fmt.Printf("%+v\n", face)
       // Handle no context proto (make signatures)
 
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
@@ -799,7 +838,7 @@ func genTsCmd() *cobra.Command {
 }
 
 func genTsForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string) (string, error) {
-	const defaultTemplateBody = `// {{$.Description}}
+	const templateBody = `// {{$.Description}}
 export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType}}> {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
@@ -811,7 +850,6 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 	}
 	funcName := funcNameBuilder.String()
 	var retType string
-	templateBody := defaultTemplateBody
 
 	switch f.Type {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
@@ -911,6 +949,7 @@ func translateRuleTs(rule *rulesv1beta3.Rule) string {
 	return ""
 }
 
+// TODO this might be the same as the other
 func translateRetValueTs(val *anypb.Any, protoType *protoImport) string {
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
