@@ -972,6 +972,9 @@ func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport, usedV
 }
 
 func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) string {
+  marshalOptions := protojson.MarshalOptions{
+    UseProtoNames: true,
+  }
 	if rule == nil {
 		return ""
 	}
@@ -980,11 +983,11 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 		usedVariables[v.Atom.ContextKey] = "string" // TODO
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+      return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			var elements []string
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
-				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
+				elements = append(elements, string(try.To1(marshalOptions.Marshal(comparisonVal))))
 			}
 			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
 		}
@@ -1005,8 +1008,11 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 	return ""
 }
 
-// TODO this might be the same as the other
 func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
+  marshalOptions := protojson.MarshalOptions{
+    UseProtoNames: true,
+  }
+
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 	if err != nil {
@@ -1023,9 +1029,10 @@ func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
 			try.To(val.UnmarshalTo(&i64))
 			return strconv.FormatInt(i64.Value, 10)
 		}
-		return string(try.To1(protojson.Marshal(msg)))
+		return string(try.To1(marshalOptions.Marshal(msg)))
 	}
 	// todo multiline formatting
+  // TODO... why this instead of the basic shit?
 	var lines []string
 	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 		valueStr := val.String()
@@ -1033,7 +1040,7 @@ func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
 			valueStr = fmt.Sprintf(`"%s"`, val)
 		}
 
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
+		lines = append(lines, fmt.Sprintf("%s: %s", f.TextName(), valueStr))
 		return true
 	})
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
