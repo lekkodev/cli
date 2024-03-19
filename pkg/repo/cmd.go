@@ -105,14 +105,45 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	return nil
 }
 
-func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
+func (r *RepoCmd) InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
 	if len(repoPath) == 0 {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return errors.Wrap(err, "get home dir")
+			return "", err
 		}
 		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
 	}
+	err := os.MkdirAll(repoPath, 0777)
+	if err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(repoPath)
+	if err != nil {
+		return "", err
+	}
+	if len(entries) > 0 {
+		return repoPath, nil // assume that everything is fine
+	}
+
+	gitRepo, err := git.PlainClone(repoPath, false, &git.CloneOptions{
+		URL: "https://github.com/lekkodev/template.git",
+	})
+	if err != nil {
+		return "", err
+	}
+	err = gitRepo.DeleteRemote("origin")
+	if err != nil {
+		return "", err
+	}
+	return repoPath, nil
+}
+
+func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
+	repoPath, err := r.InitIfNotExists(ctx, repoPath)
+	if err != nil {
+		return errors.Wrap(err, "init repo")
+	}
+
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return errors.Wrap(err, "open git repo")
@@ -229,12 +260,9 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 }
 
 func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
-	if len(repoPath) == 0 {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
+	repoPath, err := r.InitIfNotExists(ctx, repoPath)
+	if err != nil {
+		return err
 	}
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {

@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -238,8 +237,9 @@ func repoDeleteCmd() *cobra.Command {
 func repoInitCmd() *cobra.Command {
 	var owner, repoName, description string
 	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize a new template git repository",
+		Use:    "init",
+		Short:  "[Deprecated] Initialize a new template git repository on GitHub",
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			if len(owner) == 0 || len(repoName) == 0 {
@@ -273,39 +273,12 @@ func defaultRepoInitCmd() *cobra.Command {
 	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "init-default",
-		Short: "Initialize a new template git repository in the detault location",
+		Short: "Initialize a new template git repository in the default location",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var defaultLocation = repoPath
-			if len(repoPath) == 0 {
-				home, err := os.UserHomeDir()
-				if err != nil {
-					return err
-				}
-				defaultLocation = home + "/Library/Application Support/Lekko/Config Repositories/default"
-			}
-			err := os.MkdirAll(defaultLocation, 0777)
-			if err != nil {
-				return err
-			}
-			entries, err := os.ReadDir(defaultLocation)
-			if err != nil {
-				return err
-			}
-			if len(entries) > 0 {
-				return nil // assum that everything is fine
-			}
-
-			r, err := git.PlainClone(defaultLocation, false, &git.CloneOptions{
-				URL: "https://github.com/lekkodev/template.git",
-			})
-			if err != nil {
-				return err
-			}
-			err = r.DeleteRemote("origin")
-			if err != nil {
-				return err
-			}
-			return nil
+			rs := secrets.NewSecretsOrFail()
+			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
+			_, err := repo.InitIfNotExists(cmd.Context(), repoPath)
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
