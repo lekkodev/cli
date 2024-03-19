@@ -57,6 +57,7 @@ func genCmd() *cobra.Command {
 		Short: "generate library code from configs",
 	}
 	cmd.AddCommand(genGoCmd())
+	cmd.AddCommand(genTsCmd())
 	cmd.AddCommand(geneStarlarkCmd())
 	return cmd
 }
@@ -705,6 +706,7 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
 		return true
 	})
+  // Replace this with interface pointing stuff
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
 }
 
@@ -726,4 +728,218 @@ func getStringRetValues(f *featurev1beta1.Feature) []string {
 	}
 	sort.Strings(rets)
 	return rets
+}
+
+func genTsCmd() *cobra.Command {
+	var ns string
+	var wd string
+	var of string
+	cmd := &cobra.Command{
+		Use:   "ts",
+		Short: "generate typescript library code from configs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail()
+			r, err := repo.NewLocal(wd, rs)
+			if err != nil {
+				return errors.Wrap(err, "new repo")
+			}
+			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
+			// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
+			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
+			staticCtxType := unpackProtoType("", nsMDs[ns].ContextProto)
+
+      fmt.Printf("%+v\n", staticCtxType)
+      // Handle no context proto (make signatures)
+
+			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
+			if err != nil {
+				return err
+			}
+			sort.SliceStable(ffs, func(i, j int) bool {
+				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
+			})
+			var codeStrings []string
+			for _, ff := range ffs {
+				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
+				if err != nil {
+					return err
+				}
+				f := &featurev1beta1.Feature{}
+				if err := proto.Unmarshal(fff, f); err != nil {
+					return err
+				}
+				codeString, err := genTsForFeature(cmd.Context(), r, f, ns)
+        if err != nil {
+          return err
+        }
+				codeStrings = append(codeStrings, codeString)
+				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+					// TODO
+				}
+			}
+      const templateBody = `//Namespace: {{$.Namespace}}
+{{range  $.CodeStrings}}
+{{ . }}{{end}}`
+
+			data := struct {
+				Namespace   string
+				CodeStrings []string
+			}{
+				ns,
+				codeStrings,
+			}
+			templ := template.Must(template.New("").Parse(templateBody))
+			return templ.Execute(os.Stdout, data)
+		},
+	}
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
+	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
+	cmd.Flags().StringVarP(&of, "output", "o", "lekko.go", "output file")
+	return cmd
+}
+
+func genTsForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string) (string, error) {
+	const defaultTemplateBody = `// {{$.Description}}
+export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType}}> {
+{{range  $.NaturalLanguage}}{{ . }}
+{{end}}}`
+
+	var funcNameBuilder strings.Builder
+	funcNameBuilder.WriteString("get")
+	for _, word := range regexp.MustCompile("[_-]+").Split(f.Key, -1) {
+		funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
+	}
+	funcName := funcNameBuilder.String()
+	var retType string
+	templateBody := defaultTemplateBody
+
+	switch f.Type {
+	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
+		retType = "boolean"
+	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+		retType = "BigInt"
+	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+		retType = "number"
+	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
+		retType = "string"
+	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
+		retType = "json" // TODO
+	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
+    retType = "proto" // TODO
+	}
+
+	data := struct {
+		Description     string
+		FuncName        string
+		RetType         string
+		Namespace       string
+		Key             string
+		NaturalLanguage []string
+		StaticType      string
+	}{
+		f.Description,
+		funcName,
+		retType,
+		ns,
+		f.Key,
+		translateFeatureTs(f, nil),
+		"",
+	}
+	templ, err := template.New("go func").Parse(templateBody)
+	if err != nil {
+		return "", err
+	}
+	var ret bytes.Buffer
+	err = templ.Execute(&ret, data)
+	if err != nil {
+		return "", err
+	}
+  return ret.String(), nil
+}
+
+func translateFeatureTs(f *featurev1beta1.Feature, protoType *protoImport) []string {
+	var buffer []string
+	for i, constraint := range f.Tree.Constraints {
+		ifToken := "} else if"
+		if i == 0 {
+			ifToken = "if"
+		}
+		rule := translateRuleTs(constraint.GetRuleAstNew())
+		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
+
+		// TODO this doesn't work for proto, but let's try
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValueTs(constraint.Value, protoType)))
+	}
+	if len(f.Tree.Constraints) > 0 {
+		buffer = append(buffer, "\t}")
+	}
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValueTs(f.GetTree().GetDefault(), protoType)))
+	return buffer
+}
+
+func translateRuleTs(rule *rulesv1beta3.Rule) string {
+	if rule == nil {
+		return ""
+	}
+	switch v := rule.GetRule().(type) {
+	case *rulesv1beta3.Rule_Atom:
+		switch v.Atom.GetComparisonOperator() {
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
+			return fmt.Sprintf("%s === %s", v.Atom.ContextKey, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
+			var elements []string
+			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
+				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
+			}
+			return fmt.Sprintf("[%s].includes(%s)", strings.Join(elements, ", "), v.Atom.ContextKey)
+		}
+	case *rulesv1beta3.Rule_LogicalExpression:
+		operator := " && "
+		switch v.LogicalExpression.GetLogicalOperator() {
+		case rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR:
+			operator = " || "
+		}
+		var result []string
+		for _, rule := range v.LogicalExpression.Rules {
+			// worry about inner parens later
+			result = append(result, translateRule(rule))
+		}
+		return strings.Join(result, operator)
+	}
+
+	return ""
+}
+
+func translateRetValueTs(val *anypb.Any, protoType *protoImport) string {
+	// protos
+	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
+	if err != nil {
+    return "HI MOM";
+		// panic(err)
+	}
+
+	if protoType == nil {
+		// TODO we may need more special casing here for primitive types.
+		// This feels like horrific syntax, but I needed this because
+		// Int64 was somehow serializing to "1" instead of 1, and typechecking
+		// doesn't seem to work since `UnmarshalNew` returns a `dynamicpb.Message` which doesn't work with go's type casing.
+		if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
+			var i64 wrapperspb.Int64Value
+			try.To(val.UnmarshalTo(&i64))
+			return strconv.FormatInt(i64.Value, 10)
+		}
+		return string(try.To1(protojson.Marshal(msg)))
+	}
+	// todo multiline formatting
+	var lines []string
+	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+		valueStr := val.String()
+		if val, ok := val.Interface().(string); ok {
+			valueStr = fmt.Sprintf(`"%s"`, val)
+		}
+
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
+		return true
+	})
+	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
 }
