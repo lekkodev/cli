@@ -90,15 +90,21 @@ func setupCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				orgNames := make([]string, len(orgs)+1)
+				var orgNames []string
 				authorizeNewOrg := "[Authorize a new organization]"
-				orgNames[0] = authorizeNewOrg
-				for i, org := range orgs {
-					orgNames[i+1] = org.GetLogin()
+				orgNames = append(orgNames, authorizeNewOrg, rs.GetGithubUser())
+				for _, org := range orgs {
+					orgNames = append(orgNames, org.GetLogin())
 				}
 				if err := survey.AskOne(&survey.Select{
 					Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house a new config repo:",
 					Options: orgNames,
+					Description: func(value string, index int) string {
+						if value == rs.GetGithubUser() {
+							return "[personal account]"
+						}
+						return ""
+					},
 				}, &githubOrgName); err != nil {
 					return errors.Wrap(err, "prompt")
 				}

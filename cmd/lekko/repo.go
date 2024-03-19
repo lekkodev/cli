@@ -189,6 +189,10 @@ func repoDeleteCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "repos list")
 			}
+			if len(repos) == 0 {
+				fmt.Println("No repositories found.")
+				return nil
+			}
 			var options []string
 			for _, r := range repos {
 				options = append(options, fmt.Sprintf("%s/%s", r.Owner, r.RepoName))
