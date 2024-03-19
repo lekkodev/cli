@@ -823,9 +823,10 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
 		retType = "string"
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
-		retType = "json" // TODO
+		retType = "any" // TODO
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-    retType = "proto" // TODO
+    protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
+		retType = protoType.Type
 	}
 
 	data := struct {
@@ -914,8 +915,7 @@ func translateRetValueTs(val *anypb.Any, protoType *protoImport) string {
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 	if err != nil {
-    return "HI MOM";
-		// panic(err)
+		panic(err)
 	}
 
 	if protoType == nil {
