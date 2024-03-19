@@ -222,3 +222,67 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	}
 	return nil
 }
+
+func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
+	if len(repoPath) == 0 {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
+	}
+	gitRepo, err := git.PlainOpen(repoPath)
+	if err != nil {
+		return err
+	}
+	list, err := gitRepo.Remotes()
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		return errors.New("No remote found, please finish setup instructions")
+	}
+	worktree, err := gitRepo.Worktree()
+	if err != nil {
+		return err
+	}
+	_, err = worktree.Add(".")
+	if err != nil {
+		return err
+	}
+	if len(commitMessage) == 0 {
+		commitMessage = "Configs commit"
+	}
+	_, err = worktree.Commit(commitMessage, &git.CommitOptions{
+		All: true,
+	})
+	if err != nil {
+		return err
+	}
+	// push to GitHub
+	err = gitRepo.Push(&git.PushOptions{
+		Auth: &http.BasicAuth{
+			Username: r.rs.GetGithubUser(),
+			Password: r.rs.GetGithubToken(),
+		},
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	// Pull to get remote branches
+	w, err := gitRepo.Worktree()
+	if err != nil {
+		return err
+	}
+	err = w.Pull(&git.PullOptions{
+		RemoteName: "origin",
+		Auth: &http.BasicAuth{
+			Username: r.rs.GetGithubUser(),
+			Password: r.rs.GetGithubToken(),
+		},
+	})
+	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		return err
+	}
+	return nil
+}
