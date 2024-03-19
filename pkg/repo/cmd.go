@@ -246,6 +246,13 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 	if err != nil {
 		return err
 	}
+  status, err := worktree.Status()
+	if err != nil {
+		return err
+	}
+	if status.IsClean() {
+    return errors.New("No local changes to push.")
+  }
 	_, err = worktree.Add(".")
 	if err != nil {
 		return err
