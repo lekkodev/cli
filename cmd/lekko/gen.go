@@ -796,11 +796,14 @@ func genTSCmd() *cobra.Command {
 			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
 			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
 
-			ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
-			if err != nil {
-				return err
+			var parameters string
+			if len(nsMDs[ns].ContextProto) > 0 {
+				ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
+				if err != nil {
+					return err
+				}
+				parameters = getTSParameters(ptype.Descriptor())
 			}
-			parameters := getTSParameters(ptype.Descriptor())
 			//TODO Handle no context proto (make signatures) ... maybe... or we just make people make a static context
 
 			var codeStrings []string
@@ -897,6 +900,17 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 		retType = protoType.Type
 	}
 
+	usedVariables := make(map[string]string)
+	code := translateFeatureTS(f, nil, usedVariables)
+	if len(parameters) == 0 && len(usedVariables) > 0 {
+		var keys []string
+		var keyAndTypes []string
+		for k, t := range usedVariables {
+			keys = append(keys, k)
+			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", k, t))
+		}
+		parameters = fmt.Sprintf("{%s}: {%s}", strings.Join(keys, ","), strings.Join(keyAndTypes, ","))
+	}
 	data := struct {
 		Description     string
 		FuncName        string
@@ -911,7 +925,7 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 		retType,
 		ns,
 		f.Key,
-		translateFeatureTS(f, nil),
+		code,
 		parameters,
 	}
 	templ, err := template.New("go func").Parse(templateBody)
@@ -926,14 +940,14 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 	return ret.String(), nil
 }
 
-func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport) []string {
+func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport, usedVariables map[string]string) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
 		if i == 0 {
 			ifToken = "if"
 		}
-		rule := translateRuleTS(constraint.GetRuleAstNew())
+		rule := translateRuleTS(constraint.GetRuleAstNew(), usedVariables)
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
@@ -946,12 +960,13 @@ func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport) []str
 	return buffer
 }
 
-func translateRuleTS(rule *rulesv1beta3.Rule) string {
+func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) string {
 	if rule == nil {
 		return ""
 	}
 	switch v := rule.GetRule().(type) {
 	case *rulesv1beta3.Rule_Atom:
+		usedVariables[v.Atom.ContextKey] = "string" // TODO
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
 			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
@@ -971,7 +986,7 @@ func translateRuleTS(rule *rulesv1beta3.Rule) string {
 		var result []string
 		for _, rule := range v.LogicalExpression.Rules {
 			// worry about inner parens later
-			result = append(result, translateRuleTS(rule))
+			result = append(result, translateRuleTS(rule, usedVariables))
 		}
 		return "(" + strings.Join(result, operator) + ")"
 	}
