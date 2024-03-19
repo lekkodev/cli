@@ -109,13 +109,13 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	if len(repoPath) == 0 {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "get home dir")
 		}
 		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
 	}
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "open git repo")
 	}
 
 	var createGitHubRepo bool
@@ -128,53 +128,56 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 
 	list, err := gitRepo.Remotes()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get remotes")
 	}
 	if len(list) > 0 {
 		return errors.New("Remote already exists, import manually")
 	}
 	worktree, err := gitRepo.Worktree()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get worktree")
 	}
 	status, err := worktree.Status()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get status")
 	}
 	if !status.IsClean() {
 		_, err = worktree.Add(".")
 		if err != nil {
-			return err
+			return errors.Wrap(err, "add files")
 		}
 		_, err = worktree.Commit("Configs commit", &git.CommitOptions{
 			All: true,
 		})
 		if err != nil {
-			return err
+			return errors.Wrap(err, "commit files")
 		}
 	}
+
 	ghCli := gh.NewGithubClientFromToken(ctx, r.rs.GetGithubToken())
+	githubOwner := owner
 	if r.rs.GetGithubUser() == owner {
-		owner = "" // create repo expects an empty owner for personal accounts
+		githubOwner = "" // GitHub expects an empty owner for personal accounts
 	}
-	// try using current dir as a repo name
+	// try using dir name as a repo name
 	if len(repoName) == 0 {
 		repoName = filepath.Base(repoPath)
 	}
 	// create empty repo on GitHub
-	// an empty owner is fine, since it default to a personal repo
-	_, err = ghCli.CreateRepo(ctx, owner, repoName, description, true)
+	ghRepo, err := ghCli.CreateRepo(ctx, githubOwner, repoName, description, true)
 	if err != nil && !errors.Is(err, git.ErrRepositoryAlreadyExists) {
-		return err
+		return errors.Wrap(err, "create repo on GitHub")
 	}
+
 	// create remote pointing to GitHub (if it not exists)
 	_, err = gitRepo.CreateRemote(&config.RemoteConfig{
 		Name: "origin",
-		URLs: []string{fmt.Sprintf("https://github.com/%s/%s.git", owner, repoName)},
+		URLs: []string{ghRepo.GetCloneURL()},
 	})
 	if err != nil && !errors.Is(err, git.ErrRemoteExists) {
-		return err
+		return errors.Wrap(err, "create remote")
 	}
+
 	// push to GitHub
 	err = gitRepo.Push(&git.PushOptions{
 		Auth: &http.BasicAuth{
@@ -183,12 +186,13 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 		},
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return err
+		return errors.Wrap(err, "push to GitHub")
 	}
+
 	// Pull to get remote branches
 	w, err := gitRepo.Worktree()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get worktree")
 	}
 	err = w.Pull(&git.PullOptions{
 		RemoteName: "origin",
@@ -198,8 +202,9 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 		},
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return err
+		return errors.Wrap(err, "pull from GitHub")
 	}
+
 	// Create branch config tracking remote
 	err = gitRepo.CreateBranch(&config.Branch{
 		Name:   "main",
@@ -207,7 +212,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 		Merge:  "refs/heads/main",
 	})
 	if err != nil && !errors.Is(err, git.ErrBranchExists) {
-		return err
+		return errors.Wrap(err, "create branch")
 	}
 
 	// Import new repo into Lekko
@@ -218,7 +223,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 		},
 	}))
 	if err != nil {
-		return errors.Wrap(err, "import repository")
+		return errors.Wrap(err, "import repository into Lekko")
 	}
 	return nil
 }
