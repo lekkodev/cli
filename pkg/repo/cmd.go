@@ -261,6 +261,9 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 
 func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
 	repoPath, err := r.InitIfNotExists(ctx, repoPath)
+	if err != nil {
+		return err
+	}
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return err
