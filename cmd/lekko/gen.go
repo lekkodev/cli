@@ -57,7 +57,7 @@ func genCmd() *cobra.Command {
 		Short: "generate library code from configs",
 	}
 	cmd.AddCommand(genGoCmd())
-	cmd.AddCommand(genTsCmd())
+	cmd.AddCommand(genTSCmd())
 	cmd.AddCommand(geneStarlarkCmd())
 	return cmd
 }
@@ -706,7 +706,7 @@ func translateRetValue(val *anypb.Any, protoType *protoImport) string {
 		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
 		return true
 	})
-  // Replace this with interface pointing stuff
+	// Replace this with interface pointing stuff
 	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
 }
 
@@ -730,23 +730,33 @@ func getStringRetValues(f *featurev1beta1.Feature) []string {
 	return rets
 }
 
-func getTsInterface(d protoreflect.MessageDescriptor) (string, error) {
+func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	const templateBody = `export interface {{$.Name}} {
-{{range  $.Fields}}{{ . }}
-{{end}}
-}`
+{{range  $.Fields}}    {{ . }}
+{{end}}}`
 
-  var fields []string
-  for i := 0; i < d.Fields().Len(); i++ {
-    fields = append(fields, string(d.Fields().Get(i).TextName()))
-  }
+	var fields []string
+	for i := 0; i < d.Fields().Len(); i++ {
+		f := d.Fields().Get(i)
+		var t string
+		switch f.Kind() {
+		case protoreflect.StringKind:
+			t = "string"
+		case protoreflect.BoolKind:
+			t = "boolean"
+		case protoreflect.DoubleKind:
+			t = "number"
+			// TODO add more
+		}
+		fields = append(fields, fmt.Sprintf("%s: %s;", f.TextName(), t))
+	}
 
 	data := struct {
-    Name            string
+		Name   string
 		Fields []string
 	}{
-    string(d.Name()),
-    fields,
+		string(d.Name()),
+		fields,
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -757,11 +767,20 @@ func getTsInterface(d protoreflect.MessageDescriptor) (string, error) {
 	if err != nil {
 		return "", err
 	}
-  return ret.String(), nil
+	return ret.String(), nil
 }
 
+func getTSParameters(d protoreflect.MessageDescriptor) string {
+	var fields []string
+	for i := 0; i < d.Fields().Len(); i++ {
+		f := d.Fields().Get(i)
+		fields = append(fields, f.TextName())
+	}
 
-func genTsCmd() *cobra.Command {
+	return fmt.Sprintf("{%s}: %s", strings.Join(fields, ", "), d.Name())
+}
+
+func genTSCmd() *cobra.Command {
 	var ns string
 	var wd string
 	var of string
@@ -776,19 +795,28 @@ func genTsCmd() *cobra.Command {
 			}
 			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
 			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
-			staticCtxType := unpackProtoType("", nsMDs[ns].ContextProto)
 
-      fmt.Printf("%+v\n", staticCtxType)
-      //fmt.Printf("%+v\n", typeRegistry)
-      ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
-      if err != nil {
-        return err
-      }
-      fmt.Printf("%+v\n", ptype)
-      fmt.Printf("%+v\n", ptype.Descriptor())
-      face, _ := getTsInterface(ptype.Descriptor())
-      fmt.Printf("%+v\n", face)
-      // Handle no context proto (make signatures)
+			ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
+			if err != nil {
+				return err
+			}
+			parameters := getTSParameters(ptype.Descriptor())
+			//TODO Handle no context proto (make signatures) ... maybe... or we just make people make a static context
+
+			var codeStrings []string
+
+			typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
+				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
+				if splitName[0] == "google" {
+					return true
+				}
+				face, err := getTSInterface(mt.Descriptor())
+				if err != nil {
+					panic(err)
+				}
+				codeStrings = append(codeStrings, face)
+				return true
+			})
 
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
@@ -797,7 +825,6 @@ func genTsCmd() *cobra.Command {
 			sort.SliceStable(ffs, func(i, j int) bool {
 				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 			})
-			var codeStrings []string
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
 				if err != nil {
@@ -807,17 +834,13 @@ func genTsCmd() *cobra.Command {
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
 				}
-				codeString, err := genTsForFeature(cmd.Context(), r, f, ns)
-        if err != nil {
-          return err
-        }
-				codeStrings = append(codeStrings, codeString)
-				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-					// TODO
+				codeString, err := genTSForFeature(f, ns, parameters)
+				if err != nil {
+					return err
 				}
+				codeStrings = append(codeStrings, codeString)
 			}
-      const templateBody = `//Namespace: {{$.Namespace}}
-{{range  $.CodeStrings}}
+			const templateBody = `{{range  $.CodeStrings}}
 {{ . }}{{end}}`
 
 			data := struct {
@@ -827,19 +850,26 @@ func genTsCmd() *cobra.Command {
 				ns,
 				codeStrings,
 			}
+			if len(of) == 0 {
+				of = ns
+			}
+			f, err := os.Create(of + ".ts")
+			if err != nil {
+				return err
+			}
 			templ := template.Must(template.New("").Parse(templateBody))
-			return templ.Execute(os.Stdout, data)
+			return templ.Execute(f, data)
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
-	cmd.Flags().StringVarP(&of, "output", "o", "lekko.go", "output file")
+	cmd.Flags().StringVarP(&of, "output", "o", "", "output file")
 	return cmd
 }
 
-func genTsForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string) (string, error) {
+func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
 	const templateBody = `// {{$.Description}}
-export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType}}> {
+export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
 
@@ -855,7 +885,7 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		retType = "boolean"
 	case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
-		retType = "BigInt"
+		retType = "number"
 	case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
 		retType = "number"
 	case featurev1beta1.FeatureType_FEATURE_TYPE_STRING:
@@ -863,7 +893,7 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		retType = "any" // TODO
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-    protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
+		protoType := unpackProtoType("", f.Tree.Default.TypeUrl)
 		retType = protoType.Type
 	}
 
@@ -874,15 +904,15 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 		Namespace       string
 		Key             string
 		NaturalLanguage []string
-		StaticType      string
+		Parameters      string
 	}{
 		f.Description,
 		funcName,
 		retType,
 		ns,
 		f.Key,
-		translateFeatureTs(f, nil),
-		"",
+		translateFeatureTS(f, nil),
+		parameters,
 	}
 	templ, err := template.New("go func").Parse(templateBody)
 	if err != nil {
@@ -893,30 +923,30 @@ export async function {{$.FuncName}}(ctx *{{$.StaticType}}): Promise<{{$.RetType
 	if err != nil {
 		return "", err
 	}
-  return ret.String(), nil
+	return ret.String(), nil
 }
 
-func translateFeatureTs(f *featurev1beta1.Feature, protoType *protoImport) []string {
+func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
 		if i == 0 {
 			ifToken = "if"
 		}
-		rule := translateRuleTs(constraint.GetRuleAstNew())
+		rule := translateRuleTS(constraint.GetRuleAstNew())
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValueTs(constraint.Value, protoType)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, protoType)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValueTs(f.GetTree().GetDefault(), protoType)))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s;", translateRetValueTS(f.GetTree().GetDefault(), protoType)))
 	return buffer
 }
 
-func translateRuleTs(rule *rulesv1beta3.Rule) string {
+func translateRuleTS(rule *rulesv1beta3.Rule) string {
 	if rule == nil {
 		return ""
 	}
@@ -924,13 +954,13 @@ func translateRuleTs(rule *rulesv1beta3.Rule) string {
 	case *rulesv1beta3.Rule_Atom:
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			return fmt.Sprintf("%s === %s", v.Atom.ContextKey, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			var elements []string
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
 				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
 			}
-			return fmt.Sprintf("[%s].includes(%s)", strings.Join(elements, ", "), v.Atom.ContextKey)
+			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
@@ -941,16 +971,16 @@ func translateRuleTs(rule *rulesv1beta3.Rule) string {
 		var result []string
 		for _, rule := range v.LogicalExpression.Rules {
 			// worry about inner parens later
-			result = append(result, translateRule(rule))
+			result = append(result, translateRuleTS(rule))
 		}
-		return strings.Join(result, operator)
+		return "(" + strings.Join(result, operator) + ")"
 	}
 
 	return ""
 }
 
 // TODO this might be the same as the other
-func translateRetValueTs(val *anypb.Any, protoType *protoImport) string {
+func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 	if err != nil {
