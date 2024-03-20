@@ -63,7 +63,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		t = f.Kind().String()
 	}
 	if f.Cardinality() == protoreflect.Repeated && !f.IsMap() {
-		t = "[]" + t
+		t += "[]"
 	}
 	return t
 }
@@ -341,6 +341,8 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 			result = append(result, translateRuleTS(rule, usedVariables))
 		}
 		return "(" + strings.Join(result, operator) + ")"
+	default:
+		fmt.Printf("Need to learn how to: %+v\n", rule.GetRule())
 	}
 
 	return ""
