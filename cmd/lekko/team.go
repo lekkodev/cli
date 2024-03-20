@@ -276,10 +276,13 @@ func deleteTeamCmd() *cobra.Command {
 			if err := t.Delete(cmd.Context(), rs.GetLekkoTeam()); err != nil {
 				return err
 			}
-			secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+			err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				ws.SetLekkoTeam("")
 				return nil
 			})
+			if err != nil {
+				return err
+			}
 			fmt.Printf("Team '%s' deleted\n", rs.GetLekkoTeam())
 			return nil
 		},
