@@ -48,11 +48,17 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		t = "boolean"
 	case protoreflect.BytesKind:
 		t = "Uint8Array"
+	case protoreflect.FloatKind:
+		fallthrough
 	case protoreflect.DoubleKind:
 		fallthrough
 	case protoreflect.Int64Kind:
 		fallthrough
 	case protoreflect.Int32Kind:
+		fallthrough
+	case protoreflect.Uint64Kind:
+		fallthrough
+	case protoreflect.Uint32Kind:
 		t = "number"
 	case protoreflect.EnumKind:
 		t = "string"
@@ -144,10 +150,10 @@ func GenTSCmd() *cobra.Command {
 
 			var codeStrings []string
 			typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
-				if splitName[0] == "google" {
-					return true
-				}
+				//splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
+				//if splitName[0] == "google" {
+				//	return true
+				//}
 				face, err := getTSInterface(mt.Descriptor())
 				if err != nil {
 					panic(err)
