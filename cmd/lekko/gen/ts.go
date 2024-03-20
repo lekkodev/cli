@@ -329,9 +329,27 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 				elements = append(elements, string(try.To1(marshalOptions.Marshal(comparisonVal))))
 			}
 			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s < %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s <= %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s > %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s >= %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("(%s.includes(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s.startsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			return fmt.Sprintf("(%s.endsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
@@ -345,10 +363,9 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 			result = append(result, translateRuleTS(rule, usedVariables))
 		}
 		return "(" + strings.Join(result, operator) + ")"
-	default:
-		fmt.Printf("Need to learn how to: %+v\n", rule.GetRule())
 	}
 
+	fmt.Printf("Need to learn how to: %+v\n", rule.GetRule())
 	return ""
 }
 
