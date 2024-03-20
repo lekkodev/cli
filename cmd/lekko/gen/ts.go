@@ -38,6 +38,35 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
+	var t string
+	switch f.Kind() {
+	case protoreflect.StringKind:
+		t = "string"
+	case protoreflect.BoolKind:
+		t = "boolean"
+	case protoreflect.DoubleKind:
+		t = "number"
+	case protoreflect.Int64Kind:
+		t = "number"
+	case protoreflect.EnumKind:
+		t = "string"
+	case protoreflect.MessageKind:
+		if f.IsMap() {
+			t = fmt.Sprintf("Record<%s, %s>", fieldDescriptorToTS(f.MapKey()), fieldDescriptorToTS(f.MapValue()))
+		} else {
+			t = string(f.Message().Name())
+		}
+		// TODO add more
+	default:
+		t = f.Kind().String()
+	}
+	if f.Cardinality() == protoreflect.Repeated && !f.IsMap() {
+		t = "[]" + t
+	}
+	return t
+}
+
 func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	const templateBody = `export interface {{$.Name}} {
 {{range  $.Fields}}    {{ . }}
@@ -46,27 +75,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	var fields []string
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
-		var t string
-		switch f.Kind() {
-		case protoreflect.StringKind:
-			t = "string"
-		case protoreflect.BoolKind:
-			t = "boolean"
-		case protoreflect.DoubleKind:
-			t = "number"
-		case protoreflect.Int64Kind:
-			t = "number"
-		case protoreflect.EnumKind:
-			t = "string"
-		case protoreflect.MessageKind:
-			t = string(f.Message().Name())
-			// TODO add more
-		default:
-			t = f.Kind().String()
-		}
-		if f.Cardinality() == protoreflect.Repeated {
-			t = "[]" + t
-		}
+		t := fieldDescriptorToTS(f)
 		fields = append(fields, fmt.Sprintf("%s: %s;", f.TextName(), t))
 	}
 
@@ -123,10 +132,12 @@ func GenTSCmd() *cobra.Command {
 				}
 				parameters = getTSParameters(ptype.Descriptor())
 			}
-			//TODO Handle no context proto (make signatures) ... maybe... or we just make people make a static context
+			/* RangeMessages only ranges over top level messages - do we want to put stuff like this in a different file?
+			   ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName("lekko.bff.v1beta1.RepositoryKey"))
+			   print(ptype)
+			*/
 
 			var codeStrings []string
-
 			typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
 				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
 				if splitName[0] == "google" {
