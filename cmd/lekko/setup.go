@@ -86,15 +86,21 @@ func setupCmd() *cobra.Command {
 				if len(githubOrgName) > 0 {
 					break
 				}
-				orgs, err := ghCli.GetUserOrganizations(cmd.Context())
+				appInstalls, err := ghCli.GetAllUserInstallations(cmd.Context(), true)
+				// orgs, err := ghCli.GetUserOrganizations(cmd.Context())
 				if err != nil {
 					return err
 				}
 				var orgNames []string
 				authorizeNewOrg := "[Authorize a new organization]"
 				orgNames = append(orgNames, authorizeNewOrg, rs.GetGithubUser())
-				for _, org := range orgs {
-					orgNames = append(orgNames, org.GetLogin())
+				installedOnPersonal := false
+				for _, install := range appInstalls {
+					if install.GetAccount().GetLogin() == rs.GetGithubUser() {
+						installedOnPersonal = true
+						continue
+					}
+					orgNames = append(orgNames, install.GetAccount().GetLogin())
 				}
 				if err := survey.AskOne(&survey.Select{
 					Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house a new config repo:",
@@ -105,8 +111,22 @@ func setupCmd() *cobra.Command {
 						}
 						return ""
 					},
+					Default: rs.GetGithubUser(),
 				}, &githubOrgName); err != nil {
 					return errors.Wrap(err, "prompt")
+				}
+				if githubOrgName == rs.GetGithubUser() && !installedOnPersonal {
+					ghUser, err := ghCli.GetUser(cmd.Context())
+					if err != nil {
+						return errors.Wrap(err, "get user")
+					}
+					url := fmt.Sprintf("https://github.com/apps/lekko-app/installations/new/permissions?target_id=%d", ghUser.GetID())
+					if err := browser.OpenURL(url); err != nil {
+						return err
+					}
+					fmt.Printf("Press %s to continue", logging.Bold("[Enter]"))
+					_ = waitForEnter(os.Stdin)
+					continue
 				}
 				if githubOrgName == authorizeNewOrg {
 					githubOrgName = ""
@@ -116,6 +136,7 @@ func setupCmd() *cobra.Command {
 					}
 					fmt.Printf("Press %s to refresh the list of organizations", logging.Bold("[Enter]"))
 					_ = waitForEnter(os.Stdin)
+					continue
 				}
 			}
 			if len(githubOrgName) == 0 {

@@ -43,6 +43,7 @@ func teamCmd() *cobra.Command {
 		addMemberCmd(),
 		removeMemberCmd(),
 		teamListMembersCmd(),
+		deleteTeamCmd(),
 	)
 	return cmd
 }
@@ -257,4 +258,31 @@ func printTeamMemberships(memberships []*team.TeamMembership, output string) {
 	default:
 		fmt.Printf("unknown output format: %s", output)
 	}
+}
+
+func deleteTeamCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "delete the currently active team",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+
+			fmt.Printf("Deleting team '%s' from Lekko...\n", rs.GetLekkoTeam())
+			if err := confirmInput(rs.GetLekkoTeam()); err != nil {
+				return err
+			}
+
+			t := team.NewTeam(lekko.NewBFFClient(rs))
+			if err := t.Delete(cmd.Context(), rs.GetLekkoTeam()); err != nil {
+				return err
+			}
+			secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				ws.SetLekkoTeam("")
+				return nil
+			})
+			fmt.Printf("Team '%s' deleted\n", rs.GetLekkoTeam())
+			return nil
+		},
+	}
+	return cmd
 }
