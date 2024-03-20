@@ -46,9 +46,13 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		t = "string"
 	case protoreflect.BoolKind:
 		t = "boolean"
+	case protoreflect.BytesKind:
+		t = "Uint8Array"
 	case protoreflect.DoubleKind:
-		t = "number"
+		fallthrough
 	case protoreflect.Int64Kind:
+		fallthrough
+	case protoreflect.Int32Kind:
 		t = "number"
 	case protoreflect.EnumKind:
 		t = "string"
