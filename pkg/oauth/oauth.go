@@ -100,7 +100,6 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 		ws.SetGithubToken("")
 		ws.SetGithubUser("")
 	}
-	a.Status(ctx, true, ws)
 	return nil
 }
 

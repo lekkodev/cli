@@ -63,14 +63,25 @@ func logoutCmd() *cobra.Command {
 	var p provider
 	cmd := &cobra.Command{
 		Use:   "logout",
-		Short: "log out of lekko or github",
+		Short: "log out of Lekko or GitHub",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(string(p)) == 0 {
-				return errors.Errorf("provider must be specified")
+			pIsSet := len(string(p)) > 0
+			var providers []string
+			// If no provider passed, log out of both
+			if !pIsSet {
+				providers = []string{"lekko", "github"}
+			} else {
+				providers = append(providers, string(p))
 			}
 			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
-				return auth.Logout(cmd.Context(), string(p), ws)
+				for _, provider := range providers {
+					if err := auth.Logout(cmd.Context(), provider, ws); err != nil {
+						return err
+					}
+				}
+				auth.Status(cmd.Context(), true, ws)
+				return nil
 			})
 		},
 	}
