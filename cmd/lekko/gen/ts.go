@@ -35,6 +35,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -290,6 +291,19 @@ func translateFeatureTS(f *featurev1beta1.Feature, protoType *ProtoImport, usedV
 	return buffer
 }
 
+func structpbValueToKindString(v *structpb.Value) string {
+	switch v.GetKind().(type) {
+	case *structpb.Value_NumberValue:
+		// technically doubles may not work for ints....
+		return "number"
+	case *structpb.Value_BoolValue:
+		return "boolean"
+	case *structpb.Value_StringValue:
+		return "string"
+	}
+	return "unknown"
+}
+
 func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) string {
 	marshalOptions := protojson.MarshalOptions{
 		UseProtoNames: true,
@@ -299,17 +313,20 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 	}
 	switch v := rule.GetRule().(type) {
 	case *rulesv1beta3.Rule_Atom:
-		usedVariables[v.Atom.ContextKey] = "string" // TODO
+		usedVariables[v.Atom.ContextKey] = "string" // TODO - ugly as hell
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue.GetListValue().GetValues()[0])
 			var elements []string
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
 				elements = append(elements, string(try.To1(marshalOptions.Marshal(comparisonVal))))
 			}
 			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("(%s.includes(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
