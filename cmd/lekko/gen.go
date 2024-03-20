@@ -972,9 +972,9 @@ func translateFeatureTS(f *featurev1beta1.Feature, protoType *protoImport, usedV
 }
 
 func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) string {
-  marshalOptions := protojson.MarshalOptions{
-    UseProtoNames: true,
-  }
+	marshalOptions := protojson.MarshalOptions{
+		UseProtoNames: true,
+	}
 	if rule == nil {
 		return ""
 	}
@@ -983,13 +983,15 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 		usedVariables[v.Atom.ContextKey] = "string" // TODO
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-      return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			var elements []string
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
 				elements = append(elements, string(try.To1(marshalOptions.Marshal(comparisonVal))))
 			}
 			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
+			return fmt.Sprintf("(%s.includes(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
@@ -1009,9 +1011,9 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 }
 
 func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
-  marshalOptions := protojson.MarshalOptions{
-    UseProtoNames: true,
-  }
+	marshalOptions := protojson.MarshalOptions{
+		UseProtoNames: true,
+	}
 
 	// protos
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
@@ -1032,7 +1034,7 @@ func translateRetValueTS(val *anypb.Any, protoType *protoImport) string {
 		return string(try.To1(marshalOptions.Marshal(msg)))
 	}
 	// todo multiline formatting
-  // TODO... why this instead of the basic shit?
+	// TODO... why this instead of the basic shit?
 	var lines []string
 	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
 		valueStr := val.String()
