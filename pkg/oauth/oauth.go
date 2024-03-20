@@ -85,7 +85,7 @@ func maskToken(token, prefix string) string {
 // Logout implicitly expires the relevant credentials by
 // deleting them. TODO: explore explicitly expiring these
 // credentials with each provider.
-func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSecrets, noStatus bool) error {
+func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSecrets) error {
 	if !(provider == "lekko" || provider == "github") {
 		return fmt.Errorf("provider must be one of 'lekko' or 'github'")
 	}
@@ -99,9 +99,6 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 	if provider == "github" {
 		ws.SetGithubToken("")
 		ws.SetGithubUser("")
-	}
-	if !noStatus {
-		a.Status(ctx, true, ws)
 	}
 	return nil
 }

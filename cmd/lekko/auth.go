@@ -76,13 +76,11 @@ func logoutCmd() *cobra.Command {
 			return secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
 				for _, provider := range providers {
-					if err := auth.Logout(cmd.Context(), provider, ws, !pIsSet); err != nil {
+					if err := auth.Logout(cmd.Context(), provider, ws); err != nil {
 						return err
 					}
 				}
-				if !pIsSet {
-					auth.Status(cmd.Context(), true, ws)
-				}
+				auth.Status(cmd.Context(), true, ws)
 				return nil
 			})
 		},
