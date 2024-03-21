@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Technically this file is specific to go, but the functions themselves
+// are useful in general. We should generalize this to work in all langs
+// but have the logic shared somehow. For now we are hacking shit across files.
 package gen
 
 import (
@@ -23,42 +26,6 @@ type ProtoImport struct {
 	PackageAlias string
 	ImportPath   string
 	Type         string
-}
-
-// This function handles both the google.protobuf.Any.TypeURL variable
-// which has the format of `types.googleapis.com/fully.qualified.v1beta1.Proto`
-// and purely `fully.qualified.v1beta1.Proto`
-//
-// return nil if typeURL is empty. Panics on any problems like the rest of the file.
-func unpackProtoType(moduleRoot string, typeURL string) *ProtoImport {
-	if typeURL == "" {
-		return nil
-	}
-	anyURLSplit := strings.Split(typeURL, "/")
-	fqType := anyURLSplit[0]
-	if len(anyURLSplit) > 1 {
-		if anyURLSplit[0] != "type.googleapis.com" {
-			panic("invalid any type url: " + typeURL)
-		}
-		fqType = anyURLSplit[1]
-	}
-
-	// turn default.config.v1beta1.DBConfig into:
-	// moduleRoot/internal/lekko/proto/default/config/v1beta1
-	typeParts := strings.Split(fqType, ".")
-
-	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
-
-	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
-
-	// TODO do google.protobuf.X
-	switch fqType {
-	case "google.protobuf.Duration":
-		importPath = "google.golang.org/protobuf/types/known/durationpb"
-		prefix = "durationpb"
-	default:
-	}
-	return &ProtoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
 }
 
 // This function handles both the google.protobuf.Any.TypeURL variable

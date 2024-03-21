@@ -31,6 +31,7 @@ import (
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -65,6 +66,8 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	case protoreflect.MessageKind:
 		if f.IsMap() {
 			t = fmt.Sprintf("Record<%s, %s>", fieldDescriptorToTS(f.MapKey()), fieldDescriptorToTS(f.MapValue()))
+		} else if strings.HasPrefix(string(f.Message().FullName()), "google") {
+			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
 			t = string(f.Message().Name())
 		}
@@ -150,10 +153,10 @@ func GenTSCmd() *cobra.Command {
 
 			var codeStrings []string
 			typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-				//splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
-				//if splitName[0] == "google" {
-				//	return true
-				//}
+				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
+				if splitName[0] == "google" {
+					return true
+				}
 				face, err := getTSInterface(mt.Descriptor())
 				if err != nil {
 					panic(err)
@@ -169,6 +172,7 @@ func GenTSCmd() *cobra.Command {
 			sort.SliceStable(ffs, func(i, j int) bool {
 				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 			})
+			protoImports := make(map[string]struct{})
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
 				if err != nil {
@@ -177,6 +181,12 @@ func GenTSCmd() *cobra.Command {
 				f := &featurev1beta1.Feature{}
 				if err := proto.Unmarshal(fff, f); err != nil {
 					return err
+				}
+				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+					pImport := UnpackProtoType("", f.Tree.Default.TypeUrl)
+					if strings.HasPrefix(pImport.ImportPath, "google.golang.org") {
+						protoImports["import * as protobuf from '@bufbuild/protobuf';"] = struct{}{}
+					}
 				}
 				codeString, err := genTSForFeature(f, ns, parameters)
 				if err != nil {
@@ -192,7 +202,7 @@ func GenTSCmd() *cobra.Command {
 				CodeStrings []string
 			}{
 				ns,
-				codeStrings,
+				append(maps.Keys(protoImports), codeStrings...),
 			}
 			if len(of) == 0 {
 				of = ns
@@ -238,7 +248,11 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 		retType = "any" // TODO
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		protoType := UnpackProtoType("", f.Tree.Default.TypeUrl)
-		retType = protoType.Type
+		if strings.HasPrefix(protoType.ImportPath, "google") {
+			retType = fmt.Sprintf("protobuf.%s", protoType.Type)
+		} else {
+			retType = protoType.Type
+		}
 	}
 
 	usedVariables := make(map[string]string)
