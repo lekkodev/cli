@@ -425,6 +425,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	}
 
 	switch strings.Split(val.TypeUrl, "/")[1] {
+	// TODO: other WKTs
 	case "google.protobuf.Duration":
 		var v durationpb.Duration
 		val.UnmarshalTo(&v)
@@ -436,7 +437,6 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 				return true
 			})
 			panic(fmt.Sprintf("idk what is going on: %e %+v", err, err))
-
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
@@ -444,6 +444,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 			var res string
 			if msg, ok := val.Interface().(protoreflect.Message); ok {
 				if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
+					// THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
 
 					typeRegistry.RegisterMessage(msg.Type())
 				}
