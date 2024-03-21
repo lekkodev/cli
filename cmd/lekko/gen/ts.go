@@ -122,8 +122,6 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 	return fmt.Sprintf("{%s}: %s", strings.Join(fields, ", "), d.Name())
 }
 
-
-
 func GenTSCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -141,35 +139,35 @@ func GenTSCmd() *cobra.Command {
 			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
 
 			var parameters string
-      interfaces := make(map[string]string)
+			interfaces := make(map[string]string)
 			if len(nsMDs[ns].ContextProto) > 0 {
 				ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
 				if err != nil {
 					return err
 				}
 				parameters = getTSParameters(ptype.Descriptor())
-        face, err := getTSInterface(ptype.Descriptor())
+				face, err := getTSInterface(ptype.Descriptor())
 				if err != nil {
 					return err
 				}
-        interfaces[nsMDs[ns].ContextProto] = face
+				interfaces[nsMDs[ns].ContextProto] = face
 			}
 
 			var codeStrings []string
-/*		
-      typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
-				if splitName[0] == "google" {
-					return true
-				}
-				face, err := getTSInterface(mt.Descriptor())
-				if err != nil {
-					panic(err)
-				}
-				codeStrings = append(codeStrings, face)
-				return true
-			})
-*/
+			/*
+			         typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
+			   				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
+			   				if splitName[0] == "google" {
+			   					return true
+			   				}
+			   				face, err := getTSInterface(mt.Descriptor())
+			   				if err != nil {
+			   					panic(err)
+			   				}
+			   				codeStrings = append(codeStrings, face)
+			   				return true
+			   			})
+			*/
 
 			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
 			if err != nil {
@@ -193,19 +191,19 @@ func GenTSCmd() *cobra.Command {
 					if strings.HasPrefix(pImport.ImportPath, "google.golang.org") {
 						protoImports["import * as protobuf from '@bufbuild/protobuf';"] = struct{}{}
 					} else {
-            name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
-            if _, ok := interfaces[name]; !ok {
-              ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
-              if err != nil {
-                return errors.Wrap(err, f.Tree.Default.TypeUrl)
-              }
-              face, err := getTSInterface(ptype.Descriptor())
-              if err != nil {
-                return err
-              }
-              interfaces[name] = face
-            }
-          }
+						name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
+						if _, ok := interfaces[name]; !ok {
+							ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
+							if err != nil {
+								return errors.Wrap(err, f.Tree.Default.TypeUrl)
+							}
+							face, err := getTSInterface(ptype.Descriptor())
+							if err != nil {
+								return err
+							}
+							interfaces[name] = face
+						}
+					}
 				}
 				codeString, err := genTSForFeature(f, ns, parameters)
 				if err != nil {
