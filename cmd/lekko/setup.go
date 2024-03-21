@@ -87,7 +87,6 @@ func setupCmd() *cobra.Command {
 					break
 				}
 				appInstalls, err := ghCli.GetAllUserInstallations(cmd.Context(), true)
-				// orgs, err := ghCli.GetUserOrganizations(cmd.Context())
 				if err != nil {
 					return err
 				}

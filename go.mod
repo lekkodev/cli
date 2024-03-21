@@ -6,6 +6,7 @@ require (
 	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240315184309-655c9c725f17.1
 	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.33.0-20240315184309-655c9c725f17.1
 	github.com/AlecAivazis/survey/v2 v2.3.6
+	github.com/atotto/clipboard v0.1.4
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/briandowns/spinner v1.23.0
 	github.com/bufbuild/connect-go v1.10.0
@@ -24,7 +25,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.4
 	github.com/whilp/git-urls v1.0.0
-	golang.org/x/mod v0.12.0
+	golang.org/x/mod v0.14.0
 	golang.org/x/oauth2 v0.7.0
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -84,7 +85,7 @@ require (
 	golang.org/x/term v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8 // indirect
-	golang.org/x/tools v0.13.0 // indirect
+	golang.org/x/tools v0.16.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20201019141844-1ed22bb0c154 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
