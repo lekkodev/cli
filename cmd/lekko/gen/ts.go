@@ -69,7 +69,13 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		} else if strings.HasPrefix(string(f.Message().FullName()), "google") {
 			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
-			t = string(f.Message().Name())
+			d := f.Message()
+			t = "{"
+			for i := 0; i < d.Fields().Len(); i++ {
+				f := d.Fields().Get(i)
+				t += fmt.Sprintf("%s: %s;", f.TextName(), fieldDescriptorToTS(f))
+			}
+			t += "}"
 		}
 		// TODO add more
 	default:
