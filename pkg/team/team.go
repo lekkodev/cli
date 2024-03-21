@@ -170,3 +170,12 @@ func (t *Team) RemoveMember(ctx context.Context, email string) error {
 	}
 	return nil
 }
+
+func (t *Team) Delete(ctx context.Context, name string) error {
+	if _, err := t.lekkoBFFClient.DeleteTeam(ctx, connect_go.NewRequest(&bffv1beta1.DeleteTeamRequest{
+		TeamName: name,
+	})); err != nil {
+		return errors.Wrap(err, "delete team")
+	}
+	return nil
+}

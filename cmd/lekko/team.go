@@ -43,6 +43,7 @@ func teamCmd() *cobra.Command {
 		addMemberCmd(),
 		removeMemberCmd(),
 		teamListMembersCmd(),
+		deleteTeamCmd(),
 	)
 	return cmd
 }
@@ -126,7 +127,7 @@ func createCmd() *cobra.Command {
 	var name string
 	cmd := &cobra.Command{
 		Use:   "create",
-		Short: "create a lekko team",
+		Short: "create a Lekko team",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
@@ -153,7 +154,7 @@ func addMemberCmd() *cobra.Command {
 	var role team.MemberRole
 	cmd := &cobra.Command{
 		Use:   "add-member",
-		Short: "add an existing lekko user as a member to the currently active team",
+		Short: "add an existing Lekko user as a member to the currently active team",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(email) == 0 {
 				if err := survey.AskOne(&survey.Input{
@@ -183,7 +184,7 @@ func addMemberCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing Lekko user to add")
 	cmd.Flags().VarP(&role, "role", "r", "role to give member. allowed: 'owner', 'member'.")
 	return cmd
 }
@@ -210,7 +211,7 @@ func removeMemberCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing lekko user to add")
+	cmd.Flags().StringVarP(&email, "email", "e", "", "email of existing Lekko user to remove")
 	return cmd
 }
 
@@ -257,4 +258,59 @@ func printTeamMemberships(memberships []*team.TeamMembership, output string) {
 	default:
 		fmt.Printf("unknown output format: %s", output)
 	}
+}
+
+func deleteTeamCmd() *cobra.Command {
+	var name string
+	cmd := &cobra.Command{
+		Use:   "delete",
+		Short: "delete a Lekko team",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			t := team.NewTeam(lekko.NewBFFClient(rs))
+
+			if len(name) == 0 {
+				memberships, err := t.List(cmd.Context())
+				if err != nil {
+					return err
+				}
+				if len(memberships) == 0 {
+					fmt.Printf("User '%s' has no team memberhips\n", rs.GetLekkoUsername())
+					return nil
+				}
+				var options []string
+				for _, m := range memberships {
+					options = append(options, m.TeamName)
+				}
+				if err := survey.AskOne(&survey.Select{
+					Message: "Choose a team:",
+					Options: options,
+				}, &name); err != nil {
+					return errors.Wrap(err, "prompt")
+				}
+			}
+
+			fmt.Printf("Deleting team '%s' from Lekko...\n", name)
+			if err := confirmInput(name); err != nil {
+				return err
+			}
+
+			if err := t.Delete(cmd.Context(), name); err != nil {
+				return err
+			}
+			if name == rs.GetLekkoTeam() {
+				err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					ws.SetLekkoTeam("")
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+			}
+			fmt.Printf("Team '%s' deleted\n", name)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&name, "name", "n", "", "name of team to delete")
+	return cmd
 }
