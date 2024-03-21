@@ -192,14 +192,16 @@ func setupCmd() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					// TODO: consolidate with create api key command
-					fmt.Printf("Generated API key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
+					fmt.Printf("Lekko API key:\n\t%s\n", logging.Bold(resp.GetApiKey()))
+					fmt.Printf("Use %s command to copy the API key to your clipboard\n", logging.Bold("lekko apikey copy"))
 					ws.SetLekkoAPIKey(resp.GetApiKey())
 					return nil
 				}, secrets.RequireLekko()); err != nil {
 					return err
 				}
 			}
+
+			fmt.Println("Lekko setup complete!")
 
 			return nil
 		},
