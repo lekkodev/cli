@@ -20,7 +20,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"text/template"
 
@@ -36,8 +35,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
@@ -257,7 +256,7 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 	}
 	funcName := funcNameBuilder.String()
 	var retType string
-
+	var protoType *ProtoImport
 	switch f.Type {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		retType = "boolean"
@@ -270,7 +269,7 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		retType = "any" // TODO
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-		protoType := UnpackProtoType("", f.Tree.Default.TypeUrl)
+		protoType = UnpackProtoType("", f.Tree.Default.TypeUrl)
 		if strings.HasPrefix(protoType.ImportPath, "google") {
 			retType = fmt.Sprintf("protobuf.%s", protoType.Type)
 		} else {
@@ -279,7 +278,7 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 	}
 
 	usedVariables := make(map[string]string)
-	code := translateFeatureTS(f, nil, usedVariables)
+	code := translateFeatureTS(f, usedVariables)
 	if len(parameters) == 0 && len(usedVariables) > 0 {
 		var keys []string
 		var keyAndTypes []string
@@ -318,7 +317,7 @@ export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 	return ret.String(), nil
 }
 
-func translateFeatureTS(f *featurev1beta1.Feature, protoType *ProtoImport, usedVariables map[string]string) []string {
+func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
@@ -329,12 +328,12 @@ func translateFeatureTS(f *featurev1beta1.Feature, protoType *ProtoImport, usedV
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, protoType)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, f.Type)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s;", translateRetValueTS(f.GetTree().GetDefault(), protoType)))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s;", translateRetValueTS(f.GetTree().GetDefault(), f.Type)))
 	return buffer
 }
 
@@ -415,40 +414,46 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 	return ""
 }
 
-func translateRetValueTS(val *anypb.Any, protoType *ProtoImport) string {
+func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
+	//var dypb *dynamicpb.Message
 	marshalOptions := protojson.MarshalOptions{
 		UseProtoNames: true,
 	}
-
-	// protos
-	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
-	if err != nil {
-		panic(err)
+	if t != featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+		// we are guessing this is a primitive, (unless we have i64 so let's do that later)
+		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
 	}
 
-	if protoType == nil {
-		// TODO we may need more special casing here for primitive types.
-		// This feels like horrific syntax, but I needed this because
-		// Int64 was somehow serializing to "1" instead of 1, and typechecking
-		// doesn't seem to work since `UnmarshalNew` returns a `dynamicpb.Message` which doesn't work with go's type casing.
-		if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
-			var i64 wrapperspb.Int64Value
-			try.To(val.UnmarshalTo(&i64))
-			return strconv.FormatInt(i64.Value, 10)
-		}
-		return string(try.To1(marshalOptions.Marshal(msg)))
-	}
-	// todo multiline formatting
-	// TODO... why this instead of the basic shit?
-	var lines []string
-	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		valueStr := val.String()
-		if val, ok := val.Interface().(string); ok {
-			valueStr = fmt.Sprintf(`"%s"`, val)
-		}
+	switch strings.Split(val.TypeUrl, "/")[1] {
+	case "google.protobuf.Duration":
+		var v durationpb.Duration
+		val.UnmarshalTo(&v)
+		return fmt.Sprintf("protobuf.Duration.fromJsonString(%s)", marshalOptions.Format(&v))
+	default:
+		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
+		if err != nil {
+			typeRegistry.RangeMessages(func(m protoreflect.MessageType) bool {
+				return true
+			})
+			panic(fmt.Sprintf("idk what is going on: %e %+v", err, err))
 
-		lines = append(lines, fmt.Sprintf("%s: %s", f.TextName(), valueStr))
-		return true
-	})
-	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
+		}
+		var lines []string
+		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
+
+			var res string
+			if msg, ok := val.Interface().(protoreflect.Message); ok {
+				if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
+
+					typeRegistry.RegisterMessage(msg.Type())
+				}
+				res = translateRetValueTS(try.To1(anypb.New(msg.Interface())), featurev1beta1.FeatureType_FEATURE_TYPE_PROTO)
+			} else {
+				res = val.String()
+			}
+			lines = append(lines, fmt.Sprintf("%s: %s", f.TextName(), res))
+			return true
+		})
+		return fmt.Sprintf("{%s}", strings.Join(lines, ", "))
+	}
 }
