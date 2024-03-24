@@ -137,7 +137,7 @@ func (s *secrets) readFromFile() error {
 func (s *secrets) readFromKeyring() error {
 	secretsYaml, err := keyring.Get("lekko", "secrets.yaml")
 	if err != nil {
-		return errors.Wrap(err, "read from keyring")
+		return err
 	}
 	err = yaml.NewDecoder(strings.NewReader(secretsYaml)).Decode(s)
 	if err != nil {
@@ -149,14 +149,21 @@ func (s *secrets) readFromKeyring() error {
 func (s *secrets) read() error {
 	s.Lock()
 	defer s.Unlock()
+	// read from keyring first
 	err := s.readFromKeyring()
+	// on failure, try reading from file
 	if err != nil {
 		err = s.readFromFile()
+		if err == nil {
+			// save to keyring
+			err = s.save()
+			// migrated to keyring, we don't need the file anymore
+			if err == nil {
+				os.Remove(s.filename())
+			}
+		}
 	}
-	if err != nil {
-		return s.save()
-	}
-	return nil
+	return err
 }
 
 func (s *secrets) save() error {
