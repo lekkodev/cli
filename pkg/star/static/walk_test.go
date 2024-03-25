@@ -86,7 +86,7 @@ func testStar(t *testing.T, ft eval.ConfigType, useExport bool) (testVal, []byte
         default = %s,
         rules = [
             ("age == 10", %s),
-            ("city in [\"Rome\",\"Milan\"]", %s),
+            ("city in [\"Rome\",\"Milan\",\"Қарағанды\"]", %s),
         ],
     ),
 )

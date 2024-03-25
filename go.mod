@@ -2,6 +2,8 @@ module github.com/lekkodev/cli
 
 go 1.22
 
+replace github.com/bazelbuild/buildtools => github.com/lekkodev/buildtools v0.0.0-20240325231538-96eefd799042
+
 require (
 	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240315184309-655c9c725f17.1
 	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.33.0-20240315184309-655c9c725f17.1
