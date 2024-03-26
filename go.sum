@@ -33,8 +33,6 @@ github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 h1:0CwZNZbxp69SHPd
 github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5/go.mod h1:wHh0iHkYZB8zMSxRWpUBQtwG5a7fFgvEO+odwuTv2gs=
 github.com/atotto/clipboard v0.1.4 h1:EH0zSVneZPSuFR11BlR9YppQTVDbh5+16AmcJi4g1z4=
 github.com/atotto/clipboard v0.1.4/go.mod h1:ZY9tmq7sm5xIbd9bOK4onWV4S6X0u6GY7Vn0Yu86PYI=
-github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91 h1:7xSt0nPZ74liqR8jjBYmjentrQVrdQEhoW4/+4BrmoM=
-github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91/go.mod h1:689QdV3hBP7Vo9dJMmzhoYIyo/9iMhEmHkJcnaPRCbo=
 github.com/briandowns/spinner v1.23.0 h1:alDF2guRWqa/FOZZYWjlMIx2L6H0wyewPxo/CH4Pt2A=
 github.com/briandowns/spinner v1.23.0/go.mod h1:rPG4gmXeN3wQV/TsAY4w8lPdIM6RX3yqeBQJSrbXjuE=
 github.com/bufbuild/connect-go v1.10.0 h1:QAJ3G9A1OYQW2Jbk3DeoJbkCxuKArrvZgDt47mjdTbg=
@@ -178,6 +176,8 @@ github.com/kr/text v0.2.0/go.mod h1:eLer722TekiGuMkidMxC/pM04lWEeraHUUmBw8l2grE=
 github.com/kylelemons/godebug v0.0.0-20170820004349-d65d576e9348/go.mod h1:B69LEHPfb2qLo0BaaOLcbitczOKLWTsrBG9LczfCD4k=
 github.com/lainio/err2 v0.9.51 h1:R9lzMUxvP0T2U1C5DnpQG0FMMYooqGjUypP6aVmw+eY=
 github.com/lainio/err2 v0.9.51/go.mod h1:glTVV2qNFbBy6WzZFDP2G5BqMiZI58cudp588cEgCuM=
+github.com/lekkodev/buildtools v0.0.0-20240325231538-96eefd799042 h1:0aYu6I2ED2NLZn9Odi9zD5ssjEiUZbGyajPPH79wVTw=
+github.com/lekkodev/buildtools v0.0.0-20240325231538-96eefd799042/go.mod h1:689QdV3hBP7Vo9dJMmzhoYIyo/9iMhEmHkJcnaPRCbo=
 github.com/lekkodev/go-sdk v0.4.0 h1:6bs5X9XlfEDmstHK86YPzIed5NHTYPA4TAVdPDOl10s=
 github.com/lekkodev/go-sdk v0.4.0/go.mod h1:Rm1cCKxEn6aliPkgF1I2Jb6hK1GpVncBfdPsLufkomA=
 github.com/lekkodev/rules v1.5.3-0.20240206041635-dda452b36d1c h1:R94uFl+8lAdh5xqi+zLGCIdKRn1dxin9JmtrYwPnfWc=
