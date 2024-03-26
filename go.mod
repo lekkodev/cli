@@ -27,9 +27,8 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/stretchr/testify v1.8.4
 	github.com/whilp/git-urls v1.0.0
-	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
-	golang.org/x/mod v0.12.0
 	github.com/zalando/go-keyring v0.2.4
+	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
 	golang.org/x/mod v0.14.0
 	golang.org/x/oauth2 v0.7.0
 	google.golang.org/protobuf v1.33.0
