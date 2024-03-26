@@ -247,7 +247,7 @@ func GenTSCmd() *cobra.Command {
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
 	const templateBody = `// {{$.Description}}
-export async function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
+export function {{$.FuncName}}({{$.Parameters}}): Promise<{{$.RetType}}> {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
 
