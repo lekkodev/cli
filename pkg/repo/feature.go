@@ -630,9 +630,6 @@ func (r *repository) findVersionedFeatureFiles(ctx context.Context, namespaceFil
 		}
 		numNamespaces++
 		nv := feature.NewNamespaceVersion(nsMD.Version)
-		if err != nil {
-			return nil, 0, err
-		}
 		for _, ff := range ffs {
 			ff := ff
 			if len(featureFilter) > 0 && ff.Name != featureFilter {

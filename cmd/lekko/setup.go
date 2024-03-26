@@ -86,21 +86,46 @@ func setupCmd() *cobra.Command {
 				if len(githubOrgName) > 0 {
 					break
 				}
-				orgs, err := ghCli.GetUserOrganizations(cmd.Context())
+				appInstalls, err := ghCli.GetAllUserInstallations(cmd.Context(), true)
 				if err != nil {
 					return err
 				}
-				orgNames := make([]string, len(orgs)+1)
+				var orgNames []string
 				authorizeNewOrg := "[Authorize a new organization]"
-				orgNames[0] = authorizeNewOrg
-				for i, org := range orgs {
-					orgNames[i+1] = org.GetLogin()
+				orgNames = append(orgNames, authorizeNewOrg, rs.GetGithubUser())
+				installedOnPersonal := false
+				for _, install := range appInstalls {
+					if install.GetAccount().GetLogin() == rs.GetGithubUser() {
+						installedOnPersonal = true
+						continue
+					}
+					orgNames = append(orgNames, install.GetAccount().GetLogin())
 				}
 				if err := survey.AskOne(&survey.Select{
 					Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house a new config repo:",
 					Options: orgNames,
+					Description: func(value string, index int) string {
+						if value == rs.GetGithubUser() {
+							return "[personal account]"
+						}
+						return ""
+					},
+					Default: rs.GetGithubUser(),
 				}, &githubOrgName); err != nil {
 					return errors.Wrap(err, "prompt")
+				}
+				if githubOrgName == rs.GetGithubUser() && !installedOnPersonal {
+					ghUser, err := ghCli.GetUser(cmd.Context())
+					if err != nil {
+						return errors.Wrap(err, "get user")
+					}
+					url := fmt.Sprintf("https://github.com/apps/lekko-app/installations/new/permissions?target_id=%d", ghUser.GetID())
+					if err := browser.OpenURL(url); err != nil {
+						return err
+					}
+					fmt.Printf("Press %s to continue", logging.Bold("[Enter]"))
+					_ = waitForEnter(os.Stdin)
+					continue
 				}
 				if githubOrgName == authorizeNewOrg {
 					githubOrgName = ""
@@ -110,6 +135,7 @@ func setupCmd() *cobra.Command {
 					}
 					fmt.Printf("Press %s to refresh the list of organizations", logging.Bold("[Enter]"))
 					_ = waitForEnter(os.Stdin)
+					continue
 				}
 			}
 			if len(githubOrgName) == 0 {
@@ -166,14 +192,16 @@ func setupCmd() *cobra.Command {
 					if err != nil {
 						return err
 					}
-					// TODO: consolidate with create api key command
-					fmt.Printf("Generated API key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
+					fmt.Printf("Lekko API key:\n\t%s\n", logging.Bold(resp.GetApiKey()))
+					fmt.Printf("Use %s command to copy the API key to your clipboard\n", logging.Bold("lekko apikey copy"))
 					ws.SetLekkoAPIKey(resp.GetApiKey())
 					return nil
 				}, secrets.RequireLekko()); err != nil {
 					return err
 				}
 			}
+
+			fmt.Println("Lekko setup complete!")
 
 			return nil
 		},

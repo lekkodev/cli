@@ -21,6 +21,7 @@ import (
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/atotto/clipboard"
 	"github.com/lekkodev/cli/pkg/apikey"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -40,6 +41,7 @@ func apikeyCmd() *cobra.Command {
 		checkAPIKeyCmd(),
 		deleteAPIKeyCmd(),
 		showAPIKeyCmd(),
+		copyAPIKeyCmd(),
 	)
 	return cmd
 }
@@ -180,6 +182,22 @@ func showAPIKeyCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			fmt.Println(rs.GetLekkoAPIKey())
+			return nil
+		},
+	}
+	return cmd
+}
+
+func copyAPIKeyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "copy",
+		Short: "Copy the locally stored API key to the clipboard",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if err := clipboard.WriteAll(rs.GetLekkoAPIKey()); err != nil {
+				return errors.Wrap(err, "copy")
+			}
+			fmt.Println("API key copied to clipboard")
 			return nil
 		},
 	}

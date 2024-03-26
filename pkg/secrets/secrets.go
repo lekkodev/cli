@@ -19,10 +19,13 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/pkg/errors"
+	"github.com/zalando/go-keyring"
+	"gopkg.in/yaml.v2"
 )
 
 const AuthenticateGituhubMessage = "User is not authenticated.\nRun 'lekko auth login' to authenticate with GitHub."
@@ -69,9 +72,6 @@ type secrets struct {
 	GithubOwner   string `json:"github_owner,omitempty" yaml:"github_owner,omitempty"`
 	GithubRepo    string `json:"github_repo,omitempty" yaml:"github_repo,omitempty"`
 
-	// Deprecated
-	GithubEmail string `json:"github_email,omitempty" yaml:"github_email,omitempty"`
-
 	homeDir      string
 	changed      bool
 	sync.RWMutex `json:"-" yaml:"-"`
@@ -103,7 +103,12 @@ func WithWriteSecrets(f func(WriteSecrets) error, opts ...Option) error {
 	if err := f(s); err != nil {
 		return err
 	}
-	return s.close()
+	if !s.changed {
+		return nil
+	}
+	s.Lock()
+	defer s.Unlock()
+	return s.save()
 }
 
 func newSecrets() (*secrets, error) {
@@ -112,24 +117,16 @@ func newSecrets() (*secrets, error) {
 		return nil, errors.Wrap(err, "user home directory")
 	}
 	s := &secrets{homeDir: hd}
-	if err := s.readOrCreate(); err != nil {
+	if err := s.read(); err != nil {
 		return nil, errors.Wrap(err, "failed to read secrets")
 	}
 	return s, nil
 }
 
-func (s *secrets) readOrCreate() error {
-	s.Lock()
-	defer s.Unlock()
+func (s *secrets) readFromFile() error {
 	bytes, err := os.ReadFile(s.filename())
 	if err != nil {
-		if os.IsNotExist(err) {
-			if err := s.create(); err != nil {
-				return errors.Wrap(err, "create")
-			}
-		} else {
-			return errors.Wrap(err, "read file")
-		}
+		return errors.Wrap(err, "read file")
 	}
 	if err := metadata.UnmarshalYAMLStrict(bytes, s); err != nil {
 		return fmt.Errorf("unmarshal secrets from file %s: %w", s.filename(), err)
@@ -137,27 +134,45 @@ func (s *secrets) readOrCreate() error {
 	return nil
 }
 
-// TODO: don't leave the caller with an optional defer for writes.
-// Expose a safer way for callers to write to the secrets.
-func (s *secrets) close() error {
-	s.Lock()
-	defer s.Unlock()
-	if !s.changed {
-		return nil
+func (s *secrets) readFromKeyring() error {
+	secretsYaml, err := keyring.Get("lekko", "secrets.yaml")
+	if err != nil {
+		return err
 	}
-	return s.create()
+	err = yaml.NewDecoder(strings.NewReader(secretsYaml)).Decode(s)
+	if err != nil {
+		return errors.Wrap(err, "decode yaml")
+	}
+	return nil
 }
 
-func (s *secrets) create() error {
-	bytes, err := metadata.MarshalYAML(s)
+func (s *secrets) read() error {
+	s.Lock()
+	defer s.Unlock()
+	// read from keyring first
+	err := s.readFromKeyring()
+	// on failure, try reading from file
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal secrets")
+		err = s.readFromFile()
+		if err == nil {
+			// save to keyring
+			err = s.save()
+			// migrated to keyring, we don't need the file anymore
+			if err == nil {
+				os.Remove(s.filename())
+			}
+		}
 	}
-	if err := os.MkdirAll(filepath.Dir(s.filename()), 0755); err != nil {
-		return errors.Wrap(err, "failed to mkdir")
+	return err
+}
+
+func (s *secrets) save() error {
+	var buffer strings.Builder
+	if err := yaml.NewEncoder(&buffer).Encode(s); err != nil {
+		return errors.Wrap(err, "failed to encode secrets")
 	}
-	if err := os.WriteFile(s.filename(), bytes, 0600); err != nil {
-		return errors.Wrap(err, "failed to write secrets file")
+	if err := keyring.Set("lekko", "secrets.yaml", buffer.String()); err != nil {
+		return errors.Wrap(err, "failed to set secrets in keyring")
 	}
 	return nil
 }
