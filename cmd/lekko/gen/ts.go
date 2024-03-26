@@ -20,7 +20,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
-  "strconv"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -38,7 +38,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
-  "google.golang.org/protobuf/types/known/wrapperspb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
@@ -416,56 +416,58 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 	return ""
 }
 
+// returns only the formatted value
 func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) string {
-  if msg, ok := val.Interface().(protoreflect.Message); ok {
-    if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
-      // THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
-      typeRegistry.RegisterMessage(msg.Type())
-    }
-    return translateRetValueTS(try.To1(anypb.New(msg.Interface())), featurev1beta1.FeatureType_FEATURE_TYPE_PROTO)
-  } else {
-    switch f.Kind() {
-    case protoreflect.EnumKind:
-      fallthrough
-    case protoreflect.StringKind:
-      return fmt.Sprintf("\"%s\": \"%s\"", f.TextName(), val.String())
-    case protoreflect.BoolKind:
-      return fmt.Sprintf("\"%s\": %s", f.TextName(), val.String())
-    case protoreflect.BytesKind:
-      panic("Don't know how to take bytes, try nibbles");
-    case protoreflect.FloatKind:
-      fallthrough
-    case protoreflect.DoubleKind:
-      fallthrough
-    case protoreflect.Int64Kind:
-      fallthrough
-    case protoreflect.Int32Kind:
-      fallthrough
-    case protoreflect.Uint64Kind:
-      fallthrough
-    case protoreflect.Uint32Kind:
-      return fmt.Sprintf("\"%s\": %s", f.TextName(), val.String())
-    case protoreflect.MessageKind:
-      if f.IsMap() {
-        var lines []string
-        res := fmt.Sprintf("\"%s\": { ", f.TextName())
-        val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
-          lines = append(lines, fmt.Sprintf("\"%s\": %s",
-          mk.String(),
-          FieldValueToTS(f.MapValue(), mv)  ))
-          return true
-        })
-        res += strings.Join(lines, ", ")
-        res += " }"
-        return res
-      } else if f.IsList() {
-        panic(fmt.Sprintf("Do not know how to count: %+v", f))
-      }
-    default:
-      panic(fmt.Sprintf("Unknown: %+v", f))
-    }
-  }
-  panic("Unreachable code was reached")
+	if msg, ok := val.Interface().(protoreflect.Message); ok {
+		if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
+			// THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
+			try.To(typeRegistry.RegisterMessage(msg.Type()))
+		}
+		kind := featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
+		return translateRetValueTS(try.To1(anypb.New(msg.Interface())), kind)
+	} else {
+		switch f.Kind() {
+		case protoreflect.EnumKind:
+			fallthrough
+		case protoreflect.StringKind:
+			return fmt.Sprintf("\"%s\"", val.String())
+		case protoreflect.BoolKind:
+			return val.String()
+		case protoreflect.BytesKind:
+			panic("Don't know how to take bytes, try nibbles")
+		case protoreflect.FloatKind:
+			fallthrough
+		case protoreflect.DoubleKind:
+			fallthrough
+		case protoreflect.Int64Kind:
+			fallthrough
+		case protoreflect.Int32Kind:
+			fallthrough
+		case protoreflect.Uint64Kind:
+			fallthrough
+		case protoreflect.Uint32Kind:
+			return val.String()
+		case protoreflect.MessageKind:
+			if f.IsMap() {
+				var lines []string
+				res := "{ "
+				val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
+					lines = append(lines, fmt.Sprintf("\"%s\": %s",
+						mk.String(),
+						FieldValueToTS(f.MapValue(), mv)))
+					return true
+				})
+				res += strings.Join(lines, ", ")
+				res += " }"
+				return res
+			} else if f.IsList() {
+				panic(fmt.Sprintf("Do not know how to count: %+v", f))
+			}
+		default:
+			panic(fmt.Sprintf("Unknown: %+v", f))
+		}
+	}
+	panic("Unreachable code was reached")
 }
 
 func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
@@ -473,12 +475,12 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	marshalOptions := protojson.MarshalOptions{
 		UseProtoNames: true,
 	}
-  if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
-    var i64 wrapperspb.Int64Value
-    try.To(val.UnmarshalTo(&i64))
-    return strconv.FormatInt(i64.Value, 10)
-  }
-  // TODO double
+	if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
+		var i64 wrapperspb.Int64Value
+		try.To(val.UnmarshalTo(&i64))
+		return strconv.FormatInt(i64.Value, 10)
+	}
+	// TODO double
 	if t != featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 		// we are guessing this is a primitive, (unless we have i64 so let's do that later)
 		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
@@ -488,7 +490,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	// TODO: other WKTs
 	case "google.protobuf.Duration":
 		var v durationpb.Duration
-		val.UnmarshalTo(&v)
+		try.To(val.UnmarshalTo(&v))
 		return fmt.Sprintf("protobuf.Duration.fromJsonString(%s)", marshalOptions.Format(&v))
 	default:
 		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
@@ -500,7 +502,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, FieldValueToTS(f, val))
+			lines = append(lines, fmt.Sprintf("\"%s\": %s", f.TextName(), FieldValueToTS(f, val)))
 			return true
 		})
 		return fmt.Sprintf("{%s}", strings.Join(lines, ", "))
