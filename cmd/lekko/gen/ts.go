@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -74,7 +75,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("%s: %s;", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("%s?: %s;", f.TextName(), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -97,7 +98,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
 		t := fieldDescriptorToTS(f)
-		fields = append(fields, fmt.Sprintf("%s: %s;", f.TextName(), t))
+		fields = append(fields, fmt.Sprintf("%s?: %s;", f.TextName(), t))
 	}
 
 	data := struct {
@@ -131,14 +132,19 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 
 func GenTSCmd() *cobra.Command {
 	var ns string
-	var wd string
-	var of string
+	var repoPath string
+	var outDir string
 	cmd := &cobra.Command{
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var err error
 			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
+			repoPath, err = repo.InitIfNotExists(cmd.Context(), repoPath)
+			if err != nil {
+				return errors.Wrap(err, "init repo")
+			}
+			r, err := repo.NewLocal(repoPath, rs)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -185,7 +191,7 @@ func GenTSCmd() *cobra.Command {
 			})
 			protoImports := make(map[string]struct{})
 			for _, ff := range ffs {
-				fff, err := os.ReadFile(wd + "/" + ns + "/" + ff.CompiledProtoBinFileName)
+				fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
 				if err != nil {
 					return err
 				}
@@ -219,7 +225,8 @@ func GenTSCmd() *cobra.Command {
 				codeStrings = append(codeStrings, codeString)
 			}
 			const templateBody = `{{range  $.CodeStrings}}
-{{ . }}{{end}}`
+{{ . }}
+{{end}}`
 
 			data := struct {
 				Namespace   string
@@ -228,10 +235,7 @@ func GenTSCmd() *cobra.Command {
 				ns,
 				append(maps.Keys(protoImports), append(maps.Values(interfaces), codeStrings...)...),
 			}
-			if len(of) == 0 {
-				of = ns
-			}
-			f, err := os.Create(of + ".ts")
+			f, err := os.Create(filepath.Join(outDir, ns+".ts"))
 			if err != nil {
 				return err
 			}
@@ -240,14 +244,13 @@ func GenTSCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
-	cmd.Flags().StringVarP(&of, "output", "o", "", "output file")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
+	cmd.Flags().StringVarP(&outDir, "output", "o", ".", "output directory for generated code")
 	return cmd
 }
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
 	const templateBody = `// {{$.Description}}
-
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
