@@ -105,7 +105,7 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	return nil
 }
 
-func (r *RepoCmd) InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
+func InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
 	if len(repoPath) == 0 {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -139,7 +139,7 @@ func (r *RepoCmd) InitIfNotExists(ctx context.Context, repoPath string) (string,
 }
 
 func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
-	repoPath, err := r.InitIfNotExists(ctx, repoPath)
+	repoPath, err := InitIfNotExists(ctx, repoPath)
 	if err != nil {
 		return errors.Wrap(err, "init repo")
 	}
@@ -260,7 +260,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 }
 
 func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
-	repoPath, err := r.InitIfNotExists(ctx, repoPath)
+	repoPath, err := InitIfNotExists(ctx, repoPath)
 	if err != nil {
 		return err
 	}
