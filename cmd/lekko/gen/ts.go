@@ -75,7 +75,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("%s: %s;", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("%s?: %s;", f.TextName(), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -98,7 +98,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
 		t := fieldDescriptorToTS(f)
-		fields = append(fields, fmt.Sprintf("%s: %s;", f.TextName(), t))
+		fields = append(fields, fmt.Sprintf("%s?: %s;", f.TextName(), t))
 	}
 
 	data := struct {
