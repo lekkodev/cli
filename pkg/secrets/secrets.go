@@ -117,9 +117,7 @@ func newSecrets() (*secrets, error) {
 		return nil, errors.Wrap(err, "user home directory")
 	}
 	s := &secrets{homeDir: hd}
-	if err := s.read(); err != nil {
-		return nil, errors.Wrap(err, "failed to read secrets")
-	}
+	s.load()
 	return s, nil
 }
 
@@ -146,7 +144,7 @@ func (s *secrets) readFromKeyring() error {
 	return nil
 }
 
-func (s *secrets) read() error {
+func (s *secrets) load() {
 	s.Lock()
 	defer s.Unlock()
 	// read from keyring first
@@ -154,6 +152,9 @@ func (s *secrets) read() error {
 	// on failure, try reading from file
 	if err != nil {
 		err = s.readFromFile()
+		// err != nil means that there are no Lekko secrets on this device,
+		// so we start with empty secrets.
+		// Otherwise we migrate the secrets to keyring.
 		if err == nil {
 			// save to keyring
 			err = s.save()
@@ -163,7 +164,6 @@ func (s *secrets) read() error {
 			}
 		}
 	}
-	return err
 }
 
 func (s *secrets) save() error {
