@@ -35,7 +35,7 @@ import (
 
 const installBuf = `
 Please install buf in order to use lekko cli.
-Using homebrew, run 'brew install bufbuild/buf/buf'. 
+Using homebrew, run 'brew install bufbuild/buf/buf'.
 For other options, see the installation page here: https://docs.buf.build/installation`
 
 var requiredFileDescriptors = []protoreflect.FileDescriptor{
@@ -71,10 +71,11 @@ func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, useExterna
 		return nil, err
 	}
 	// Lint before generating the new buf image
-	if err := lint(protoDir); err != nil {
+	fullProtoDir := cw.GetFullPath(protoDir)
+	if err := lint(fullProtoDir); err != nil {
 		return nil, errors.Wrap(err, "buf lint")
 	}
-	_, err := newBufImage(protoDir)
+	_, err := newBufImage(fullProtoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
