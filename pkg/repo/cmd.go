@@ -278,7 +278,6 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 		return errors.New("No remote found, please finish setup instructions")
 	}
 
-	// TODO: make it work with custom repo path
 	configRepo, err := NewLocal(repoPath, r.rs)
 	if err != nil {
 		return errors.Wrap(err, "failed to open config repo")
