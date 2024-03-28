@@ -16,6 +16,7 @@ package repo
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -334,13 +335,17 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 		},
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
 		// Soft reset will keep changes as staged.
-		worktree.Reset(&git.ResetOptions{
+		errReset := worktree.Reset(&git.ResetOptions{
 			Commit: headBefore.Hash(),
 			Mode:   git.SoftReset,
 		})
-		return errors.Wrap(err, "failed to push")
+		if errReset != nil {
+			return errors.Wrap(stderrors.Join(err, errReset), "failed to reset changes")
+		}
+		return err
 	}
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
 		fmt.Println("Everything up-to-date")
