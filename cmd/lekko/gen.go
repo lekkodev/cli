@@ -42,11 +42,11 @@ func genCmd() *cobra.Command {
 	}
 	cmd.AddCommand(gen.GenGoCmd())
 	cmd.AddCommand(gen.GenTSCmd())
-	cmd.AddCommand(geneStarlarkCmd())
+	cmd.AddCommand(genStarlarkCmd())
 	return cmd
 }
 
-func geneStarlarkCmd() *cobra.Command {
+func genStarlarkCmd() *cobra.Command {
 	var wd string
 	var ns string
 	var configName string
