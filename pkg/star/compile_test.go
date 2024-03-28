@@ -63,6 +63,10 @@ func (fs *testFS) IsNotExist(err error) bool {
 	return true
 }
 
+func (fs *testFS) GetFullPath(path string) string {
+	return path
+}
+
 func getRegistry(t *testing.T) *protoregistry.Types {
 	sTypes, err := prototypes.RegisterDynamicTypes(nil)
 	if err != nil {

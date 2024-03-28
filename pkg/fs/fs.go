@@ -34,6 +34,7 @@ type Provider interface {
 	GetFileContents(ctx context.Context, path string) ([]byte, error)
 	GetDirContents(ctx context.Context, path string) ([]ProviderFile, error)
 	IsNotExist(err error) bool
+	GetFullPath(path string) string
 }
 
 // FileSystem abstraction so we can use the same writing code

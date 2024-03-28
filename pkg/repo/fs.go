@@ -67,6 +67,10 @@ func (r *repository) IsNotExist(err error) bool {
 	return errors.Is(err, os.ErrNotExist)
 }
 
+func (r *repository) GetFullPath(path string) string {
+	return filepath.Join(r.path, path)
+}
+
 /* Implement fs.ConfigWriter */
 
 // WriteFile writes data to the named file, creating it if necessary.

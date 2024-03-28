@@ -16,6 +16,7 @@ package repo
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -264,44 +265,49 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 	if err != nil {
 		return err
 	}
+	fmt.Printf("Using repo path: %s\n\n", repoPath)
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "open git repo")
 	}
 	remotes, err := gitRepo.Remotes()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "get remotes")
 	}
 	if len(remotes) == 0 {
 		return errors.New("No remote found, please finish setup instructions")
 	}
 
-	// TODO: make it work with custom repo path
-	// configRepo, err := NewLocal(repoPath, r.rs)
-	// if err != nil {
-	// 	return errors.Wrap(err, "failed to open config repo")
-	// }
-	// rootMD, _, err := configRepo.ParseMetadata(ctx)
-	// if err != nil {
-	// 	return errors.Wrap(err, "failed to parse config repo metadata")
-	// }
-	// // re-build proto
-	// registry, err := configRepo.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
-	// if err != nil {
-	// 	return errors.Wrap(err, "rebuild type registry")
-	// }
-	// _, err = configRepo.Compile(ctx, &CompileRequest{
-	// 	Registry: registry,
-	// })
-	// if err != nil {
-	// 	return errors.Wrap(err, "compile before push")
-	// }
+	configRepo, err := NewLocal(repoPath, r.rs)
+	if err != nil {
+		return errors.Wrap(err, "failed to open config repo")
+	}
+	rootMD, _, err := configRepo.ParseMetadata(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse config repo metadata")
+	}
+	// re-build proto
+	registry, err := configRepo.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
+	if err != nil {
+		return errors.Wrap(err, "rebuild type registry")
+	}
+	_, err = configRepo.Compile(ctx, &CompileRequest{
+		Registry: registry,
+	})
+	if err != nil {
+		return errors.Wrap(err, "compile before push")
+	}
+	fmt.Printf("Compiled successfully\n\n")
 
 	worktree, err := gitRepo.Worktree()
 	if err != nil {
 		return err
 	}
 	status, err := worktree.Status()
+	if err != nil {
+		return err
+	}
+	headBefore, err := gitRepo.Head()
 	if err != nil {
 		return err
 	}
@@ -328,6 +334,16 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 		},
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		err = errors.Wrap(err, "failed to push")
+		// Undo commit that we made before push.
+		// Soft reset will keep changes as staged.
+		errReset := worktree.Reset(&git.ResetOptions{
+			Commit: headBefore.Hash(),
+			Mode:   git.SoftReset,
+		})
+		if errReset != nil {
+			return errors.Wrap(stderrors.Join(err, errReset), "failed to reset changes")
+		}
 		return err
 	}
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
