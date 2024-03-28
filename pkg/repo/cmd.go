@@ -268,13 +268,35 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 	if err != nil {
 		return err
 	}
-	list, err := gitRepo.Remotes()
+	remotes, err := gitRepo.Remotes()
 	if err != nil {
 		return err
 	}
-	if len(list) == 0 {
+	if len(remotes) == 0 {
 		return errors.New("No remote found, please finish setup instructions")
 	}
+
+	// TODO: make it work with custom repo path
+	// configRepo, err := NewLocal(repoPath, r.rs)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to open config repo")
+	// }
+	// rootMD, _, err := configRepo.ParseMetadata(ctx)
+	// if err != nil {
+	// 	return errors.Wrap(err, "failed to parse config repo metadata")
+	// }
+	// // re-build proto
+	// registry, err := configRepo.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
+	// if err != nil {
+	// 	return errors.Wrap(err, "rebuild type registry")
+	// }
+	// _, err = configRepo.Compile(ctx, &CompileRequest{
+	// 	Registry: registry,
+	// })
+	// if err != nil {
+	// 	return errors.Wrap(err, "compile before push")
+	// }
+
 	worktree, err := gitRepo.Worktree()
 	if err != nil {
 		return err
@@ -283,21 +305,20 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 	if err != nil {
 		return err
 	}
-	if status.IsClean() {
-		return errors.New("No local changes to push.")
-	}
-	_, err = worktree.Add(".")
-	if err != nil {
-		return err
-	}
-	if len(commitMessage) == 0 {
-		commitMessage = "Configs commit"
-	}
-	_, err = worktree.Commit(commitMessage, &git.CommitOptions{
-		All: true,
-	})
-	if err != nil {
-		return err
+	if !status.IsClean() {
+		_, err = worktree.Add(".")
+		if err != nil {
+			return err
+		}
+		if len(commitMessage) == 0 {
+			commitMessage = "Configs commit"
+		}
+		_, err = worktree.Commit(commitMessage, &git.CommitOptions{
+			All: true,
+		})
+		if err != nil {
+			return err
+		}
 	}
 	// push to GitHub
 	err = gitRepo.Push(&git.PushOptions{
@@ -308,6 +329,12 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return err
+	}
+	if errors.Is(err, git.NoErrAlreadyUpToDate) {
+		fmt.Println("Everything up-to-date")
+	} else {
+		// assuming that there is only one remote and one URL
+		fmt.Printf("Successfully pushed changes to: %s\n", remotes[0].Config().URLs[0])
 	}
 	// Pull to get remote branches
 	w, err := gitRepo.Worktree()
