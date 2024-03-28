@@ -152,6 +152,9 @@ func (s *secrets) load() {
 	// on failure, try reading from file
 	if err != nil {
 		err = s.readFromFile()
+		// err != nil means that there are no Lekko secrets on this device,
+		// so we start with empty secrets.
+		// Otherwise we migrate the secrets to keyring.
 		if err == nil {
 			// save to keyring
 			err = s.save()
