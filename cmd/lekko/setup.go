@@ -160,7 +160,6 @@ func setupCmd() *cobra.Command {
 				}
 				fmt.Printf("Cloned into %s\n\n", repoPath)
 			} else {
-
 				for {
 					if len(githubOrgName) > 0 {
 						break
