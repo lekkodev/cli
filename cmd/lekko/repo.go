@@ -50,6 +50,7 @@ func repoCmd() *cobra.Command {
 		defaultRepoInitCmd(),
 		importCmd(),
 		remoteCmd(),
+		pathCmd(),
 		pushCmd(),
 	)
 	return cmd
@@ -330,5 +331,21 @@ func pushCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
 	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	return cmd
+}
+
+func pathCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "path",
+		Short: "Show the local repo path currently in use",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if len(rs.GetLekkoRepoPath()) == 0 {
+				return errors.New("no local repo info in Lekko config")
+			}
+			fmt.Println(rs.GetLekkoRepoPath())
+			return nil
+		},
+	}
 	return cmd
 }

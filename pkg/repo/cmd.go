@@ -106,13 +106,21 @@ func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote
 	return nil
 }
 
+func DefaultRepoBasePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "Library/Application Support/Lekko/Config Repositories"), nil
+}
+
 func InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
 	if len(repoPath) == 0 {
-		home, err := os.UserHomeDir()
+		base, err := DefaultRepoBasePath()
 		if err != nil {
 			return "", err
 		}
-		repoPath = home + "/Library/Application Support/Lekko/Config Repositories/default"
+		repoPath = filepath.Join(base, "default")
 	}
 	err := os.MkdirAll(repoPath, 0777)
 	if err != nil {
