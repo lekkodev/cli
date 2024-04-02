@@ -65,6 +65,9 @@ message PreRegisterUserResponse {}
 message LoginRequest {
   string username = 1;
   string password = 2;
+  // An encrypted token issued by the backend. If this token is present, valid,
+  // and not expired, it can be used to log in without a password.
+  string token = 3;
 }
 
 enum ChallengeName {
