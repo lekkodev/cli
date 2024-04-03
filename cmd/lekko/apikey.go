@@ -53,6 +53,20 @@ func createAPIKeyCmd() *cobra.Command {
 		Short: "Create an api key",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if len(rs.GetLekkoAPIKey()) > 0 {
+				fmt.Printf("Found existing API key, use %s or %s to retrieve it.\n", logging.Bold("lekko apikey show"), logging.Bold("lekko apikey copy"))
+				fmt.Println("Generating a new API key will overwrite the existing one.")
+				doIt := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: "Continue?",
+					Default: false,
+				}, &doIt); err != nil {
+					return err
+				}
+				if !doIt {
+					return errors.New("Aborted!")
+				}
+			}
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
@@ -67,9 +81,14 @@ func createAPIKeyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				ws.SetLekkoAPIKey(resp.GetApiKey())
+				return nil
+			}, secrets.RequireLekko()); err != nil {
+				return errors.Wrap(err, "write API key to secrets")
+			}
 			fmt.Printf("Generated api key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
-			fmt.Printf("Please save the key somewhere safe, as you will not be able to access it again.\n")
-			fmt.Printf("Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
+			fmt.Printf("Use %s command to copy the API key to your clipboard\n", logging.Bold("lekko apikey copy"))
 			return nil
 		},
 	}
