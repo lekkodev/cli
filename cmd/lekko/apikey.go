@@ -67,9 +67,14 @@ func createAPIKeyCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				ws.SetLekkoAPIKey(resp.GetApiKey())
+				return nil
+			}, secrets.RequireLekko()); err != nil {
+				return errors.Wrap(err, "write API key to secrets")
+			}
 			fmt.Printf("Generated api key named '%s':\n\t%s\n", resp.GetNickname(), logging.Bold(resp.GetApiKey()))
-			fmt.Printf("Please save the key somewhere safe, as you will not be able to access it again.\n")
-			fmt.Printf("Avoid sharing the key unnecessarily or storing it anywhere insecure.\n")
+			fmt.Printf("Use %s command to copy the API key to your clipboard\n", logging.Bold("lekko apikey copy"))
 			return nil
 		},
 	}
