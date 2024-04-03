@@ -304,10 +304,36 @@ func importCmd() *cobra.Command {
 }
 
 func remoteCmd() *cobra.Command {
+	var remoteRepo string
 	cmd := &cobra.Command{
 		Use:   "remote",
 		Short: "Show the remote Lekko repo currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(remoteRepo) > 0 {
+				doIt := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: fmt.Sprintf("Set remote repo to '%s'?", remoteRepo),
+					Default: false,
+				}, &doIt); err != nil {
+					return err
+				}
+				if !doIt {
+					fmt.Println("Aborted!")
+					return nil
+				}
+				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					parts := strings.Split(remoteRepo, "/")
+					if len(parts) != 2 {
+						return errors.New("Invalid remote repo format, shoud be '<GitHub owner>/<GitHub repo>'")
+					}
+					ws.SetGithubOwner(parts[0])
+					ws.SetGithubRepo(parts[1])
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			if len(rs.GetGithubOwner()) == 0 || len(rs.GetGithubRepo()) == 0 {
 				return errors.New("no remote repo info in Lekko config")
@@ -316,6 +342,7 @@ func remoteCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&remoteRepo, "set", "", "set the remote Lekko repo, use '<GitHub owner>/<GitHub repo>' format")
 	return cmd
 }
 
@@ -336,10 +363,31 @@ func pushCmd() *cobra.Command {
 }
 
 func pathCmd() *cobra.Command {
+	var path string
 	cmd := &cobra.Command{
 		Use:   "path",
 		Short: "Show the local repo path currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(path) > 0 {
+				doIt := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: fmt.Sprintf("Set local repo path to '%s'?", path),
+					Default: false,
+				}, &doIt); err != nil {
+					return err
+				}
+				if !doIt {
+					fmt.Println("Aborted!")
+					return nil
+				}
+				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+					ws.SetLekkoRepoPath(path)
+					return nil
+				}); err != nil {
+					return err
+				}
+				return nil
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
 			if len(rs.GetLekkoRepoPath()) == 0 {
 				return errors.New("no local repo info in Lekko config")
@@ -348,5 +396,6 @@ func pathCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&path, "set", "", "set the local repo path")
 	return cmd
 }
