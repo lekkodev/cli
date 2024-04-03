@@ -140,7 +140,7 @@ func GenTSCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
 			rs := secrets.NewSecretsOrFail()
-			repoPath, err = repo.InitIfNotExists(cmd.Context(), repoPath)
+			repoPath, err = repo.InitIfNotExists(cmd.Context(), rs, repoPath)
 			if err != nil {
 				return errors.Wrap(err, "init repo")
 			}

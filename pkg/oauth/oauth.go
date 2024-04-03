@@ -146,6 +146,9 @@ func (a *OAuth) PreRegister(ctx context.Context, username string, ws secrets.Wri
 	}
 	ws.SetLekkoUsername(username)
 	ws.SetLekkoToken(creds.Token)
+	if creds.Team != nil {
+		ws.SetLekkoTeam(*creds.Team)
+	}
 
 	fmt.Printf("Sign-up complete! You are now logged into Lekko as %s.\n", logging.Bold(username))
 	return nil
