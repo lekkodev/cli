@@ -114,13 +114,17 @@ func DefaultRepoBasePath() (string, error) {
 	return filepath.Join(home, "Library/Application Support/Lekko/Config Repositories"), nil
 }
 
-func InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
+func InitIfNotExists(ctx context.Context, rs secrets.ReadSecrets, repoPath string) (string, error) {
 	if len(repoPath) == 0 {
-		base, err := DefaultRepoBasePath()
-		if err != nil {
-			return "", err
+		if len(rs.GetLekkoRepoPath()) > 0 {
+			repoPath = rs.GetLekkoRepoPath()
+		} else {
+			base, err := DefaultRepoBasePath()
+			if err != nil {
+				return "", err
+			}
+			repoPath = filepath.Join(base, "default")
 		}
-		repoPath = filepath.Join(base, "default")
 	}
 	err := os.MkdirAll(repoPath, 0777)
 	if err != nil {
@@ -148,7 +152,7 @@ func InitIfNotExists(ctx context.Context, repoPath string) (string, error) {
 }
 
 func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
-	repoPath, err := InitIfNotExists(ctx, repoPath)
+	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
 	if err != nil {
 		return errors.Wrap(err, "init repo")
 	}
@@ -269,7 +273,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 }
 
 func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
-	repoPath, err := InitIfNotExists(ctx, repoPath)
+	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
 	if err != nil {
 		return err
 	}

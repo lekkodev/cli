@@ -276,7 +276,8 @@ func defaultRepoInitCmd() *cobra.Command {
 		Use:   "init-default",
 		Short: "Initialize a new template git repository in the default location",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := repo.InitIfNotExists(cmd.Context(), repoPath)
+			rs := secrets.NewSecretsOrFail()
+			_, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
 			return err
 		},
 	}
