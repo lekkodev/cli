@@ -246,12 +246,15 @@ func setupCmd() *cobra.Command {
 				rs = secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
 				bff = lekko.NewBFFClient(rs)
 
-				repoCmd := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-				repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
-				if err != nil {
-					return errors.Wrap(err, "init repo")
+				if len(repoPath) == 0 {
+					base, err := repo.DefaultRepoBasePath()
+					if err != nil {
+						return err
+					}
+					repoPath = filepath.Join(base, githubOrgName, githubRepo)
 				}
 
+				repoCmd := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 				err = repoCmd.Import(cmd.Context(), repoPath, githubOrgName, githubRepo, "")
 				if err != nil {
 					return errors.Wrap(err, "import repo")
