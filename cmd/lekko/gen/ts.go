@@ -17,6 +17,7 @@ package gen
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -138,6 +139,7 @@ func GenTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// TODO to avoid weird error message we should compile first.
 			var err error
 			rs := secrets.NewSecretsOrFail()
 			repoPath, err = repo.InitIfNotExists(cmd.Context(), rs, repoPath)
@@ -150,13 +152,15 @@ func GenTSCmd() *cobra.Command {
 			}
 			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
 			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
-
 			var parameters string
 			interfaces := make(map[string]string)
+			if _, ok := nsMDs[ns]; !ok {
+				log.Fatal("unknown namespace: ", ns)
+			}
 			if len(nsMDs[ns].ContextProto) > 0 {
 				ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
 				if err != nil {
-					return err
+					log.Fatal("error finding the message in the registry", err)
 				}
 				parameters = getTSParameters(ptype.Descriptor())
 				face, err := getTSInterface(ptype.Descriptor())
@@ -165,7 +169,6 @@ func GenTSCmd() *cobra.Command {
 				}
 				interfaces[nsMDs[ns].ContextProto] = face
 			}
-
 			var codeStrings []string
 			/*
 			         typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
@@ -189,6 +192,7 @@ func GenTSCmd() *cobra.Command {
 			sort.SliceStable(ffs, func(i, j int) bool {
 				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 			})
+
 			protoImports := make(map[string]struct{})
 			for _, ff := range ffs {
 				fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
@@ -208,7 +212,7 @@ func GenTSCmd() *cobra.Command {
 						if _, ok := interfaces[name]; !ok {
 							ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
 							if err != nil {
-								return errors.Wrap(err, f.Tree.Default.TypeUrl)
+								return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
 							}
 							face, err := getTSInterface(ptype.Descriptor())
 							if err != nil {
@@ -227,7 +231,6 @@ func GenTSCmd() *cobra.Command {
 			const templateBody = `{{range  $.CodeStrings}}
 {{ . }}
 {{end}}`
-
 			data := struct {
 				Namespace   string
 				CodeStrings []string
