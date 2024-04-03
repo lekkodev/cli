@@ -180,7 +180,7 @@ func setupCmd() *cobra.Command {
 						orgNames = append(orgNames, install.GetAccount().GetLogin())
 					}
 					if err := survey.AskOne(&survey.Select{
-						Message: "Lekko uses a GitHub repository to store configs. Please select a GitHub organization to house a new config repo:",
+						Message: "Please select a GitHub organization to house a new config repo:",
 						Options: orgNames,
 						Description: func(value string, index int) string {
 							if value == rs.GetGithubUser() {
