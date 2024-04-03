@@ -53,6 +53,20 @@ func createAPIKeyCmd() *cobra.Command {
 		Short: "Create an api key",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
+			if len(rs.GetLekkoAPIKey()) > 0 {
+				fmt.Printf("Found existing API key, use %s or %s to retrieve it.\n", logging.Bold("lekko apikey show"), logging.Bold("lekko apikey copy"))
+				fmt.Println("Generating a new API key will overwrite the existing one.")
+				doIt := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: "Continue?",
+					Default: false,
+				}, &doIt); err != nil {
+					return err
+				}
+				if !doIt {
+					return errors.New("Aborted!")
+				}
+			}
 			a := apikey.NewAPIKey(lekko.NewBFFClient(rs))
 			if len(name) == 0 {
 				if err := survey.AskOne(&survey.Input{
