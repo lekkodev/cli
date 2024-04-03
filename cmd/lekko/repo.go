@@ -20,6 +20,7 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -370,8 +371,12 @@ func pathCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(path) > 0 {
 				doIt := false
+				absPath, err := filepath.Abs(path)
+				if err != nil {
+					return err
+				}
 				if err := survey.AskOne(&survey.Confirm{
-					Message: fmt.Sprintf("Set local repo path to '%s'?", path),
+					Message: fmt.Sprintf("Set local repo path to '%s'?", absPath),
 					Default: false,
 				}, &doIt); err != nil {
 					return err
@@ -381,7 +386,7 @@ func pathCmd() *cobra.Command {
 					return nil
 				}
 				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-					ws.SetLekkoRepoPath(path)
+					ws.SetLekkoRepoPath(absPath)
 					return nil
 				}); err != nil {
 					return err
