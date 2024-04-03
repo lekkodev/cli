@@ -95,6 +95,9 @@ func (a *OAuth) Logout(ctx context.Context, provider string, ws secrets.WriteSec
 		ws.SetLekkoTeam("")
 		ws.SetLekkoToken("")
 		ws.SetLekkoAPIKey("")
+		ws.SetLekkoRepoPath("")
+		ws.SetGithubOwner("")
+		ws.SetGithubRepo("")
 	}
 	if provider == "github" {
 		ws.SetGithubToken("")
