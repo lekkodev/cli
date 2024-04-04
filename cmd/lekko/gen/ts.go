@@ -28,6 +28,7 @@ import (
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
@@ -99,7 +100,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
 		t := fieldDescriptorToTS(f)
-		fields = append(fields, fmt.Sprintf("%s?: %s;", f.TextName(), t))
+		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 	}
 
 	data := struct {
@@ -509,7 +510,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\"%s\": %s", f.TextName(), FieldValueToTS(f, val)))
+			lines = append(lines, fmt.Sprintf("\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
 		return fmt.Sprintf("{%s}", strings.Join(lines, ", "))
