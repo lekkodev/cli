@@ -288,13 +288,23 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	}
 
 	usedVariables := make(map[string]string)
-	code := translateFeatureTS(f, usedVariables)
+	optionalVariables := make(map[string]string)
+	code := translateFeatureTS(f, usedVariables, optionalVariables)
 	if len(parameters) == 0 && len(usedVariables) > 0 {
 		var keys []string
 		var keyAndTypes []string
 		for k, t := range usedVariables {
+			if _, exists := optionalVariables[k]; !exists {
+				keys = append(keys, k)
+				keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", k, t))
+			}
+		}
+		for k, t := range optionalVariables {
 			keys = append(keys, k)
-			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", k, t))
+			if paramType, exists := usedVariables[k]; exists {
+				t = paramType
+			}
+			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s?: %s", k, t))
 		}
 		parameters = fmt.Sprintf("{%s}: {%s}", strings.Join(keys, ","), strings.Join(keyAndTypes, ","))
 	}
@@ -327,14 +337,14 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	return ret.String(), nil
 }
 
-func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string) []string {
+func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string, optionalVariables map[string]string) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
 		if i == 0 {
 			ifToken = "if"
 		}
-		rule := translateRuleTS(constraint.GetRuleAstNew(), usedVariables)
+		rule := translateRuleTS(constraint.GetRuleAstNew(), usedVariables, optionalVariables)
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
@@ -360,7 +370,7 @@ func structpbValueToKindString(v *structpb.Value) string {
 	return "unknown"
 }
 
-func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) string {
+func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, optionalVariables map[string]string) string {
 	marshalOptions := protojson.MarshalOptions{
 		UseProtoNames: true,
 	}
@@ -405,6 +415,10 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("(%s.endsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_PRESENT:
+			usedVariables[v.Atom.ContextKey] = "unknown"
+			optionalVariables[v.Atom.ContextKey] = "unknown"
+			return fmt.Sprintf("(%s !== undefined)", v.Atom.ContextKey)
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
