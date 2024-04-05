@@ -416,7 +416,9 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, o
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("(%s.endsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_PRESENT:
-			usedVariables[v.Atom.ContextKey] = "unknown"
+			if _, ok := usedVariables[v.Atom.ContextKey]; !ok {
+				usedVariables[v.Atom.ContextKey] = "unknown"
+			}
 			optionalVariables[v.Atom.ContextKey] = "unknown"
 			return fmt.Sprintf("(%s !== undefined)", v.Atom.ContextKey)
 		}
