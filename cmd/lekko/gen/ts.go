@@ -431,7 +431,7 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, o
 		var result []string
 		for _, rule := range v.LogicalExpression.Rules {
 			// worry about inner parens later
-			result = append(result, translateRuleTS(rule, usedVariables))
+			result = append(result, translateRuleTS(rule, usedVariables, optionalVariables))
 		}
 		return "(" + strings.Join(result, operator) + ")"
 	}
