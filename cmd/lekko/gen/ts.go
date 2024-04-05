@@ -254,7 +254,7 @@ func GenTSCmd() *cobra.Command {
 }
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
-	const templateBody = `// {{$.Description}}
+	const templateBody = `{{if $.Description}}// {{$.Description}}{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
