@@ -203,7 +203,8 @@ func featureAdd() *cobra.Command {
 }
 
 func featureRemove() *cobra.Command {
-	var wd, ns, featureName string
+	var wd, ns, configName string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "remove config",
@@ -212,28 +213,29 @@ func featureRemove() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			nsf, err := featureSelect(cmd.Context(), r, ns, featureName)
+			nsf, err := featureSelect(cmd.Context(), r, ns, configName)
 			if err != nil {
 				return err
 			}
-			ns, featureName = nsf.namespace(), nsf.feature()
+			ns, configName = nsf.namespace(), nsf.feature()
 			// Confirm
-			featurePair := fmt.Sprintf("%s/%s", ns, featureName)
+			featurePair := fmt.Sprintf("%s/%s", ns, configName)
 			fmt.Printf("Deleting config %s...\n", featurePair)
-			if err := confirmInput(featurePair); err != nil {
-				return err
+			if !force {
+				if err := confirmInput(featurePair); err != nil {
+					return err
+				}
 			}
-			if err := r.RemoveFeature(cmd.Context(), ns, featureName); err != nil {
+			if err := r.RemoveFeature(cmd.Context(), ns, configName); err != nil {
 				return errors.Wrap(err, "remove config")
 			}
-			fmt.Printf("Successfully removed config %s/%s\n", ns, featureName)
+			fmt.Printf("Successfully removed config %s/%s\n", ns, configName)
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to remove config from")
-	cmd.Flags().StringVarP(&featureName, "feature", "f", "", "name of config to remove")
-	_ = cmd.Flags().MarkHidden("feature")
-	cmd.Flags().StringVarP(&featureName, "config", "c", "", "name of config to remove")
+	cmd.Flags().StringVarP(&configName, "config", "c", "", "name of config to remove")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "whether to remove the config without confirmation")
 	cmd.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository") // TODO this is gross maybe make them all full?
 	return cmd
 }
