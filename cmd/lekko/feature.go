@@ -76,15 +76,17 @@ func featureList() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "list namespaces")
 			}
+			filtered := nss
 			if len(ns) > 0 {
+				filtered = []*metadata.NamespaceConfigRepoMetadata{}
 				for _, namespaceMD := range nss {
 					if namespaceMD.Name == ns {
-						nss = []*metadata.NamespaceConfigRepoMetadata{namespaceMD}
+						filtered = []*metadata.NamespaceConfigRepoMetadata{namespaceMD}
 						break
 					}
 				}
 			}
-			for _, namespaceMD := range nss {
+			for _, namespaceMD := range filtered {
 				ffs, err := r.GetFeatureFiles(cmd.Context(), namespaceMD.Name)
 				if err != nil {
 					return errors.Wrapf(err, "get config files for ns %s", namespaceMD.Name)
