@@ -254,7 +254,8 @@ func GenTSCmd() *cobra.Command {
 }
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
-	const templateBody = `{{if $.Description}}// {{$.Description}}{{end}}
+	// TODO: support multiline descriptions
+	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
