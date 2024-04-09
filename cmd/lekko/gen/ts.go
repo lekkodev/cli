@@ -74,10 +74,10 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
 			d := f.Message()
-			t = "{"
+			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("%s?: %s;", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", f.TextName(), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -511,9 +511,9 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
+			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
-		return fmt.Sprintf("{%s}", strings.Join(lines, ", "))
+		return fmt.Sprintf("{\n%s}", strings.Join(lines, ",\n"))
 	}
 }
