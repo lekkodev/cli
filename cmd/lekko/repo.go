@@ -487,14 +487,14 @@ func pullCmd() *cobra.Command {
 			}
 			newHead, err := gitRepo.Head()
 			if err != nil {
-				return nil
+				return err
 			}
 			if newHead.Hash().String() == baseCommit {
 				fmt.Println("Already up to date.")
 				return nil
 			}
 
-			genTs := func(outFilename string) error {
+			genTS := func(outFilename string) error {
 				err := gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
 					return os.Create(outFilename)
 				})
@@ -516,7 +516,7 @@ func pullCmd() *cobra.Command {
 				return errors.Wrap(err, fmt.Sprintf("checkout %s", baseCommit))
 			}
 			baseFilename := tsFilename + ".base"
-			err = genTs(baseFilename)
+			err = genTS(baseFilename)
 			if err != nil {
 				return errors.Wrap(err, "gen ts: base")
 			}
@@ -529,7 +529,7 @@ func pullCmd() *cobra.Command {
 				return errors.Wrap(err, "checkout main")
 			}
 			remoteFilename := tsFilename + ".remote"
-			err = genTs(remoteFilename)
+			err = genTS(remoteFilename)
 			if err != nil {
 				return errors.Wrap(err, "gen ts: remote")
 			}
