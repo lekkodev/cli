@@ -544,12 +544,15 @@ func pullCmd() *cobra.Command {
 				return errors.Wrap(err, "gen ts: remote")
 			}
 
+			fmt.Printf("Auto-merging %s\n", tsFilename)
 			mergeCmd := exec.Command("git", "merge-file", tsFilename, baseFilename, remoteFilename, "--diff3")
 			err = mergeCmd.Run()
 			if err != nil {
 				exitErr, ok := err.(*exec.ExitError)
 				// positive error code is fine, it signals number of conflicts
-				if !ok || exitErr.ExitCode() < 0 {
+				if ok && exitErr.ExitCode() > 0 {
+					fmt.Printf("CONFLICT (content): Merge conflict in %s\n", tsFilename)
+				} else {
 					return errors.Wrap(err, "git merge-file")
 				}
 			}
