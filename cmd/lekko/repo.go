@@ -16,14 +16,20 @@ package main
 
 import (
 	"bufio"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/lekkodev/cli/cmd/lekko/gen"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -53,6 +59,7 @@ func repoCmd() *cobra.Command {
 		remoteCmd(),
 		pathCmd(),
 		pushCmd(),
+		pullCmd(),
 	)
 	return cmd
 }
@@ -404,5 +411,160 @@ func pathCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&path, "set", "", "set the local repo path")
+	return cmd
+}
+
+func pullCmd() *cobra.Command {
+	var repoPath, tsFilename string
+	cmd := &cobra.Command{
+		Use:   "pull",
+		Short: "Pull remote changes (ts-only)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			base := filepath.Base(tsFilename)
+			if !strings.HasSuffix(base, ".ts") {
+				return errors.New("Unsupported language")
+			}
+			ns := strings.TrimSuffix(base, ".ts")
+
+			tsBytes, err := os.ReadFile(tsFilename)
+			if err != nil {
+				return errors.Wrap(err, "read file")
+			}
+			if strings.Contains(string(tsBytes), ">>>>>>>") {
+				return fmt.Errorf("%s has unresolved merge conflicts", tsFilename)
+			}
+
+			lekkoPath, err := repo.DetectLekkoPath()
+			if err != nil || len(lekkoPath) == 0 {
+				return errors.New("could not find a valid lekko/ directory in file tree")
+			}
+			lekkoLock := &repo.LekkoLock{}
+			err = lekkoLock.ReadLekkoLock(lekkoPath)
+			if err != nil {
+				return errors.Wrap(err, "read lekko lock")
+			}
+
+			// this should be safe as we generate all changes from native lang
+			// git reset --hard
+			// git clean -fd
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
+			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
+			if err != nil {
+				return err
+			}
+			gitRepo, err := git.PlainOpen(repoPath)
+			if err != nil {
+				return errors.Wrap(err, "open git repo")
+			}
+			worktree, err := gitRepo.Worktree()
+			if err != nil {
+				return errors.Wrap(err, "get worktree")
+			}
+			head, err := gitRepo.Head()
+			if err != nil {
+				return errors.Wrap(err, "get head")
+			}
+			err = worktree.Reset(&git.ResetOptions{
+				Commit: head.Hash(),
+				Mode:   git.HardReset,
+			})
+			if err != nil {
+				return errors.Wrap(err, "reset")
+			}
+			err = worktree.Clean(&git.CleanOptions{Dir: true})
+			if err != nil {
+				return errors.Wrap(err, "clean")
+			}
+
+			err = worktree.Checkout(&git.CheckoutOptions{
+				Branch: plumbing.NewBranchReferenceName("main"),
+			})
+			if err != nil {
+				return errors.Wrap(err, "checkout main #1")
+			}
+
+			// pull from remote
+			err = worktree.Pull(&git.PullOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return errors.Wrap(err, "pull")
+			}
+			newHead, err := gitRepo.Head()
+			if err != nil {
+				return err
+			}
+			if newHead.Hash().String() == lekkoLock.Commit {
+				fmt.Println("Already up to date.")
+				return nil
+			}
+
+			genTS := func(outFilename string) error {
+				err := gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
+					return os.Create(outFilename)
+				})
+				if err != nil {
+					return err
+				}
+				prettierCmd := exec.Command("npx", "prettier", "-w", "--no-config", "--parser", "typescript", outFilename)
+				if err := prettierCmd.Run(); err != nil {
+					return errors.Wrap(err, fmt.Sprintf("run prettier on %s", outFilename))
+				}
+				return nil
+			}
+
+			// base
+			err = worktree.Checkout(&git.CheckoutOptions{
+				Hash: plumbing.NewHash(lekkoLock.Commit),
+			})
+			if err != nil {
+				return errors.Wrap(err, fmt.Sprintf("checkout %s", lekkoLock.Commit))
+			}
+			baseFilename := tsFilename + ".base"
+			err = genTS(baseFilename)
+			if err != nil {
+				return errors.Wrap(err, "gen ts: base")
+			}
+
+			// remote
+			err = worktree.Checkout(&git.CheckoutOptions{
+				Branch: plumbing.NewBranchReferenceName("main"),
+			})
+			if err != nil {
+				return errors.Wrap(err, "checkout main")
+			}
+			remoteFilename := tsFilename + ".remote"
+			err = genTS(remoteFilename)
+			if err != nil {
+				return errors.Wrap(err, "gen ts: remote")
+			}
+
+			fmt.Printf("Auto-merging %s\n", tsFilename)
+			mergeCmd := exec.Command("git", "merge-file", tsFilename, baseFilename, remoteFilename, "--diff3")
+			err = mergeCmd.Run()
+			if err != nil {
+				exitErr, ok := err.(*exec.ExitError)
+				// positive error code is fine, it signals number of conflicts
+				if ok && exitErr.ExitCode() > 0 {
+					fmt.Printf("CONFLICT (content): Merge conflict in %s\n", tsFilename)
+				} else {
+					return errors.Wrap(err, "git merge-file")
+				}
+			}
+
+			err = stderrors.Join(os.Remove(baseFilename), os.Remove(remoteFilename))
+			if err != nil {
+				return errors.Wrap(err, "cleanup")
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
+	cmd.Flags().StringVarP(&tsFilename, "filename", "f", "", "path to ts file to pull changes into")
 	return cmd
 }
