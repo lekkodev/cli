@@ -99,7 +99,7 @@ func featureList() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "name of namespace to filter by")
-	cmd.Flags().StringVarP(&wd, "config-path", "c", ".", "path to configuration repository")
+	cmd.Flags().StringVarP(&wd, "repo-path", "p", ".", "path to config repository")
 	return cmd
 }
 

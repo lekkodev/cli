@@ -349,17 +349,19 @@ func remoteCmd() *cobra.Command {
 
 func pushCmd() *cobra.Command {
 	var commitMessage, repoPath string
+	var skipLock bool
 	cmd := &cobra.Command{
 		Use:   "push",
 		Short: "Push local changes into GitHub and Lekko",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-			return repo.Push(cmd.Context(), repoPath, commitMessage)
+			return repo.Push(cmd.Context(), repoPath, commitMessage, skipLock)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
 	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	cmd.Flags().BoolVar(&skipLock, "skip-lock", false, "whether to skip version locking")
 	return cmd
 }
 
