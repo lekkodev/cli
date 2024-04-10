@@ -234,6 +234,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
 
+  // TODO this is broke as hell because we don't know how we want to do it
 	const jsonTemplateBody = `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
   {{ $.CtxStuff }}
@@ -245,8 +246,9 @@ func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
 }
 
 // {{$.Description}}
-func {{$.FuncName}}(ctx context.Context, result interface{}) {
+func {{$.PrivateFunc}}(ctx context.Context, result interface{}) {
  	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
+  {{range  $.NaturalLanguage}}{{ . }}{{end}}
 }
 `
 
@@ -258,7 +260,6 @@ const (
 )
 
 
-// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   {{ $.CtxStuff }}
   result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
@@ -407,6 +408,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	// Final canonical Go format
 	formatted, err := format.Source(ret.Bytes())
 	if err != nil {
+    //return ret.String(), nil // Leave this here for easy debugging
 		return "", errors.Wrap(err, "format")
 	}
 	return string(formatted), nil
@@ -624,7 +626,7 @@ func translateRetValue(val *anypb.Any, protoType *ProtoImport) string {
 
 			lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
 		*/
-		lines = append(lines, fmt.Sprintf("\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToString(f, val, protoType)))
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), FieldValueToString(f, val, protoType)))
 		return true
 	})
 	// Replace this with interface pointing stuff
