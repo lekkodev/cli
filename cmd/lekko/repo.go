@@ -452,7 +452,6 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Using repo path: %s\n\n", repoPath)
 			gitRepo, err := git.PlainOpen(repoPath)
 			if err != nil {
 				return errors.Wrap(err, "open git repo")
