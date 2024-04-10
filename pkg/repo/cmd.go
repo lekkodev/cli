@@ -273,12 +273,44 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	return nil
 }
 
-func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skipLock bool) error {
+func DetectLekkoPath() (string, error) {
+	// Walk through fs tree until we find lekko/, the managed directory
+	var lekkoPath string
 	wd, err := os.Getwd()
 	if err != nil {
-		return err
+		return "", err
 	}
-	repoPath, err = InitIfNotExists(ctx, r.rs, repoPath)
+	if err := filepath.WalkDir(wd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Some sane skips
+		if d.Name() == "node_modules" || d.Name() == "vendor" {
+			return fs.SkipDir
+		}
+		if d.IsDir() && d.Name() == "lekko" {
+			// Safety check against non-code repo lekko/
+			lekkoEntries, err := os.ReadDir(path)
+			if err != nil {
+				return err
+			}
+			for _, entry := range lekkoEntries {
+				if entry.IsDir() && entry.Name() != "gen" {
+					return fs.SkipDir
+				}
+			}
+			lekkoPath = path
+			return fs.SkipAll
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return lekkoPath, nil
+}
+
+func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skipLock bool) error {
+	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
 	if err != nil {
 		return err
 	}
@@ -376,33 +408,10 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 			return err
 		}
 		lockSHA := head.Hash().String()
-		// Walk through fs tree until we find lekko/, the managed directory
-		var lekkoPath string
-		if err := filepath.WalkDir(wd, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			// Some sane skips
-			if d.Name() == "node_modules" || d.Name() == "vendor" {
-				return fs.SkipDir
-			}
-			if d.IsDir() && d.Name() == "lekko" {
-				// Safety check against non-code repo lekko/
-				lekkoEntries, err := os.ReadDir(path)
-				if err != nil {
-					return err
-				}
-				for _, entry := range lekkoEntries {
-					if entry.IsDir() && entry.Name() != "gen" {
-						return fs.SkipDir
-					}
-				}
-				lekkoPath = path
-				return fs.SkipAll
-			}
-			return nil
-		}); err != nil {
-			return err
+
+		lekkoPath, err := DetectLekkoPath()
+		if err != nil {
+			return errors.Wrap(err, "detect lekko path")
 		}
 		if lekkoPath == "" {
 			return errors.New("could not find a valid lekko/ directory in file tree")

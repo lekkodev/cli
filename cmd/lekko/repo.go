@@ -415,7 +415,7 @@ func pathCmd() *cobra.Command {
 }
 
 func pullCmd() *cobra.Command {
-	var repoPath, baseCommit, tsFilename string
+	var repoPath, tsFilename string
 	cmd := &cobra.Command{
 		Use:   "pull",
 		Short: "Pull remote changes (ts-only)",
@@ -432,6 +432,16 @@ func pullCmd() *cobra.Command {
 			}
 			if strings.Contains(string(tsBytes), ">>>>>>>") {
 				return fmt.Errorf("%s has unresolved merge conflicts", tsFilename)
+			}
+
+			lekkoPath, err := repo.DetectLekkoPath()
+			if err != nil || len(lekkoPath) == 0 {
+				return errors.New("could not find a valid lekko/ directory in file tree")
+			}
+			lekkoLock := &repo.LekkoLock{}
+			err = lekkoLock.ReadLekkoLock(lekkoPath)
+			if err != nil {
+				return errors.Wrap(err, "read lekko lock")
 			}
 
 			// this should be safe as we generate all changes from native lang
@@ -489,7 +499,7 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if newHead.Hash().String() == baseCommit {
+			if newHead.Hash().String() == lekkoLock.Commit {
 				fmt.Println("Already up to date.")
 				return nil
 			}
@@ -510,10 +520,10 @@ func pullCmd() *cobra.Command {
 
 			// base
 			err = worktree.Checkout(&git.CheckoutOptions{
-				Hash: plumbing.NewHash(baseCommit),
+				Hash: plumbing.NewHash(lekkoLock.Commit),
 			})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("checkout %s", baseCommit))
+				return errors.Wrap(err, fmt.Sprintf("checkout %s", lekkoLock.Commit))
 			}
 			baseFilename := tsFilename + ".base"
 			err = genTS(baseFilename)
@@ -553,7 +563,6 @@ func pullCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
-	cmd.Flags().StringVarP(&baseCommit, "base", "b", "", "base commit hash")
 	cmd.Flags().StringVarP(&tsFilename, "filename", "f", "", "path to ts file to pull changes into")
 	return cmd
 }
