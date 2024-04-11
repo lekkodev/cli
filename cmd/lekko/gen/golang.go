@@ -49,6 +49,20 @@ var typeRegistry *protoregistry.Types
 
 const StaticBytes = false
 
+// TODO make this work for GO
+func structpbValueToKindStringGo(v *structpb.Value) string {
+  switch v.GetKind().(type) {
+  case *structpb.Value_NumberValue:
+    // technically doubles may not work for ints....
+    return "float64"
+  case *structpb.Value_BoolValue:
+    return "bool"
+  case *structpb.Value_StringValue:
+    return "string"
+  }
+  return "unknown" // do we just want to panic?
+}
+
 // Natural language codegen is in super alpha, only handles a subset
 // of what is available, namely only supports protos that are one level
 // deep with non-repeated primitives, a subset of ruleslang (== and in ops)
@@ -204,7 +218,6 @@ var StaticConfig = map[string]map[string][]byte{
 
 func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *ProtoImport) (string, error) {
 	const defaultTemplateBody = `
-// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   {{ $.CtxStuff }}
   err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
@@ -219,7 +232,6 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{end}}}`
 
 	const protoTemplateBody = `
-// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
   {{ $.CtxStuff }}
 	result := &{{$.RetType}}{}
@@ -234,8 +246,8 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
 
-  // TODO this is broke as hell because we don't know how we want to do it
-	const jsonTemplateBody = `// {{$.Description}}
+	// TODO this is broke as hell because we don't know how we want to do it
+	const jsonTemplateBody = `
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
   {{ $.CtxStuff }}
   err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
@@ -408,7 +420,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	// Final canonical Go format
 	formatted, err := format.Source(ret.Bytes())
 	if err != nil {
-    //return ret.String(), nil // Leave this here for easy debugging
+		//return ret.String(), nil // Leave this here for easy debugging
 		return "", errors.Wrap(err, "format")
 	}
 	return string(formatted), nil
@@ -442,63 +454,63 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 	case *rulesv1beta3.Rule_Atom:
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s == %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s == %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s != %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s != %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s < %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s < %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s <= %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s <= %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s > %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s > %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("ctx.%s >= %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("%s >= %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("strings.Contains(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("strings.Contains(%s,  %s)", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("strings.HasPrefix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
 				return fmt.Sprintf("strings.HasPrefix(%s,  %s)", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
+			usedVariables[v.Atom.ContextKey] = structpbValueToKindStringGo(v.Atom.ComparisonValue)
 			if staticContext {
 				return fmt.Sprintf("strings.HasSuffix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {

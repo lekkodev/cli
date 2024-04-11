@@ -67,6 +67,7 @@ func main() {
 	experimentalCmd.AddCommand(formatCmd())
 	// code generation
 	experimentalCmd.AddCommand(genCmd())
+	experimentalCmd.AddCommand(syncCmd())
 	rootCmd.AddCommand(experimentalCmd)
 
 	// setup
