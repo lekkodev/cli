@@ -25,6 +25,8 @@ import (
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+  "github.com/lekkodev/cli/pkg/repo"
+  "github.com/lekkodev/cli/pkg/secrets"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/iancoleman/strcase"
 	"github.com/spf13/cobra"
@@ -56,7 +58,7 @@ func exprToValue(expr ast.Expr) string {
 }
 
 // TODO -- We know the return type..
-func exprToAny(expr ast.Expr) *anypb.Any {
+func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
 	switch node := expr.(type) {
 	case *ast.BasicLit:
 		switch node.Kind {
@@ -247,21 +249,24 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 	}
 }
 
-func ifToConstraints(ifStmt *ast.IfStmt) []*featurev1beta1.Constraint {
+func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
 	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
+  constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry) // TODO
 	if ifStmt.Else != nil { // TODO bare else?
-		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt))...)
+		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt), registry)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
 }
 
 func syncGoCmd() *cobra.Command {
 	var f string
+  var repoPath string
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "sync go code to the repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
+      ctx := cmd.Context()
 			src, err := os.ReadFile(f)
 			if err != nil {
 				return err
@@ -272,6 +277,20 @@ func syncGoCmd() *cobra.Command {
 				return err
 			}
 			namespace := Namespace{}
+
+      r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
+      if err != nil {
+        return err
+      }
+      rootMD, _, err := r.ParseMetadata(ctx)
+      if err != nil {
+        return err
+      }
+      registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+      if err != nil {
+        return err
+      }
+      fmt.Printf("%+v", registry)
 
 			ast.Inspect(pf, func(n ast.Node) bool {
 				switch x := n.(type) {
@@ -320,9 +339,9 @@ func syncGoCmd() *cobra.Command {
 									panic("Panic. Or Noop.")
 								}
 								// TODO also need to take care of the possibility that the default is in an else
-								feature.Tree.Default = exprToAny(n.Results[0]) // can this be multiple things?
+								feature.Tree.Default = exprToAny(n.Results[0], registry) // can this be multiple things?
 							case *ast.IfStmt:
-								feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n)...)
+								feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n, registry)...)
 							default:
 								panic("Panic!")
 							}
@@ -338,6 +357,7 @@ func syncGoCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync")
+	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync") // TODO make this less dumb
+  cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
 	return cmd
 }
