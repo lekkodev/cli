@@ -23,9 +23,15 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+    "path"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+    "github.com/lekkodev/cli/pkg/star"
+      "github.com/lekkodev/go-sdk/pkg/eval"
+  "github.com/pkg/errors"
+    "github.com/lekkodev/cli/pkg/feature"
+     "github.com/lekkodev/cli/pkg/star/static"
 	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
@@ -58,38 +64,42 @@ func exprToValue(expr ast.Expr) string {
 }
 
 // TODO -- We know the return type..
-func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
+func exprToAny(expr ast.Expr, registry *protoregistry.Types, want featurev1beta1.FeatureType) *anypb.Any {
 	switch node := expr.(type) {
-	case *ast.BasicLit:
-		switch node.Kind {
-		case token.STRING:
-			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"")})
-			if err != nil {
-				panic(err)
-			}
-			return a
-		case token.INT:
-			if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
-				if err != nil {
-					panic(err)
-				}
-				a, err := anypb.New(&wrapperspb.Int64Value{Value: intValue})
-				if err != nil {
-					panic(err)
-				}
-				return a
-			}
-		case token.FLOAT:
-			if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
-				if err != nil {
-					panic(err)
-				}
-				a, err := anypb.New(&wrapperspb.DoubleValue{Value: floatValue})
-				if err != nil {
-					panic(err)
-				}
-				return a
-			}
+  case *ast.BasicLit:
+    switch node.Kind {
+    case token.STRING:
+      a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"")})
+      if err != nil {
+        panic(err)
+      }
+      return a
+    case token.INT:
+      fallthrough
+    case token.FLOAT:
+      switch want {
+      case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+        intValue, err := strconv.ParseInt(node.Value, 10, 64) 
+        if err != nil {
+          panic(err)
+        }
+        a, err := anypb.New(&wrapperspb.Int64Value{Value: intValue})
+        if err != nil {
+          panic(err)
+        }
+        return a
+
+      case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+        floatValue, err := strconv.ParseFloat(node.Value, 64) 
+        if err != nil {
+          panic(err)
+        }
+        a, err := anypb.New(&wrapperspb.DoubleValue{Value: floatValue})
+        if err != nil {
+          panic(err)
+        }
+        return a
+      }
 		default:
 			fmt.Printf("NV: %s\n", node.Value)
 		}
@@ -205,29 +215,29 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 				Kind: &structpb.Value_StringValue{
 					StringValue: strings.Trim(node.Value, "\""),
 				},
-			}
-		case token.INT:
-			if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
-				if err != nil {
-					panic(err)
-				}
-				return &structpb.Value{
-					Kind: &structpb.Value_NumberValue{
-						NumberValue: float64(intValue),
-					},
-				}
-			}
-		case token.FLOAT:
-			if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
-				if err != nil {
-					panic(err)
-				}
-				return &structpb.Value{
-					Kind: &structpb.Value_NumberValue{
-						NumberValue: floatValue,
-					},
-				}
-			}
+      }
+    case token.INT:
+      intValue, err := strconv.ParseInt(node.Value, 10, 64) 
+      if err != nil {
+        panic(err)
+      }
+      return &structpb.Value{
+        Kind: &structpb.Value_NumberValue{
+          NumberValue: float64(intValue),
+        },
+      }
+
+    case token.FLOAT:
+      floatValue, err := strconv.ParseFloat(node.Value, 64) 
+      if err != nil {
+        panic(err)
+      }
+      return &structpb.Value{
+        Kind: &structpb.Value_NumberValue{
+          NumberValue: floatValue,
+        },
+      }
+
 		default:
 			fmt.Printf("Unknown basicLit: %s\n", node.Value)
 		}
@@ -328,12 +338,12 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 	}
 }
 
-func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types) []*featurev1beta1.Constraint {
+func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types, want featurev1beta1.FeatureType) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
 	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
-	constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry) // TODO
+	constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry, want) // TODO
 	if ifStmt.Else != nil {                                                                  // TODO bare else?
-		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt), registry)...)
+		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt), registry, want)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
 }
@@ -419,9 +429,9 @@ func syncGoCmd() *cobra.Command {
 									panic("Panic. Or Noop.")
 								}
 								// TODO also need to take care of the possibility that the default is in an else
-								feature.Tree.Default = exprToAny(n.Results[0], registry) // can this be multiple things?
+								feature.Tree.Default = exprToAny(n.Results[0], registry, feature.Type) // can this be multiple things?
 							case *ast.IfStmt:
-								feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n, registry)...)
+								feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n, registry, feature.Type)...)
 							default:
 								panic("Panic!")
 							}
@@ -434,10 +444,96 @@ func syncGoCmd() *cobra.Command {
 			// TODO static context
 			fmt.Printf("\n\n%+v\n", namespace)
 
-			return nil
-		},
-	}
-	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync") // TODO make this less dumb
-	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
-	return cmd
+      // Now we need to write/merge it..
+      nsExists := false
+      for _, nsFromMeta := range rootMD.Namespaces {
+        if namespace.Name == nsFromMeta {
+          nsExists = true
+          break
+        }
+      }
+      if !nsExists {
+        if err := r.AddNamespace(cmd.Context(), namespace.Name); err != nil {
+          return errors.Wrap(err, "add namespace")
+        }
+      }
+
+      for _, configProto := range namespace.Features {
+        // create a new starlark file from a template (based on the config type)
+        var starBytes []byte
+        starImports := make([]*featurev1beta1.ImportStatement, 0)
+
+        if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+          typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
+          messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
+          if !found {
+            return fmt.Errorf("can't parse type url: %s", typeURL)
+          }
+          starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
+          if err != nil {
+            return err
+          }
+          starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
+          if err != nil {
+            return err
+          }
+          for importPackage, importAlias := range starInputs.Packages {
+            starImports = append(starImports, &featurev1beta1.ImportStatement{
+              Lhs: &featurev1beta1.IdentExpr{
+                Token: importAlias,
+              },
+              Operator: "=",
+              Rhs: &featurev1beta1.ImportExpr{
+                Dot: &featurev1beta1.DotExpr{
+                  X:    "proto",
+                  Name: "package",
+                },
+                Args: []string{importPackage},
+              },
+            })
+          }
+        } else {
+          starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
+          if err != nil {
+            return err
+          }
+        }
+
+        // mutate starlark with the actual config
+        walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
+        newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
+          Key:  configProto.Key,
+          Type: configProto.GetType(),
+          Feature: &featurev1beta1.FeatureStruct{
+            Description: configProto.GetDescription(),
+          },
+          FeatureOld: configProto,
+          Imports:    starImports,
+        })
+        if err != nil {
+          return errors.Wrap(err, "walker mutate")
+        }
+        configFile := feature.NewFeatureFile(namespace.Name, configProto.Key)
+        // write starlark to disk
+        if err := r.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
+          return errors.Wrap(err, "write after mutation")
+        }
+
+        // compile newly generated starlark file
+        _, err = r.Compile(ctx, &repo.CompileRequest{
+          Registry:        registry,
+          NamespaceFilter: namespace.Name,
+          FeatureFilter:   configProto.Key,
+        })
+        if err != nil {
+          return errors.Wrap(err, "compile after mutation")
+        }
+      }
+
+      return nil
+    },
+  }
+  cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync") // TODO make this less dumb
+  cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+  return cmd
 }
