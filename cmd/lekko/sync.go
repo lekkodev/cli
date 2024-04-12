@@ -25,13 +25,13 @@ import (
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-  "github.com/lekkodev/cli/pkg/repo"
-  "github.com/lekkodev/cli/pkg/secrets"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/iancoleman/strcase"
+	"github.com/lekkodev/cli/pkg/repo"
+	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-  "google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -48,8 +48,8 @@ func syncCmd() *cobra.Command {
 
 // TODO - make this our proto rep?
 type Namespace struct {
-	Name         string
-	Features     []*featurev1beta1.Feature
+	Name     string
+	Features []*featurev1beta1.Feature
 }
 
 func exprToValue(expr ast.Expr) string {
@@ -110,92 +110,91 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
 		default:
 			fmt.Printf("NN: %s\n", node.Name)
 		}
-  case *ast.UnaryExpr:
-    switch node.Op {
-    case token.AND:
-      switch x := node.X.(type) {
-      case *ast.CompositeLit:
-        a, err := anypb.New(compositeLitToProto(x, registry).(protoreflect.ProtoMessage))
-        if err != nil {
-          panic(err)
-        }
-        return a
-      default:
-        panic("Unknown X Type")
-      }
-    default:
-      panic("Unknown Op")
-    }
-  default:
+	case *ast.UnaryExpr:
+		switch node.Op {
+		case token.AND:
+			switch x := node.X.(type) {
+			case *ast.CompositeLit:
+				a, err := anypb.New(compositeLitToProto(x, registry).(protoreflect.ProtoMessage))
+				if err != nil {
+					panic(err)
+				}
+				return a
+			default:
+				panic("Unknown X Type")
+			}
+		default:
+			panic("Unknown Op")
+		}
+	default:
 		fmt.Printf("ETA: %#v\n", node)
 	}
 	return &anypb.Any{}
 }
 
 func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) protoreflect.Message {
-  mt, err := registry.FindMessageByName(protoreflect.FullName("default.config.v1beta1").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
-  if err != nil {
-    // TODO - google wkt crap
-    fmt.Printf("%s: %s\n", err, x.Type)
-    panic(err)
-  } else {
-    msg := mt.New()
-    for _, v := range x.Elts {
-      kv := v.(*ast.KeyValueExpr)
-      name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
-      field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
-      switch node := kv.Value.(type) {
-      case *ast.BasicLit:
-        switch node.Kind {
-        case token.STRING:
-          msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
-        case token.INT:
-          if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
-            if err != nil {
-              panic(err)
-            }
-            msg.Set(field, protoreflect.ValueOf(intValue))
-          }
-        case token.FLOAT:
-          if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
-            if err != nil {
-              panic(err)
-            }
-            msg.Set(field, protoreflect.ValueOf(floatValue))
-          }
-        default:
-          fmt.Printf("NV: %s\n", node.Value)
-        }
-      case *ast.Ident:
-        switch node.Name {
-        case "true":
-          msg.Set(field, protoreflect.ValueOf(true))
-        case "false":
-          msg.Set(field, protoreflect.ValueOf(false))
-        default:
-          fmt.Printf("NN: %s\n", node.Name)
-        }
-      case *ast.UnaryExpr:
-        switch node.Op {
-        case token.AND:
-          switch ix := node.X.(type) {
-          case *ast.CompositeLit:
-            msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
-          default:
-            panic("Unknown X Type")
-          }
-        default:
-          panic("Unknown Op")
-        }
-      default:
-        fmt.Printf("ETP: %#v\n", node)
-      }
+	mt, err := registry.FindMessageByName(protoreflect.FullName("default.config.v1beta1").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+	if err != nil {
+		// TODO - google wkt crap
+		fmt.Printf("%s: %s\n", err, x.Type)
+		panic(err)
+	} else {
+		msg := mt.New()
+		for _, v := range x.Elts {
+			kv := v.(*ast.KeyValueExpr)
+			name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
+			field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
+			switch node := kv.Value.(type) {
+			case *ast.BasicLit:
+				switch node.Kind {
+				case token.STRING:
+					msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
+				case token.INT:
+					if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
+						if err != nil {
+							panic(err)
+						}
+						msg.Set(field, protoreflect.ValueOf(intValue))
+					}
+				case token.FLOAT:
+					if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
+						if err != nil {
+							panic(err)
+						}
+						msg.Set(field, protoreflect.ValueOf(floatValue))
+					}
+				default:
+					fmt.Printf("NV: %s\n", node.Value)
+				}
+			case *ast.Ident:
+				switch node.Name {
+				case "true":
+					msg.Set(field, protoreflect.ValueOf(true))
+				case "false":
+					msg.Set(field, protoreflect.ValueOf(false))
+				default:
+					fmt.Printf("NN: %s\n", node.Name)
+				}
+			case *ast.UnaryExpr:
+				switch node.Op {
+				case token.AND:
+					switch ix := node.X.(type) {
+					case *ast.CompositeLit:
+						msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
+					default:
+						panic("Unknown X Type")
+					}
+				default:
+					panic("Unknown Op")
+				}
+			default:
+				fmt.Printf("ETP: %#v\n", node)
+			}
 
-    }
-    return msg
-  }
+		}
+		return msg
+	}
 }
-
 
 func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 	switch node := expr.(type) {
@@ -326,8 +325,8 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
 	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
-  constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry) // TODO
-	if ifStmt.Else != nil { // TODO bare else?
+	constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry) // TODO
+	if ifStmt.Else != nil {                                                                  // TODO bare else?
 		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt), registry)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
@@ -335,12 +334,12 @@ func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types) []*featu
 
 func syncGoCmd() *cobra.Command {
 	var f string
-  var repoPath string
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "sync go code to the repo",
 		RunE: func(cmd *cobra.Command, args []string) error {
-      ctx := cmd.Context()
+			ctx := cmd.Context()
 			src, err := os.ReadFile(f)
 			if err != nil {
 				return err
@@ -352,18 +351,18 @@ func syncGoCmd() *cobra.Command {
 			}
 			namespace := Namespace{}
 
-      r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
-      if err != nil {
-        return err
-      }
-      rootMD, _, err := r.ParseMetadata(ctx)
-      if err != nil {
-        return err
-      }
-      registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-      if err != nil {
-        return err
-      }
+			r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
+			if err != nil {
+				return err
+			}
+			rootMD, _, err := r.ParseMetadata(ctx)
+			if err != nil {
+				return err
+			}
+			registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+			if err != nil {
+				return err
+			}
 
 			ast.Inspect(pf, func(n ast.Node) bool {
 				switch x := n.(type) {
@@ -372,11 +371,11 @@ func syncGoCmd() *cobra.Command {
 				case *ast.FuncDecl:
 					if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
 						var commentLines []string
-            if x.Doc != nil {
-              for _, comment := range x.Doc.List {
-                commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
-              }
-            }
+						if x.Doc != nil {
+							for _, comment := range x.Doc.List {
+								commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
+							}
+						}
 						privateName := x.Name.Name
 						configName := strcase.ToKebab(privateName[3:])
 						results := x.Type.Results.List
@@ -433,6 +432,6 @@ func syncGoCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync") // TODO make this less dumb
-  cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
 	return cmd
 }
