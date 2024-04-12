@@ -51,16 +51,16 @@ const StaticBytes = false
 
 // TODO make this work for GO
 func structpbValueToKindStringGo(v *structpb.Value) string {
-  switch v.GetKind().(type) {
-  case *structpb.Value_NumberValue:
-    // technically doubles may not work for ints....
-    return "float64"
-  case *structpb.Value_BoolValue:
-    return "bool"
-  case *structpb.Value_StringValue:
-    return "string"
-  }
-  return "unknown" // do we just want to panic?
+	switch v.GetKind().(type) {
+	case *structpb.Value_NumberValue:
+		// technically doubles may not work for ints....
+		return "float64"
+	case *structpb.Value_BoolValue:
+		return "bool"
+	case *structpb.Value_StringValue:
+		return "string"
+	}
+	return "unknown" // do we just want to panic?
 }
 
 // Natural language codegen is in super alpha, only handles a subset
@@ -140,11 +140,12 @@ func GenGoCmd() *cobra.Command {
 			// proper handling of gofmt for imports, importing slices
 			// depending on the go version.
 			// only importing strings if needed
+			// TODO: make sure to test if slices is valid depending on go versions
 			const templateBody = `package lekko{{$.Namespace}}
 
 import (
 	"context"
-  "strings"
+    "strings"
 {{range  $.ProtoImports}}
 	{{ . }}{{end}}
 	client "github.com/lekkodev/go-sdk/client"
@@ -155,7 +156,6 @@ type LekkoClient struct {
 	client.Client
 	Close client.CloseFunc
 }
-
 
 {{if $.StaticConfig}}
 var StaticConfig = map[string]map[string][]byte{
@@ -219,13 +219,14 @@ var StaticConfig = map[string]map[string][]byte{
 func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *ProtoImport) (string, error) {
 	const defaultTemplateBody = `
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
-  {{ $.CtxStuff }}
-  err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
+  	{{ $.CtxStuff }}
+  	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
-	  return result
-  }
-  return {{$.PrivateFunc}}({{$.CallString}})
+	  	return result
+  	}
+  	return {{$.PrivateFunc}}({{$.CallString}})
 }
+
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
@@ -233,14 +234,15 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 
 	const protoTemplateBody = `
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
-  {{ $.CtxStuff }}
+  	{{ $.CtxStuff }}
 	result := &{{$.RetType}}{}
 	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
 	if err == nil {
-	  return result
-  }
-  return {{$.PrivateFunc}}({{$.CallString}})
+	  	return result
+  	}
+  	return {{$.PrivateFunc}}({{$.CallString}})
 }
+
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
@@ -249,18 +251,18 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 	// TODO this is broke as hell because we don't know how we want to do it
 	const jsonTemplateBody = `
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
-  {{ $.CtxStuff }}
-  err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
+  	{{ $.CtxStuff }}
+  	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
 	if err == nil {
 	  return result
-  }
-  return {{$.PrivateFunc}}({{$.CallString}})
+  	}
+  	return {{$.PrivateFunc}}({{$.CallString}})
 }
 
 // {{$.Description}}
 func {{$.PrivateFunc}}(ctx context.Context, result interface{}) {
  	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-  {{range  $.NaturalLanguage}}{{ . }}{{end}}
+  	{{range  $.NaturalLanguage}}{{ . }}{{end}}
 }
 `
 
@@ -273,13 +275,14 @@ const (
 
 
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
-  {{ $.CtxStuff }}
-  result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
+  	{{ $.CtxStuff }}
+  	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
-	  return result
-  }
-  return {{$.PrivateFunc}}({{$.CallString}})
+	  	return result
+  	}
+  	return {{$.PrivateFunc}}({{$.CallString}})
 }
+
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
@@ -420,7 +423,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	// Final canonical Go format
 	formatted, err := format.Source(ret.Bytes())
 	if err != nil {
-		//return ret.String(), nil // Leave this here for easy debugging
+		// return ret.String(), nil // Leave this here for easy debugging
 		return "", errors.Wrap(err, "format")
 	}
 	return string(formatted), nil
