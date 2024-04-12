@@ -49,9 +49,9 @@ func UnpackProtoType(moduleRoot string, typeURL string) *ProtoImport {
 	// turn default.config.v1beta1.DBConfig into:
 	// moduleRoot/internal/lekko/proto/default/config/v1beta1
 	typeParts := strings.Split(fqType, ".")
-
+	// TODO: un-hardcode import path
 	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
-
+	// e.g. configv1beta1
 	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
 
 	// TODO do google.protobuf.X

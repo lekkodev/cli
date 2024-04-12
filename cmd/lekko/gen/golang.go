@@ -141,7 +141,7 @@ func GenGoCmd() *cobra.Command {
 			// TODOs for the template:
 			// proper handling of gofmt for imports, importing slices
 			// depending on the go version.
-			// only importing strings if needed
+			// only importing strings and slices if needed
 			// TODO: make sure to test if slices is valid depending on go versions
 			const templateBody = `package lekko{{$.Namespace}}
 
@@ -175,6 +175,7 @@ var StaticConfig = map[string]map[string][]byte{
 			pCmd := exec.Command(
 				"buf",
 				"generate",
+				// TODO: Fix the hardcoded stuff
 				fmt.Sprintf(`--template={"managed": {"enabled": true, "go_package_prefix": {"default": "%s/internal/lekko/proto"}}, "version":"v1","plugins":[{"plugin":"go","out":"internal/lekko/proto", "opt": "paths=source_relative"}]}`, moduleRoot),
 				"--include-imports",
 				wd) // #nosec G204
@@ -448,12 +449,12 @@ func translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticC
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateRetValue(constraint.Value, protoType)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", translateAnyValue(constraint.Value, protoType)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateRetValue(f.GetTree().GetDefault(), protoType)))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", translateAnyValue(f.GetTree().GetDefault(), protoType)))
 	return buffer
 }
 
@@ -581,13 +582,34 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 	return ""
 }
 
-func FieldValueToString(f protoreflect.FieldDescriptor, val protoreflect.Value, protoType *ProtoImport) string {
+func FieldValueToString(parent protoreflect.Message, f protoreflect.FieldDescriptor, val protoreflect.Value, protoType *ProtoImport) string {
 	if msg, ok := val.Interface().(protoreflect.Message); ok {
-		if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
-			// THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
-			try.To(typeRegistry.RegisterMessage(msg.Type()))
+		// Try finding in type registry
+		_, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName()))
+		if errors.Is(err, protoregistry.NotFound) {
+			// Try finding in parent's nested message definitions
+			nestedMsgDesc := parent.Descriptor().Messages().ByName(msg.Descriptor().Name())
+			if nestedMsgDesc == nil {
+				panic(fmt.Sprintf("unable to find message type %s", msg.Descriptor().FullName()))
+			}
+			return translateProtoValue(
+				msg.Interface(),
+				// Need to use original import info but with different nested type name
+				&ProtoImport{
+					ImportPath:   protoType.ImportPath,
+					PackageAlias: protoType.PackageAlias,
+					Type:         fmt.Sprintf("%s_%s", string(parent.Descriptor().Name()), string(nestedMsgDesc.Name())),
+				},
+			)
+		} else if err != nil {
+			panic(errors.Wrap(err, "unknown error while checking type registry"))
 		}
-		return translateRetValue(try.To1(anypb.New(msg.Interface())), protoType) // not sure if this will work..
+		// Found in type registry
+		return translateProtoValue(
+			msg.Interface(),
+			// TODO: We probably do need the root module here...?
+			UnpackProtoType("", string(msg.Descriptor().FullName())),
+		)
 	} else {
 		switch f.Kind() {
 		case protoreflect.EnumKind:
@@ -624,7 +646,7 @@ func FieldValueToString(f protoreflect.FieldDescriptor, val protoreflect.Value, 
 				val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
 					lines = append(lines, fmt.Sprintf("\"%s\": %s",
 						mk.String(),
-						FieldValueToString(f.MapValue(), mv, protoType)))
+						FieldValueToString(parent, f.MapValue(), mv, protoType)))
 					return true
 				})
 				res += strings.Join(lines, ", ")
@@ -639,13 +661,12 @@ func FieldValueToString(f protoreflect.FieldDescriptor, val protoreflect.Value, 
 	}
 	panic("Unreachable code was reached")
 }
-func translateRetValue(val *anypb.Any, protoType *ProtoImport) string {
-	// protos
+
+func translateAnyValue(val *anypb.Any, protoType *ProtoImport) string {
 	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 	if err != nil {
-		panic(err)
+		panic(errors.Wrap(err, "unmarshal return value"))
 	}
-
 	if protoType == nil {
 		// TODO we may need more special casing here for primitive types.
 		// This feels like horrific syntax, but I needed this because
@@ -668,17 +689,14 @@ func translateRetValue(val *anypb.Any, protoType *ProtoImport) string {
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
+	return translateProtoValue(msg, protoType)
+}
+
+func translateProtoValue(msg protoreflect.ProtoMessage, protoType *ProtoImport) string {
 	// todo multiline formatting
 	var lines []string
 	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		/*	valueStr := val.String()
-			if val, ok := val.Interface().(string); ok {
-				valueStr = fmt.Sprintf(`"%s"`, val)
-			}
-
-			lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), valueStr))
-		*/
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), FieldValueToString(f, val, protoType)))
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), FieldValueToString(msg.ProtoReflect(), f, val, protoType)))
 		return true
 	})
 	// Replace this with interface pointing stuff
@@ -692,9 +710,9 @@ func getStringRetValues(f *featurev1beta1.Feature) []string {
 		return []string{}
 	}
 	valSet := make(map[string]bool)
-	valSet[translateRetValue(f.Tree.Default, nil)] = true
+	valSet[translateAnyValue(f.Tree.Default, nil)] = true
 	for _, constraint := range f.Tree.Constraints {
-		ret := translateRetValue(constraint.Value, nil)
+		ret := translateAnyValue(constraint.Value, nil)
 		valSet[ret] = true
 	}
 	var rets []string
