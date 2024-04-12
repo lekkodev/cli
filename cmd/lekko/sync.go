@@ -142,68 +142,110 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types, want featurev1beta1
 	return &anypb.Any{}
 }
 
-func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) protoreflect.Message {
-	mt, err := registry.FindMessageByName(protoreflect.FullName("default.config.v1beta1").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
-	if err != nil {
-		// TODO - google wkt crap
-		fmt.Printf("%s: %s\n", err, x.Type)
+func exprToNameParts(expr ast.Expr) []string {
+	switch node := expr.(type) {
+	case *ast.Ident:
+		return []string{node.Name}
+	case *ast.SelectorExpr:
+		return append(exprToNameParts(node.X), exprToNameParts(node.Sel)...)
+	default:
+		panic(node)
+	}
+}
+
+func findMessageType(x *ast.CompositeLit, registry *protoregistry.Types) protoreflect.MessageType {
+	innerIdent, ok := x.Type.(*ast.SelectorExpr).X.(*ast.Ident)
+	if ok && innerIdent.Name == "durationpb" {
+		mt, err := registry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+		if err == nil {
+			return mt
+		}
 		panic(err)
-	} else {
-		msg := mt.New()
-		for _, v := range x.Elts {
-			kv := v.(*ast.KeyValueExpr)
-			name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
-			field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
-			switch node := kv.Value.(type) {
-			case *ast.BasicLit:
-				switch node.Kind {
-				case token.STRING:
-					msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
-				case token.INT:
-					if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
-						if err != nil {
-							panic(err)
-						}
-						msg.Set(field, protoreflect.ValueOf(intValue))
+	}
+	fullName := protoreflect.FullName("default.config.v1beta1")
+	parts := exprToNameParts(x.Type)[1:]
+	fullName = fullName.Append(protoreflect.Name(parts[0]))
+	mt, err := registry.FindMessageByName(fullName)
+	if err != nil {
+		panic(err)
+	}
+	if len(parts) == 2 {
+		md := mt.Descriptor().Messages().ByName(protoreflect.Name(parts[1])) // TODO
+		panic(md)
+	}
+	return mt
+}
+
+func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) protoreflect.Message {
+	mt := findMessageType(x, registry)
+	msg := mt.New()
+	for _, v := range x.Elts {
+		kv := v.(*ast.KeyValueExpr)
+		name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
+		field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
+		if field == nil {
+			continue // TODO...
+		}
+		switch node := kv.Value.(type) {
+		case *ast.BasicLit:
+			switch node.Kind {
+			case token.STRING:
+				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
+			case token.INT:
+				if field.Kind() == protoreflect.EnumKind {
+					fmt.Printf("%#v\n", field)
+					intValue, err := strconv.ParseInt(node.Value, 10, 32)
+					if err != nil {
+						panic(err)
 					}
-				case token.FLOAT:
-					if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
-						if err != nil {
-							panic(err)
-						}
-						msg.Set(field, protoreflect.ValueOf(floatValue))
-					}
-				default:
-					fmt.Printf("NV: %s\n", node.Value)
+					msg.Set(field, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
+					continue
 				}
-			case *ast.Ident:
-				switch node.Name {
-				case "true":
-					msg.Set(field, protoreflect.ValueOf(true))
-				case "false":
-					msg.Set(field, protoreflect.ValueOf(false))
-				default:
-					fmt.Printf("NN: %s\n", node.Name)
-				}
-			case *ast.UnaryExpr:
-				switch node.Op {
-				case token.AND:
-					switch ix := node.X.(type) {
-					case *ast.CompositeLit:
-						msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
-					default:
-						panic("Unknown X Type")
+				// TODO - parse/validate based on field Kind
+				if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
+					if err != nil {
+						panic(err)
 					}
-				default:
-					panic("Unknown Op")
+					msg.Set(field, protoreflect.ValueOf(intValue))
+				}
+			case token.FLOAT:
+				if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
+					if err != nil {
+						panic(err)
+					}
+					msg.Set(field, protoreflect.ValueOf(floatValue))
 				}
 			default:
-				fmt.Printf("ETP: %#v\n", node)
+				fmt.Printf("NV: %s\n", node.Value)
 			}
-
+		case *ast.Ident:
+			switch node.Name {
+			case "true":
+				msg.Set(field, protoreflect.ValueOf(true))
+			case "false":
+				msg.Set(field, protoreflect.ValueOf(false))
+			default:
+				fmt.Printf("NN: %s\n", node.Name)
+			}
+		case *ast.UnaryExpr:
+			switch node.Op {
+			case token.AND:
+				switch ix := node.X.(type) {
+				case *ast.CompositeLit:
+					msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
+				default:
+					panic("Unknown X Type")
+				}
+			default:
+				panic("Unknown Op")
+			}
+		default:
+			fmt.Printf("ETP: %+v\n", node)
 		}
-		return msg
+
 	}
+	return msg
+
 }
 
 func exprToComparisonValue(expr ast.Expr) *structpb.Value {
