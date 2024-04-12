@@ -208,6 +208,9 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 			}
 		case token.INT:
 			if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
+				if err != nil {
+					panic(err)
+				}
 				return &structpb.Value{
 					Kind: &structpb.Value_NumberValue{
 						NumberValue: float64(intValue),
@@ -216,6 +219,9 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 			}
 		case token.FLOAT:
 			if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
+				if err != nil {
+					panic(err)
+				}
 				return &structpb.Value{
 					Kind: &structpb.Value_NumberValue{
 						NumberValue: floatValue,
