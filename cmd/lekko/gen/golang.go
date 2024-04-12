@@ -220,6 +220,7 @@ var StaticConfig = map[string]map[string][]byte{
 
 func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *ProtoImport) (string, error) {
 	const defaultTemplateBody = `
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
   	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
@@ -235,6 +236,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{end}}}`
 
 	const protoTemplateBody = `
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
   	{{ $.CtxStuff }}
 	result := &{{$.RetType}}{}
@@ -252,6 +254,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 
 	// TODO this is broke as hell because we don't know how we want to do it
 	const jsonTemplateBody = `
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
   	{{ $.CtxStuff }}
   	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
@@ -275,7 +278,7 @@ const (
 	{{end}}
 )
 
-
+// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
   	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
@@ -426,6 +429,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 		return "", err
 	}
 	// Final canonical Go format
+	// TODO: This doesn't reorder imports or clean extra newlines, investigate why
 	formatted, err := format.Source(ret.Bytes())
 	if err != nil {
 		// return ret.String(), nil // Leave this here for easy debugging
