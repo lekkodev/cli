@@ -72,6 +72,11 @@ func main() {
 	// setup
 	rootCmd.AddCommand(setupCmd())
 
+	// short for `lekko repo push`
+	rootCmd.AddCommand(pushCmd())
+	// short for `lekko repo pull`
+	rootCmd.AddCommand(pullCmd())
+
 	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		fmt.Println(err)

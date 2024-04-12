@@ -368,7 +368,7 @@ func pushCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
-	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
 	cmd.Flags().BoolVar(&skipLock, "skip-lock", false, "whether to skip version locking")
 	return cmd
 }
@@ -504,7 +504,7 @@ func pullCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
 	return cmd
 }
 
