@@ -31,6 +31,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/reflect/protoregistry"
+  "google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -49,7 +50,6 @@ func syncCmd() *cobra.Command {
 type Namespace struct {
 	Name         string
 	Features     []*featurev1beta1.Feature
-	TypeRegistry *protoregistry.Types
 }
 
 func exprToValue(expr ast.Expr) string {
@@ -70,6 +70,9 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
 			return a
 		case token.INT:
 			if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
+				if err != nil {
+					panic(err)
+				}
 				a, err := anypb.New(&wrapperspb.Int64Value{Value: intValue})
 				if err != nil {
 					panic(err)
@@ -78,6 +81,9 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
 			}
 		case token.FLOAT:
 			if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
+				if err != nil {
+					panic(err)
+				}
 				a, err := anypb.New(&wrapperspb.DoubleValue{Value: floatValue})
 				if err != nil {
 					panic(err)
@@ -109,8 +115,11 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
     case token.AND:
       switch x := node.X.(type) {
       case *ast.CompositeLit:
-        fmt.Printf("%s\n", x.Type)
-        fmt.Printf("%#v\n", x.Elts)
+        a, err := anypb.New(compositeLitToProto(x, registry).(protoreflect.ProtoMessage))
+        if err != nil {
+          panic(err)
+        }
+        return a
       default:
         panic("Unknown X Type")
       }
@@ -122,6 +131,71 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types) *anypb.Any {
 	}
 	return &anypb.Any{}
 }
+
+func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) protoreflect.Message {
+  mt, err := registry.FindMessageByName(protoreflect.FullName("default.config.v1beta1").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+  if err != nil {
+    // TODO - google wkt crap
+    fmt.Printf("%s: %s\n", err, x.Type)
+    panic(err)
+  } else {
+    msg := mt.New()
+    for _, v := range x.Elts {
+      kv := v.(*ast.KeyValueExpr)
+      name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
+      field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
+      switch node := kv.Value.(type) {
+      case *ast.BasicLit:
+        switch node.Kind {
+        case token.STRING:
+          msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
+        case token.INT:
+          if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
+            if err != nil {
+              panic(err)
+            }
+            msg.Set(field, protoreflect.ValueOf(intValue))
+          }
+        case token.FLOAT:
+          if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
+            if err != nil {
+              panic(err)
+            }
+            msg.Set(field, protoreflect.ValueOf(floatValue))
+          }
+        default:
+          fmt.Printf("NV: %s\n", node.Value)
+        }
+      case *ast.Ident:
+        switch node.Name {
+        case "true":
+          msg.Set(field, protoreflect.ValueOf(true))
+        case "false":
+          msg.Set(field, protoreflect.ValueOf(false))
+        default:
+          fmt.Printf("NN: %s\n", node.Name)
+        }
+      case *ast.UnaryExpr:
+        switch node.Op {
+        case token.AND:
+          switch ix := node.X.(type) {
+          case *ast.CompositeLit:
+            msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
+          default:
+            panic("Unknown X Type")
+          }
+        default:
+          panic("Unknown Op")
+        }
+      default:
+        fmt.Printf("ETP: %#v\n", node)
+      }
+
+    }
+    return msg
+  }
+}
+
 
 func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 	switch node := expr.(type) {
@@ -290,7 +364,6 @@ func syncGoCmd() *cobra.Command {
       if err != nil {
         return err
       }
-      fmt.Printf("%+v", registry)
 
 			ast.Inspect(pf, func(n ast.Node) bool {
 				switch x := n.(type) {
@@ -299,9 +372,11 @@ func syncGoCmd() *cobra.Command {
 				case *ast.FuncDecl:
 					if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
 						var commentLines []string
-						for _, comment := range x.Doc.List {
-							commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
-						}
+            if x.Doc != nil {
+              for _, comment := range x.Doc.List {
+                commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
+              }
+            }
 						privateName := x.Name.Name
 						configName := strcase.ToKebab(privateName[3:])
 						results := x.Type.Results.List
