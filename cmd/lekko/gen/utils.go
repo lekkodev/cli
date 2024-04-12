@@ -52,6 +52,7 @@ func UnpackProtoType(moduleRoot string, typeURL string) *ProtoImport {
 	// TODO: un-hardcode import path
 	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
 	// e.g. configv1beta1
+	// TODO: shouldn't we be doing namespace + configv1beta1? what if there are multiple namespaces?
 	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
 
 	// TODO do google.protobuf.X

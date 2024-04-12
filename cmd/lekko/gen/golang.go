@@ -135,10 +135,9 @@ func GenGoCmd() *cobra.Command {
 				}
 			}
 			// TODOs for the template:
-			// proper handling of gofmt for imports, importing slices
-			// depending on the go version.
-			// only importing strings and slices if needed
-			// TODO: make sure to test if slices is valid depending on go versions
+			// - only importing strings and slices if needed
+			// - make sure to test if slices is valid depending on go versions
+			// - if you have multiple namespaces, how should the client be initialized?
 			const templateBody = `package lekko{{$.Namespace}}
 
 import (
@@ -415,7 +414,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 		var arguments []string
 		for f, t := range usedVariables {
 			arguments = append(arguments, fmt.Sprintf("%s %s", strcase.ToLowerCamel(f), t))
-			data.CtxStuff += fmt.Sprintf("ctx = context.WithValue(ctx, \"%s\", %s)\n", f, strcase.ToLowerCamel(f))
+			data.CtxStuff += fmt.Sprintf("ctx = client.Add(ctx, \"%s\", %s)\n", f, strcase.ToLowerCamel(f))
 		}
 		// TODO: Sorting by name might not be the best solution for long-term UX... but it's simple and it works for now
 		slices.Sort(arguments)
