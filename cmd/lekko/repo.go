@@ -419,7 +419,7 @@ func pullCmd() *cobra.Command {
 	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "pull",
-		Short: "Pull remote changes and merge them with local changes",
+		Short: "Pull remote changes and merge them with local changes. Typescript only.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lekkoPath, err := repo.DetectLekkoPath()
 			if err != nil || len(lekkoPath) == 0 {
@@ -553,6 +553,9 @@ func mergeFileCmd() *cobra.Command {
 				return err
 			}
 			worktree, err := gitRepo.Worktree()
+			if err != nil {
+				return errors.Wrap(err, "get worktree")
+			}
 
 			genTS := func(outFilename string) error {
 				err := gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
