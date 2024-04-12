@@ -588,9 +588,16 @@ func FieldValueToString(f protoreflect.FieldDescriptor, val protoreflect.Value, 
 	} else {
 		switch f.Kind() {
 		case protoreflect.EnumKind:
-			fallthrough
+			// TODO: Actually handle enums, right now they're just numbers
+			return val.String()
 		case protoreflect.StringKind:
-			return fmt.Sprintf("\"%s\"", val.String())
+			// If the string value is multiline, transform to raw literal instead
+			valString := val.String()
+			quote := "\""
+			if strings.Count(valString, "\n") > 0 {
+				quote = "`"
+			}
+			return fmt.Sprintf("%s%s%s", quote, val.String(), quote)
 		case protoreflect.BoolKind:
 			return val.String()
 		case protoreflect.BytesKind:
@@ -645,6 +652,16 @@ func translateRetValue(val *anypb.Any, protoType *ProtoImport) string {
 			var i64 wrapperspb.Int64Value
 			try.To(val.UnmarshalTo(&i64))
 			return strconv.FormatInt(i64.Value, 10)
+		}
+		if val.MessageIs((*wrapperspb.StringValue)(nil)) {
+			var s wrapperspb.StringValue
+			try.To(val.UnmarshalTo(&s))
+			// If multiline string value, gen as raw string literal instead
+			quote := "\""
+			if strings.Count(s.Value, "\n") > 0 {
+				quote = "`"
+			}
+			return fmt.Sprintf("%s%s%s", quote, s.Value, quote)
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
