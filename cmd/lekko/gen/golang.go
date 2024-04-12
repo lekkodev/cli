@@ -65,10 +65,6 @@ func structpbValueToKindStringGo(v *structpb.Value) string {
 	return "unknown" // do we just want to panic?
 }
 
-// Natural language codegen is in super alpha, only handles a subset
-// of what is available, namely only supports protos that are one level
-// deep with non-repeated primitives, a subset of ruleslang (== and in ops)
-// Also doesn't support external types.
 func GenGoCmd() *cobra.Command {
 	var ns string
 	var wd string
@@ -158,7 +154,6 @@ type LekkoClient struct {
 	client.Client
 	Close client.CloseFunc
 }
-
 {{if $.StaticConfig}}
 var StaticConfig = map[string]map[string][]byte{
 	"{{$.Namespace}}": {
@@ -185,6 +180,7 @@ var StaticConfig = map[string]map[string][]byte{
 				fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
 				return err
 			}
+			// TODO: Fix hardcoded paths
 			if err := os.MkdirAll("./internal/lekko/"+ns, 0770); err != nil {
 				return err
 			}
@@ -209,8 +205,20 @@ var StaticConfig = map[string]map[string][]byte{
 				codeStrings,
 				StaticBytes,
 			}
+			var contents bytes.Buffer
 			templ := template.Must(template.New("").Parse(templateBody))
-			return templ.Execute(f, data)
+			if err := templ.Execute(&contents, data); err != nil {
+				return errors.Wrap(err, "overall template")
+			}
+			// Final canonical Go format
+			formatted, err := format.Source(contents.Bytes())
+			if err != nil {
+				return errors.Wrap(err, "format")
+			}
+			if _, err := f.Write(formatted); err != nil {
+				return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
@@ -428,14 +436,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	if err != nil {
 		return "", err
 	}
-	// Final canonical Go format
-	// TODO: This doesn't reorder imports or clean extra newlines, investigate why
-	formatted, err := format.Source(ret.Bytes())
-	if err != nil {
-		//return ret.String(), nil // Leave this here for easy debugging
-		return "", errors.Wrap(err, "format")
-	}
-	return string(formatted), nil
+	return ret.String(), nil
 }
 
 func translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string) []string {
