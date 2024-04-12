@@ -60,6 +60,7 @@ func repoCmd() *cobra.Command {
 		pathCmd(),
 		pushCmd(),
 		pullCmd(),
+		mergeFileCmd(),
 	)
 	return cmd
 }
@@ -346,7 +347,7 @@ func remoteCmd() *cobra.Command {
 			if len(rs.GetGithubOwner()) == 0 || len(rs.GetGithubRepo()) == 0 {
 				return errors.New("no remote repo info in Lekko config")
 			}
-			fmt.Printf("%s/%s", rs.GetGithubOwner(), rs.GetGithubRepo())
+			fmt.Printf("%s/%s\n", rs.GetGithubOwner(), rs.GetGithubRepo())
 			return nil
 		},
 	}
@@ -415,10 +416,104 @@ func pathCmd() *cobra.Command {
 }
 
 func pullCmd() *cobra.Command {
-	var repoPath, tsFilename string
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "pull",
-		Short: "Pull remote changes (ts-only)",
+		Short: "Pull remote changes and merge them with local changes",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			lekkoPath, err := repo.DetectLekkoPath()
+			if err != nil || len(lekkoPath) == 0 {
+				return errors.New("could not find a valid lekko/ directory in file tree")
+			}
+			lekkoLock := &repo.LekkoLock{}
+			err = lekkoLock.ReadLekkoLock(lekkoPath)
+			if err != nil {
+				return errors.Wrap(err, "read lekko lock")
+			}
+
+			// this should be safe as we generate all changes from native lang
+			// git reset --hard
+			// git clean -fd
+			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
+			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
+			if err != nil {
+				return err
+			}
+			gitRepo, err := git.PlainOpen(repoPath)
+			if err != nil {
+				return errors.Wrap(err, "open git repo")
+			}
+			err = repo.ResetAndClean(gitRepo)
+			if err != nil {
+				return errors.Wrap(err, "reset and clean")
+			}
+
+			worktree, err := gitRepo.Worktree()
+			if err != nil {
+				return errors.Wrap(err, "get worktree")
+			}
+
+			err = worktree.Checkout(&git.CheckoutOptions{
+				Branch: plumbing.NewBranchReferenceName("main"),
+			})
+			if err != nil {
+				return errors.Wrap(err, "checkout main")
+			}
+
+			// pull from remote
+			remotes, err := gitRepo.Remotes()
+			if err != nil {
+				return errors.Wrap(err, "get remotes")
+			}
+			if len(remotes) == 0 {
+				return errors.New("No remote found, please finish setup instructions")
+			}
+			fmt.Printf("Pulling from %s\n", remotes[0].Config().URLs[0])
+			err = worktree.Pull(&git.PullOptions{
+				RemoteName: "origin",
+				Auth: &http.BasicAuth{
+					Username: rs.GetGithubUser(),
+					Password: rs.GetGithubToken(),
+				},
+			})
+			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+				return errors.Wrap(err, "pull")
+			}
+			newHead, err := gitRepo.Head()
+			if err != nil {
+				return err
+			}
+			if newHead.Hash().String() == lekkoLock.Commit {
+				fmt.Println("Already up to date.")
+				return nil
+			}
+			fmt.Printf("Rebasing from %s to %s\n\n", lekkoLock.Commit, newHead.Hash().String())
+
+			tsPullCmd := exec.Command("npx", "lekko-repo-pull", "--lekko-dir", lekkoPath)
+			output, err := tsPullCmd.CombinedOutput()
+			fmt.Println(string(output))
+			if err != nil {
+				return errors.Wrap(err, "ts pull")
+			}
+
+			lekkoLock.Commit = newHead.Hash().String()
+			if err := lekkoLock.WriteFile(lekkoPath); err != nil {
+				return errors.Wrap(err, "write lockfile")
+			}
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
+	return cmd
+}
+
+func mergeFileCmd() *cobra.Command {
+	var repoPath, tsFilename string
+	cmd := &cobra.Command{
+		Use: "merge-file",
+		Short: ("Merge native lekko file with remote changes. " +
+			"Assumes that the repo is up-to-date. Typescript only."),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := filepath.Base(tsFilename)
 			if !strings.HasSuffix(base, ".ts") {
@@ -444,9 +539,6 @@ func pullCmd() *cobra.Command {
 				return errors.Wrap(err, "read lekko lock")
 			}
 
-			// this should be safe as we generate all changes from native lang
-			// git reset --hard
-			// git clean -fd
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
 			if err != nil {
@@ -456,52 +548,11 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "open git repo")
 			}
-			worktree, err := gitRepo.Worktree()
-			if err != nil {
-				return errors.Wrap(err, "get worktree")
-			}
-			head, err := gitRepo.Head()
-			if err != nil {
-				return errors.Wrap(err, "get head")
-			}
-			err = worktree.Reset(&git.ResetOptions{
-				Commit: head.Hash(),
-				Mode:   git.HardReset,
-			})
-			if err != nil {
-				return errors.Wrap(err, "reset")
-			}
-			err = worktree.Clean(&git.CleanOptions{Dir: true})
-			if err != nil {
-				return errors.Wrap(err, "clean")
-			}
-
-			err = worktree.Checkout(&git.CheckoutOptions{
-				Branch: plumbing.NewBranchReferenceName("main"),
-			})
-			if err != nil {
-				return errors.Wrap(err, "checkout main #1")
-			}
-
-			// pull from remote
-			err = worktree.Pull(&git.PullOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: rs.GetGithubUser(),
-					Password: rs.GetGithubToken(),
-				},
-			})
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return errors.Wrap(err, "pull")
-			}
-			newHead, err := gitRepo.Head()
+			err = repo.ResetAndClean(gitRepo)
 			if err != nil {
 				return err
 			}
-			if newHead.Hash().String() == lekkoLock.Commit {
-				fmt.Println("Already up to date.")
-				return nil
-			}
+			worktree, err := gitRepo.Worktree()
 
 			genTS := func(outFilename string) error {
 				err := gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
