@@ -265,10 +265,9 @@ func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
 }
 
 // {{$.Description}}
-func {{$.PrivateFunc}}(ctx context.Context, result interface{}) {
- 	c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-  	{{range  $.NaturalLanguage}}{{ . }}{{end}}
-}
+// func {{$.PrivateFunc}}(ctx context.Context, result interface{}) {
+//  	{{range  $.NaturalLanguage}}{{ . }}{{end}}
+//}
 `
 
 	// Generate an enum type and const declarations
@@ -432,7 +431,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	// TODO: This doesn't reorder imports or clean extra newlines, investigate why
 	formatted, err := format.Source(ret.Bytes())
 	if err != nil {
-		// return ret.String(), nil // Leave this here for easy debugging
+		//return ret.String(), nil // Leave this here for easy debugging
 		return "", errors.Wrap(err, "format")
 	}
 	return string(formatted), nil
