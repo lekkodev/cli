@@ -414,21 +414,21 @@ func getOptionalVariables(rule *rulesv1beta3.Rule, optionalVariables map[string]
 }
 
 func createUndefinedSafeJSExpression(contextKey string, comparisonValue *structpb.Value, operator string, optionalVariables map[string]string, marshalOptions protojson.MarshalOptions, usedVariables map[string]string) string {
-    usedVariables[contextKey] = structpbValueToKindString(comparisonValue)
+	usedVariables[contextKey] = structpbValueToKindString(comparisonValue)
 
-    marshaledValue, err := marshalOptions.Marshal(comparisonValue)
+	marshaledValue, err := marshalOptions.Marshal(comparisonValue)
 	if err != nil {
-        return fmt.Sprintf("Error marshaling comparison value: %v", err)
-    }
-	
+		return fmt.Sprintf("Error marshaling comparison value: %v", err)
+	}
+
 	marshaledValueStr := string(marshaledValue)
 
-    methodCall := fmt.Sprintf("%s.%s(%s)", contextKey, operator, marshaledValueStr)
-    if _, ok := optionalVariables[contextKey]; ok {
-        methodCall = fmt.Sprintf("%s?.%s(%s)", contextKey, operator, marshaledValueStr)
-    }
+	methodCall := fmt.Sprintf("%s.%s(%s)", contextKey, operator, marshaledValueStr)
+	if _, ok := optionalVariables[contextKey]; ok {
+		methodCall = fmt.Sprintf("%s?.%s(%s)", contextKey, operator, marshaledValueStr)
+	}
 
-    return fmt.Sprintf("(%s)", methodCall)
+	return fmt.Sprintf("(%s)", methodCall)
 }
 
 func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, optionalVariables map[string]string) string {
