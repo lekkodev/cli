@@ -76,6 +76,8 @@ func main() {
 	rootCmd.AddCommand(pushCmd())
 	// short for `lekko repo pull`
 	rootCmd.AddCommand(pullCmd())
+	// short for `lekko repo merge-file`
+	rootCmd.AddCommand(mergeFileCmd())
 
 	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {

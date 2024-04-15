@@ -360,7 +360,7 @@ func pushCmd() *cobra.Command {
 	var skipLock bool
 	cmd := &cobra.Command{
 		Use:   "push",
-		Short: "Push local changes into GitHub and Lekko",
+		Short: "Push local changes to remote Lekko repo. Typescript only.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
@@ -514,6 +514,7 @@ func mergeFileCmd() *cobra.Command {
 		Use: "merge-file",
 		Short: ("Merge native lekko file with remote changes. " +
 			"Assumes that the repo is up-to-date. Typescript only."),
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := filepath.Base(tsFilename)
 			if !strings.HasSuffix(base, ".ts") {

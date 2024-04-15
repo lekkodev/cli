@@ -369,7 +369,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	output, err := tsSyncCmd.CombinedOutput()
 	fmt.Println(string(output))
 	if err != nil {
-		return errors.Wrap(err, "ts sync")
+		return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
 	}
 
 	configRepo, err := NewLocal(repoPath, r.rs)
@@ -432,7 +432,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if strings.Contains(err.Error(), "non-fast-forward update") {
 			return errors.New("Remote repository has new changes, " +
-				fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko repo pull")))
+				fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko pull")))
 		}
 		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
