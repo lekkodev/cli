@@ -16,11 +16,14 @@ package gen
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -74,10 +77,10 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
 			d := f.Message()
-			t = "{"
+			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("%s?: %s;", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", f.TextName(), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -132,6 +135,122 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 	return fmt.Sprintf("{%s}: %s", strings.Join(fields, ", "), d.Name())
 }
 
+func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer, error)) error {
+	// TODO to avoid weird error message we should compile first.
+	var err error
+	rs := secrets.NewSecretsOrFail()
+	repoPath, err = repo.InitIfNotExists(ctx, rs, repoPath)
+	if err != nil {
+		return errors.Wrap(err, "init repo")
+	}
+	r, err := repo.NewLocal(repoPath, rs)
+	if err != nil {
+		return errors.Wrap(err, "new repo")
+	}
+	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
+	typeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	var parameters string
+	interfaces := make(map[string]string)
+	if _, ok := nsMDs[ns]; !ok {
+		log.Fatal("unknown namespace: ", ns)
+	}
+	if len(nsMDs[ns].ContextProto) > 0 {
+		ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
+		if err != nil {
+			log.Fatal("error finding the message in the registry", err)
+		}
+		parameters = getTSParameters(ptype.Descriptor())
+		face, err := getTSInterface(ptype.Descriptor())
+		if err != nil {
+			return err
+		}
+		interfaces[nsMDs[ns].ContextProto] = face
+	}
+	var codeStrings []string
+	/*
+	         typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
+	   				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
+	   				if splitName[0] == "google" {
+	   					return true
+	   				}
+	   				face, err := getTSInterface(mt.Descriptor())
+	   				if err != nil {
+	   					panic(err)
+	   				}
+	   				codeStrings = append(codeStrings, face)
+	   				return true
+	   			})
+	*/
+
+	ffs, err := r.GetFeatureFiles(ctx, ns)
+	if err != nil {
+		return err
+	}
+	sort.SliceStable(ffs, func(i, j int) bool {
+		return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
+	})
+
+	protoImports := make(map[string]struct{})
+	for _, ff := range ffs {
+		fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
+		if err != nil {
+			return err
+		}
+		f := &featurev1beta1.Feature{}
+		if err := proto.Unmarshal(fff, f); err != nil {
+			return err
+		}
+		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			pImport := UnpackProtoType("", f.Tree.Default.TypeUrl)
+			if strings.HasPrefix(pImport.ImportPath, "google.golang.org") {
+				protoImports["import * as protobuf from '@bufbuild/protobuf';"] = struct{}{}
+			} else {
+				name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
+				if _, ok := interfaces[name]; !ok {
+					ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
+					if err != nil {
+						return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
+					}
+					face, err := getTSInterface(ptype.Descriptor())
+					if err != nil {
+						return err
+					}
+					interfaces[name] = face
+				}
+			}
+		}
+		codeString, err := genTSForFeature(f, ns, parameters)
+		if err != nil {
+			return err
+		}
+		codeStrings = append(codeStrings, codeString)
+	}
+	const templateBody = `{{range  $.CodeStrings}}
+{{ . }}
+{{end}}`
+
+	interfaceStrings := make([]string, 0, len(interfaces))
+	keys := maps.Keys(interfaces)
+	slices.Sort(keys)
+	for _, k := range keys {
+		interfaceStrings = append(interfaceStrings, interfaces[k])
+	}
+
+	data := struct {
+		Namespace   string
+		CodeStrings []string
+	}{
+		ns,
+		append(maps.Keys(protoImports), append(interfaceStrings, codeStrings...)...),
+	}
+	wr, err := getWriter()
+	if err != nil {
+		return err
+	}
+	templ := template.Must(template.New("").Parse(templateBody))
+	return templ.Execute(wr, data)
+}
+
 func GenTSCmd() *cobra.Command {
 	var ns string
 	var repoPath string
@@ -140,111 +259,9 @@ func GenTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// TODO to avoid weird error message we should compile first.
-			var err error
-			rs := secrets.NewSecretsOrFail()
-			repoPath, err = repo.InitIfNotExists(cmd.Context(), rs, repoPath)
-			if err != nil {
-				return errors.Wrap(err, "init repo")
-			}
-			r, err := repo.NewLocal(repoPath, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			rootMD, nsMDs := try.To2(r.ParseMetadata(cmd.Context()))
-			typeRegistry = try.To1(r.BuildDynamicTypeRegistry(cmd.Context(), rootMD.ProtoDirectory))
-			var parameters string
-			interfaces := make(map[string]string)
-			if _, ok := nsMDs[ns]; !ok {
-				log.Fatal("unknown namespace: ", ns)
-			}
-			if len(nsMDs[ns].ContextProto) > 0 {
-				ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
-				if err != nil {
-					log.Fatal("error finding the message in the registry", err)
-				}
-				parameters = getTSParameters(ptype.Descriptor())
-				face, err := getTSInterface(ptype.Descriptor())
-				if err != nil {
-					return err
-				}
-				interfaces[nsMDs[ns].ContextProto] = face
-			}
-			var codeStrings []string
-			/*
-			         typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-			   				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
-			   				if splitName[0] == "google" {
-			   					return true
-			   				}
-			   				face, err := getTSInterface(mt.Descriptor())
-			   				if err != nil {
-			   					panic(err)
-			   				}
-			   				codeStrings = append(codeStrings, face)
-			   				return true
-			   			})
-			*/
-
-			ffs, err := r.GetFeatureFiles(cmd.Context(), ns)
-			if err != nil {
-				return err
-			}
-			sort.SliceStable(ffs, func(i, j int) bool {
-				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
+			return GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
+				return os.Create(filepath.Join(outDir, ns+".ts"))
 			})
-
-			protoImports := make(map[string]struct{})
-			for _, ff := range ffs {
-				fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
-				if err != nil {
-					return err
-				}
-				f := &featurev1beta1.Feature{}
-				if err := proto.Unmarshal(fff, f); err != nil {
-					return err
-				}
-				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-					pImport := UnpackProtoType("", f.Tree.Default.TypeUrl)
-					if strings.HasPrefix(pImport.ImportPath, "google.golang.org") {
-						protoImports["import * as protobuf from '@bufbuild/protobuf';"] = struct{}{}
-					} else {
-						name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
-						if _, ok := interfaces[name]; !ok {
-							ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
-							if err != nil {
-								return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
-							}
-							face, err := getTSInterface(ptype.Descriptor())
-							if err != nil {
-								return err
-							}
-							interfaces[name] = face
-						}
-					}
-				}
-				codeString, err := genTSForFeature(f, ns, parameters)
-				if err != nil {
-					return err
-				}
-				codeStrings = append(codeStrings, codeString)
-			}
-			const templateBody = `{{range  $.CodeStrings}}
-{{ . }}
-{{end}}`
-			data := struct {
-				Namespace   string
-				CodeStrings []string
-			}{
-				ns,
-				append(maps.Keys(protoImports), append(maps.Values(interfaces), codeStrings...)...),
-			}
-			f, err := os.Create(filepath.Join(outDir, ns+".ts"))
-			if err != nil {
-				return err
-			}
-			templ := template.Must(template.New("").Parse(templateBody))
-			return templ.Execute(f, data)
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
@@ -254,7 +271,8 @@ func GenTSCmd() *cobra.Command {
 }
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
-	const templateBody = `// {{$.Description}}
+	// TODO: support multiline descriptions
+	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 {{range  $.NaturalLanguage}}{{ . }}
 {{end}}}`
@@ -526,9 +544,10 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
+			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
-		return fmt.Sprintf("{%s}", strings.Join(lines, ", "))
+		sort.Strings(lines)
+		return fmt.Sprintf("{\n%s}", strings.Join(lines, ",\n"))
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -272,12 +273,47 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	return nil
 }
 
-func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) error {
+func DetectLekkoPath() (string, error) {
+	// Walk through fs tree until we find lekko/, the managed directory
+	var lekkoPath string
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if err := filepath.WalkDir(wd, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		// Some sane skips
+		if d.Name() == "node_modules" || d.Name() == "vendor" {
+			return fs.SkipDir
+		}
+		if d.IsDir() && d.Name() == "lekko" {
+			// Safety check against non-code repo lekko/
+			lekkoEntries, err := os.ReadDir(path)
+			if err != nil {
+				return err
+			}
+			for _, entry := range lekkoEntries {
+				if entry.IsDir() && entry.Name() != "gen" {
+					return fs.SkipDir
+				}
+			}
+			lekkoPath = path
+			return fs.SkipAll
+		}
+		return nil
+	}); err != nil {
+		return "", err
+	}
+	return lekkoPath, nil
+}
+
+func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skipLock bool) error {
 	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Using repo path: %s\n\n", repoPath)
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
 		return errors.Wrap(err, "open git repo")
@@ -364,6 +400,27 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string) erro
 		// assuming that there is only one remote and one URL
 		fmt.Printf("Successfully pushed changes to: %s\n", remotes[0].Config().URLs[0])
 	}
+	// Take commit SHA for synchronizing with code repo
+	if !skipLock {
+		head, err := gitRepo.Head()
+		if err != nil {
+			return err
+		}
+		lockSHA := head.Hash().String()
+
+		lekkoPath, err := DetectLekkoPath()
+		if err != nil {
+			return errors.Wrap(err, "detect lekko path")
+		}
+		if lekkoPath == "" {
+			return errors.New("could not find a valid lekko/ directory in file tree")
+		}
+		lekkoLock := &LekkoLock{Commit: lockSHA}
+		if err := lekkoLock.WriteFile(lekkoPath); err != nil {
+			return errors.Wrap(err, "write lockfile")
+		}
+	}
+
 	// Pull to get remote branches
 	w, err := gitRepo.Worktree()
 	if err != nil {
