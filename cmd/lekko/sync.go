@@ -19,6 +19,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"log"
 	"os"
 	"path"
 	"regexp"
@@ -167,7 +168,17 @@ func findMessageType(x *ast.CompositeLit, registry *protoregistry.Types) protore
 	fullName = fullName.Append(protoreflect.Name(parts[0]))
 	mt, err := registry.FindMessageByName(fullName)
 	if err != nil {
-		panic(err)
+		if strings.Contains(string(fullName), "_") {
+			outerMessageDescriptor, err := registry.FindMessageByName(protoreflect.FullName(strings.Split(string(fullName), "_")[0]))
+			if err == nil {
+
+				for i := 0; i < outerMessageDescriptor.Descriptor().Messages().Len(); i = i + 1 {
+					registry.RegisterMessage(outerMessageDescriptor.Descriptor().Messages().Get(i))
+				}
+			}
+
+		}
+		log.Fatal("this strange bug above didn't catch this error", err)
 	}
 	if len(parts) == 2 {
 		md := mt.Descriptor().Messages().ByName(protoreflect.Name(parts[1])) // TODO
