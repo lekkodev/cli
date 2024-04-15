@@ -305,8 +305,10 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 		}
 	}
 
-	usedVariables := make(map[string]string)
 	optionalVariables := make(map[string]string)
+	translateFeatureToOptionalVariables(f, optionalVariables)
+
+	usedVariables := make(map[string]string)
 	code := translateFeatureTS(f, usedVariables, optionalVariables)
 	if len(parameters) == 0 && len(usedVariables) > 0 {
 		var keys []string
@@ -355,6 +357,12 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	return ret.String(), nil
 }
 
+func translateFeatureToOptionalVariables(f *featurev1beta1.Feature, optionalVariables map[string]string) {
+	for _, constraint := range f.Tree.Constraints {
+		getOptionalVariables(constraint.GetRuleAstNew(), optionalVariables)
+	}
+}
+
 func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string, optionalVariables map[string]string) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
@@ -386,6 +394,41 @@ func structpbValueToKindString(v *structpb.Value) string {
 		return "string"
 	}
 	return "unknown"
+}
+
+func getOptionalVariables(rule *rulesv1beta3.Rule, optionalVariables map[string]string) {
+	if rule == nil {
+		return
+	}
+	switch v := rule.GetRule().(type) {
+	case *rulesv1beta3.Rule_Atom:
+		switch v.Atom.GetComparisonOperator() {
+		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_PRESENT:
+			optionalVariables[v.Atom.ContextKey] = "string | boolean | number"
+		}
+	case *rulesv1beta3.Rule_LogicalExpression:
+		for _, rule := range v.LogicalExpression.Rules {
+			getOptionalVariables(rule, optionalVariables)
+		}
+	}
+}
+
+func createUndefinedSafeJSExpression(contextKey string, comparisonValue *structpb.Value, operator string, optionalVariables map[string]string, marshalOptions protojson.MarshalOptions, usedVariables map[string]string) string {
+    usedVariables[contextKey] = structpbValueToKindString(comparisonValue)
+
+    marshaledValue, err := marshalOptions.Marshal(comparisonValue)
+	if err != nil {
+        return fmt.Sprintf("Error marshaling comparison value: %v", err)
+    }
+	
+	marshaledValueStr := string(marshaledValue)
+
+    methodCall := fmt.Sprintf("%s.%s(%s)", contextKey, operator, marshaledValueStr)
+    if _, ok := optionalVariables[contextKey]; ok {
+        methodCall = fmt.Sprintf("%s?.%s(%s)", contextKey, operator, marshaledValueStr)
+    }
+
+    return fmt.Sprintf("(%s)", methodCall)
 }
 
 func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, optionalVariables map[string]string) string {
@@ -425,19 +468,15 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string, o
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("(%s >= %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.includes(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return createUndefinedSafeJSExpression(v.Atom.ContextKey, v.Atom.ComparisonValue, "includes", optionalVariables, marshalOptions, usedVariables)
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.startsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return createUndefinedSafeJSExpression(v.Atom.ContextKey, v.Atom.ComparisonValue, "startsWith", optionalVariables, marshalOptions, usedVariables)
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
-			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.endsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return createUndefinedSafeJSExpression(v.Atom.ContextKey, v.Atom.ComparisonValue, "endsWith", optionalVariables, marshalOptions, usedVariables)
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_PRESENT:
 			if _, ok := usedVariables[v.Atom.ContextKey]; !ok {
-				usedVariables[v.Atom.ContextKey] = "unknown"
+				usedVariables[v.Atom.ContextKey] = "string | boolean | number"
 			}
-			optionalVariables[v.Atom.ContextKey] = "unknown"
 			return fmt.Sprintf("(%s !== undefined)", v.Atom.ContextKey)
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
