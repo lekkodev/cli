@@ -558,17 +558,23 @@ func mergeFileCmd() *cobra.Command {
 			}
 
 			genTS := func(outFilename string) error {
-				err := gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
-					return os.Create(outFilename)
+				prettierCmd := exec.Command("npx", "prettier", "--no-config", "--parser", "typescript")
+				stdinPipe, err := prettierCmd.StdinPipe()
+				if err != nil {
+					return err
+				}
+				err = gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
+					return stdinPipe, nil
 				})
 				if err != nil {
 					return err
 				}
-				prettierCmd := exec.Command("npx", "prettier", "-w", "--no-config", "--parser", "typescript", outFilename)
-				if err := prettierCmd.Run(); err != nil {
-					return errors.Wrap(err, fmt.Sprintf("run prettier on %s", outFilename))
+				stdinPipe.Close()
+				out, err := prettierCmd.Output()
+				if err != nil {
+					return err
 				}
-				return nil
+				return os.WriteFile(outFilename, out, 0600)
 			}
 
 			// base
@@ -584,6 +590,25 @@ func mergeFileCmd() *cobra.Command {
 				return errors.Wrap(err, "gen ts: base")
 			}
 
+			getCommitInfo := func() (string, error) {
+				head, err := gitRepo.Head()
+				if err != nil {
+					return "", err
+				}
+				commit, err := gitRepo.CommitObject(head.Hash())
+				if err != nil {
+					return "", err
+				}
+				shortHash := head.Hash().String()[:7]
+				title := strings.Split(commit.Message, "\n")[0]
+				return fmt.Sprintf("%s - %s", shortHash, title), nil
+			}
+
+			baseCommitInfo, err := getCommitInfo()
+			if err != nil {
+				return errors.Wrap(err, "get commit info")
+			}
+
 			// remote
 			err = worktree.Checkout(&git.CheckoutOptions{
 				Branch: plumbing.NewBranchReferenceName("main"),
@@ -596,9 +621,19 @@ func mergeFileCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "gen ts: remote")
 			}
+			remoteCommitInfo, err := getCommitInfo()
+			if err != nil {
+				return errors.Wrap(err, "get commit info")
+			}
 
 			fmt.Printf("Auto-merging %s\n", tsFilename)
-			mergeCmd := exec.Command("git", "merge-file", tsFilename, baseFilename, remoteFilename, "--diff3")
+			mergeCmd := exec.Command(
+				"git", "merge-file",
+				tsFilename, baseFilename, remoteFilename,
+				"-L", "local",
+				"-L", fmt.Sprintf("base: %s", baseCommitInfo),
+				"-L", fmt.Sprintf("remote: %s", remoteCommitInfo),
+				"--diff3")
 			err = mergeCmd.Run()
 			if err != nil {
 				exitErr, ok := err.(*exec.ExitError)
