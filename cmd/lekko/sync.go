@@ -208,7 +208,6 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
 			case token.INT:
 				if field.Kind() == protoreflect.EnumKind {
-					fmt.Printf("%#v\n", field)
 					intValue, err := strconv.ParseInt(node.Value, 10, 32)
 					if err != nil {
 						panic(err)
@@ -254,8 +253,71 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 			default:
 				panic("Unknown Op")
 			}
+		case *ast.CompositeLit:
+			switch mapTypeNode := node.Type.(type) {
+			case *ast.MapType:
+				switch mapTypeNode.Key.(type) {
+				case *ast.Ident:
+					// Do something
+				default:
+					panic("Unknown Type")
+				}
+				switch mapTypeNode.Value.(type) {
+				case *ast.Ident:
+					// Do something
+				default:
+					panic("Unknown Type")
+				}
+				for _, elt := range node.Elts {
+					pair := elt.(*ast.KeyValueExpr)
+					key := protoreflect.ValueOfString(strings.Trim(pair.Key.(*ast.BasicLit).Value, "\"")).MapKey()
+					switch v := pair.Value.(type) {
+					case *ast.BasicLit:
+						switch v.Kind {
+						case token.STRING:
+							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"")))
+						case token.INT:
+							if field.Kind() == protoreflect.EnumKind {
+								intValue, err := strconv.ParseInt(v.Value, 10, 32)
+								if err != nil {
+									panic(err)
+								}
+								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
+								continue
+							}
+							// TODO - parse/validate based on field Kind
+							if intValue, err := strconv.ParseInt(v.Value, 10, 64); err == nil {
+								if err != nil {
+									panic(err)
+								}
+								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(intValue))
+							}
+						case token.FLOAT:
+							if floatValue, err := strconv.ParseFloat(v.Value, 64); err == nil {
+								if err != nil {
+									panic(err)
+								}
+								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(floatValue))
+							}
+						default:
+							fmt.Printf("NV: %s\n", v.Value)
+						}
+					case *ast.Ident:
+						switch v.Name {
+						case "true":
+							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(true))
+						case "false":
+							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(false))
+						default:
+							fmt.Printf("NN: %s\n", v.Name)
+						}
+					}
+				}
+			default:
+				panic("Unknown Type")
+			}
 		default:
-			fmt.Printf("ETP: %+v\n", node)
+			fmt.Printf("ETP: %#v\n", node)
 		}
 
 	}
@@ -499,7 +561,6 @@ func syncGoCmd() *cobra.Command {
 				return true
 			})
 			// TODO static context
-			fmt.Printf("\n\n%+v\n", namespace)
 
 			// Now we need to write/merge it..
 			nsExists := false
