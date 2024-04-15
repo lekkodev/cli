@@ -20,7 +20,9 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -28,8 +30,10 @@ import (
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 )
@@ -273,6 +277,36 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	return nil
 }
 
+func ResetAndClean(gitRepo *git.Repository) error {
+	worktree, err := gitRepo.Worktree()
+	if err != nil {
+		return errors.Wrap(err, "get worktree")
+	}
+	head, err := gitRepo.Head()
+	if err != nil {
+		return errors.Wrap(err, "get head")
+	}
+	err = worktree.Reset(&git.ResetOptions{
+		Commit: head.Hash(),
+		Mode:   git.HardReset,
+	})
+	if err != nil {
+		return errors.Wrap(err, "reset")
+	}
+	err = worktree.Clean(&git.CleanOptions{Dir: true})
+	if err != nil {
+		return errors.Wrap(err, "clean")
+	}
+
+	err = worktree.Checkout(&git.CheckoutOptions{
+		Branch: plumbing.NewBranchReferenceName("main"),
+	})
+	if err != nil {
+		return errors.Wrap(err, "checkout main")
+	}
+	return nil
+}
+
 func DetectLekkoPath() (string, error) {
 	// Walk through fs tree until we find lekko/, the managed directory
 	var lekkoPath string
@@ -326,6 +360,18 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		return errors.New("No remote found, please finish setup instructions")
 	}
 
+	// run 2-way sync
+	lekkoPath, err := DetectLekkoPath()
+	if err != nil || len(lekkoPath) == 0 {
+		return errors.New("could not find a valid lekko/ directory in file tree")
+	}
+	tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
+	output, err := tsSyncCmd.CombinedOutput()
+	fmt.Println(string(output))
+	if err != nil {
+		return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
+	}
+
 	configRepo, err := NewLocal(repoPath, r.rs)
 	if err != nil {
 		return errors.Wrap(err, "failed to open config repo")
@@ -375,6 +421,8 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		}
 	}
 	// push to GitHub
+	// assuming that there is only one remote and one URL
+	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
 	err = gitRepo.Push(&git.PushOptions{
 		Auth: &http.BasicAuth{
 			Username: r.rs.GetGithubUser(),
@@ -382,6 +430,10 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		},
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
+		if strings.Contains(err.Error(), "non-fast-forward update") {
+			return errors.New("Remote repository has new changes, " +
+				fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko pull")))
+		}
 		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
 		// Soft reset will keep changes as staged.
@@ -395,19 +447,18 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		return err
 	}
 	if errors.Is(err, git.NoErrAlreadyUpToDate) {
-		fmt.Println("Everything up-to-date")
-	} else {
-		// assuming that there is only one remote and one URL
-		fmt.Printf("Successfully pushed changes to: %s\n", remotes[0].Config().URLs[0])
+		fmt.Println("Already up to date.")
+		return nil
 	}
+	head, err := gitRepo.Head()
+	if err != nil {
+		return err
+	}
+	headSHA := head.Hash().String()
+	fmt.Printf("Successfully pushed changes as %s\n", headSHA)
+
 	// Take commit SHA for synchronizing with code repo
 	if !skipLock {
-		head, err := gitRepo.Head()
-		if err != nil {
-			return err
-		}
-		lockSHA := head.Hash().String()
-
 		lekkoPath, err := DetectLekkoPath()
 		if err != nil {
 			return errors.Wrap(err, "detect lekko path")
@@ -415,7 +466,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		if lekkoPath == "" {
 			return errors.New("could not find a valid lekko/ directory in file tree")
 		}
-		lekkoLock := &LekkoLock{Commit: lockSHA}
+		lekkoLock := &LekkoLock{Commit: headSHA}
 		if err := lekkoLock.WriteFile(lekkoPath); err != nil {
 			return errors.Wrap(err, "write lockfile")
 		}
