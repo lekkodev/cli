@@ -39,6 +39,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -173,12 +174,15 @@ func findMessageType(x *ast.CompositeLit, registry *protoregistry.Types) protore
 			if err == nil {
 
 				for i := 0; i < outerMessageDescriptor.Descriptor().Messages().Len(); i = i + 1 {
-					registry.RegisterMessage(outerMessageDescriptor.Descriptor().Messages().Get(i))
+					newMT := dynamicpb.NewMessageType(outerMessageDescriptor.Descriptor().Messages().Get(i))
+					registry.RegisterMessage(newMT)
+					mt = newMT
 				}
 			}
 
+		} else if mt == nil {
+			log.Fatal("this strange bug above didn't catch this error", err)
 		}
-		log.Fatal("this strange bug above didn't catch this error", err)
 	}
 	if len(parts) == 2 {
 		md := mt.Descriptor().Messages().ByName(protoreflect.Name(parts[1])) // TODO
