@@ -28,7 +28,6 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/cmd/lekko/gen"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
@@ -469,15 +468,9 @@ func pullCmd() *cobra.Command {
 				return errors.New("No remote found, please finish setup instructions")
 			}
 			fmt.Printf("Pulling from %s\n", remotes[0].Config().URLs[0])
-			err = worktree.Pull(&git.PullOptions{
-				RemoteName: "origin",
-				Auth: &http.BasicAuth{
-					Username: rs.GetGithubUser(),
-					Password: rs.GetGithubToken(),
-				},
-			})
-			if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-				return errors.Wrap(err, "pull")
+			err = repo.GitPull(gitRepo, rs)
+			if err != nil {
+				return errors.Wrap(err, "git pull")
 			}
 			newHead, err := gitRepo.Head()
 			if err != nil {
