@@ -559,7 +559,7 @@ func mergeFileCmd() *cobra.Command {
 			}
 
 			genTS := func(outFilename string) error {
-				prettierCmd := exec.Command("npx", "prettier", "--no-config", "--parser", "typescript")
+				prettierCmd := exec.Command("npx", "prettier", "--parser", "typescript")
 				stdinPipe, err := prettierCmd.StdinPipe()
 				if err != nil {
 					return err

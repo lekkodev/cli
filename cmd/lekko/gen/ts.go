@@ -260,13 +260,16 @@ func GenTSCmd() *cobra.Command {
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
+				if len(outDir) == 0 {
+					return os.Stdout, nil
+				}
 				return os.Create(filepath.Join(outDir, ns+".ts"))
 			})
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
-	cmd.Flags().StringVarP(&outDir, "output", "o", ".", "output directory for generated code")
+	cmd.Flags().StringVarP(&outDir, "output", "o", "", "output directory for generated code")
 	return cmd
 }
 
