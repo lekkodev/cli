@@ -105,6 +105,8 @@ func GenGoCmd() *cobra.Command {
 			var publicFuncStrings []string
 			var privateFuncStrings []string
 			protoImportSet := make(map[string]*ProtoImport)
+			addStringsImport := false
+			addSlicesImport := false
 			if staticCtxType != nil {
 				protoImportSet[staticCtxType.ImportPath] = staticCtxType
 			}
@@ -120,6 +122,12 @@ func GenGoCmd() *cobra.Command {
 				generated := try.To1(genGoForFeature(cmd.Context(), r, f, ns, staticCtxType))
 				publicFuncStrings = append(publicFuncStrings, generated.public)
 				privateFuncStrings = append(privateFuncStrings, generated.private)
+				if generated.usedStrings {
+					addStringsImport = true
+				}
+				if generated.usedSlices {
+					addSlicesImport = true
+				}
 				if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 					protoImport := UnpackProtoType(moduleRoot, f.Tree.Default.TypeUrl)
 					protoImportSet[protoImport.ImportPath] = protoImport
@@ -152,15 +160,16 @@ type LekkoClient struct {
 {{ . }}{{end}}`
 
 			// TODOs for the template:
-			// - only importing strings and slices if needed
 			// - make sure to test if slices is valid depending on go versions
+			// - add go generate directive to invoke this command
+			//   - but if doing 2-way and directive already exists, should respect original
 			const privateFileTemplateBody = `package lekko{{$.Namespace}}
 
 import (
-	"strings"
+	{{if $.AddStringsImport}}"strings"{{end}}
 {{range $.ProtoImports}}
 	{{ . }}{{end}}
-	"golang.org/x/exp/slices"
+	{{if $.AddSlicesImport}}"golang.org/x/exp/slices"{{end}}
 )
 
 {{range $.PrivateFuncStrings}}
@@ -198,11 +207,15 @@ import (
 				Namespace          string
 				PublicFuncStrings  []string
 				PrivateFuncStrings []string
+				AddStringsImport   bool
+				AddSlicesImport    bool
 			}{
 				protoImports,
 				ns,
 				publicFuncStrings,
 				privateFuncStrings,
+				addStringsImport,
+				addSlicesImport,
 			}
 			outputs := []struct {
 				templateBody string
@@ -259,6 +272,10 @@ type generatedConfigCode struct {
 	public string
 	// For user creation/editing
 	private string
+	// Whether the std package "strings" was used
+	usedStrings bool
+	// Whether the std package "slices" was used
+	usedSlices bool
 }
 
 type configCodeTemplate struct {
@@ -463,14 +480,15 @@ func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *fea
 		enumFields,
 		"",
 	}
+	generated := &generatedConfigCode{}
 	usedVariables := make(map[string]string)
 	if staticCtxType != nil {
-		data.NaturalLanguage = translateFeature(f, protoType, true, usedVariables)
+		data.NaturalLanguage = translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		data.ArgumentString = fmt.Sprintf("ctx *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type)
 		data.CallString = "ctx"
 	} else {
 		data.CtxStuff = "ctx := context.Background()\n"
-		data.NaturalLanguage = translateFeature(f, protoType, false, usedVariables)
+		data.NaturalLanguage = translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		for f, t := range usedVariables {
 			arguments = append(arguments, fmt.Sprintf("%s %s", strcase.ToLowerCamel(f), t))
@@ -486,7 +504,6 @@ func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *fea
 		slices.Sort(keys)
 		data.CallString = strings.Join(keys, ", ")
 	}
-	generated := &generatedConfigCode{}
 	if templ, err := template.New("public func").Parse(templateBody.public); err != nil {
 		return nil, err
 	} else {
@@ -508,14 +525,14 @@ func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *fea
 	return generated, nil
 }
 
-func translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string) []string {
+func translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
 		if i == 0 {
 			ifToken = "if"
 		}
-		rule := translateRule(constraint.GetRuleAstNew(), staticContext, usedVariables)
+		rule := translateRule(constraint.GetRuleAstNew(), staticContext, usedVariables, usedStrings, usedSlices)
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
@@ -539,7 +556,7 @@ func tryStoreUsedVariable(usedVariables map[string]string, k string, t string) {
 	assert.Equal(t, existT)
 }
 
-func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables map[string]string) string {
+func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) string {
 	if rule == nil {
 		return ""
 	}
@@ -591,6 +608,7 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
+			*usedStrings = true
 			if staticContext {
 				return fmt.Sprintf("strings.Contains(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
@@ -598,6 +616,7 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
 			tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
+			*usedStrings = true
 			if staticContext {
 				return fmt.Sprintf("strings.HasPrefix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
@@ -605,6 +624,7 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 			}
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
 			tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
+			*usedStrings = true
 			if staticContext {
 				return fmt.Sprintf("strings.HasSuffix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 			} else {
@@ -627,6 +647,7 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 				elements = append(elements, string(try.To1(protojson.Marshal(comparisonVal))))
 			}
 			tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, sliceType)
+			*usedSlices = true
 			if staticContext {
 				return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.ToCamel(v.Atom.ContextKey))
 			} else {
@@ -643,7 +664,7 @@ func translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables ma
 		var result []string
 		for _, rule := range v.LogicalExpression.Rules {
 			// worry about inner parens later
-			result = append(result, translateRule(rule, staticContext, usedVariables))
+			result = append(result, translateRule(rule, staticContext, usedVariables, usedStrings, usedSlices))
 		}
 		return strings.Join(result, operator)
 	}
