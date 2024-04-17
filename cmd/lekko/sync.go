@@ -29,6 +29,7 @@ import (
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/iancoleman/strcase"
+	"github.com/lainio/err2/assert"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
@@ -172,14 +173,13 @@ func findMessageType(x *ast.CompositeLit, registry *protoregistry.Types) protore
 		if strings.Contains(string(fullName), "_") {
 			outerMessageDescriptor, err := registry.FindMessageByName(protoreflect.FullName(strings.Split(string(fullName), "_")[0]))
 			if err == nil {
-
 				for i := 0; i < outerMessageDescriptor.Descriptor().Messages().Len(); i = i + 1 {
 					newMT := dynamicpb.NewMessageType(outerMessageDescriptor.Descriptor().Messages().Get(i))
-					registry.RegisterMessage(newMT)
+					err := registry.RegisterMessage(newMT)
+					assert.NoError(err, "register nested message")
 					mt = newMT
 				}
 			}
-
 		} else if mt == nil {
 			log.Fatal("this strange bug above didn't catch this error", err)
 		}
@@ -195,8 +195,11 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 	mt := findMessageType(x, registry)
 	msg := mt.New()
 	for _, v := range x.Elts {
-		kv := v.(*ast.KeyValueExpr)
-		name := strcase.ToSnake(kv.Key.(*ast.Ident).Name)
+		kv, ok := v.(*ast.KeyValueExpr)
+		assert.Equal(ok, true)
+		keyIdent, ok := kv.Key.(*ast.Ident)
+		assert.Equal(ok, true)
+		name := strcase.ToSnake(keyIdent.Name)
 		field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
 		if field == nil {
 			continue // TODO...
@@ -217,17 +220,15 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 				}
 				// TODO - parse/validate based on field Kind
 				if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
-					if err != nil {
-						panic(err)
-					}
 					msg.Set(field, protoreflect.ValueOf(intValue))
+				} else {
+					panic(err)
 				}
 			case token.FLOAT:
 				if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
-					if err != nil {
-						panic(err)
-					}
 					msg.Set(field, protoreflect.ValueOf(floatValue))
+				} else {
+					panic(err)
 				}
 			default:
 				fmt.Printf("NV: %s\n", node.Value)
@@ -269,8 +270,11 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 					panic("Unknown Type")
 				}
 				for _, elt := range node.Elts {
-					pair := elt.(*ast.KeyValueExpr)
-					key := protoreflect.ValueOfString(strings.Trim(pair.Key.(*ast.BasicLit).Value, "\"")).MapKey()
+					pair, ok := elt.(*ast.KeyValueExpr)
+					assert.Equal(ok, true)
+					basicLit, ok := pair.Key.(*ast.BasicLit)
+					assert.Equal(ok, true)
+					key := protoreflect.ValueOfString(strings.Trim(basicLit.Value, "\"")).MapKey()
 					switch v := pair.Value.(type) {
 					case *ast.BasicLit:
 						switch v.Kind {
@@ -287,17 +291,15 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 							}
 							// TODO - parse/validate based on field Kind
 							if intValue, err := strconv.ParseInt(v.Value, 10, 64); err == nil {
-								if err != nil {
-									panic(err)
-								}
 								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(intValue))
+							} else {
+								panic(err)
 							}
 						case token.FLOAT:
 							if floatValue, err := strconv.ParseFloat(v.Value, 64); err == nil {
-								if err != nil {
-									panic(err)
-								}
 								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(floatValue))
+							} else {
+								panic(err)
 							}
 						default:
 							fmt.Printf("NV: %s\n", v.Value)
@@ -319,10 +321,8 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 		default:
 			fmt.Printf("ETP: %#v\n", node)
 		}
-
 	}
 	return msg
-
 }
 
 func exprToComparisonValue(expr ast.Expr) *structpb.Value {
@@ -421,16 +421,20 @@ func binaryExprToRule(expr *ast.BinaryExpr) *rulesv1beta3.Rule {
 func callExprToRule(expr *ast.CallExpr) *rulesv1beta3.Rule {
 	// TODO check Fun
 	//fmt.Printf("\t%+v\n", expr.Fun)
-	switch expr.Fun.(*ast.SelectorExpr).X.(*ast.Ident).Name { // TODO... brittle..
+	selectorExpr, ok := expr.Fun.(*ast.SelectorExpr)
+	assert.Equal(ok, true)
+	ident, ok := selectorExpr.X.(*ast.Ident)
+	assert.Equal(ok, true)
+	switch ident.Name { // TODO... brittle..
 	case "slices":
-		switch expr.Fun.(*ast.SelectorExpr).Sel.Name {
+		switch selectorExpr.Sel.Name {
 		case "Contains":
 			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN, ContextKey: exprToValue(expr.Args[1]), ComparisonValue: exprToComparisonValue(expr.Args[0])}}}
 		default:
 			panic("Ahhhh")
 		}
 	case "strings":
-		switch expr.Fun.(*ast.SelectorExpr).Sel.Name {
+		switch selectorExpr.Sel.Name {
 		case "Contains":
 			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS, ContextKey: exprToValue(expr.Args[0]), ComparisonValue: exprToComparisonValue(expr.Args[1])}}}
 		case "HasPrefix":
@@ -443,7 +447,6 @@ func callExprToRule(expr *ast.CallExpr) *rulesv1beta3.Rule {
 	default:
 		panic("Ahhhh")
 	}
-	return &rulesv1beta3.Rule{}
 }
 
 func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
@@ -460,9 +463,13 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types, want featurev1beta1.FeatureType) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
 	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
-	constraint.Value = exprToAny(ifStmt.Body.List[0].(*ast.ReturnStmt).Results[0], registry, want) // TODO
-	if ifStmt.Else != nil {                                                                        // TODO bare else?
-		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(ifStmt.Else.(*ast.IfStmt), registry, want)...)
+	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
+	assert.Equal(ok, true)
+	constraint.Value = exprToAny(returnStmt.Results[0], registry, want) // TODO
+	if ifStmt.Else != nil {                                             // TODO bare else?
+		elseIfStmt, ok := ifStmt.Else.(*ast.IfStmt)
+		assert.Equal(ok, true)
+		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(elseIfStmt, registry, want)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
 }

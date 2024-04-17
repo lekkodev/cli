@@ -301,7 +301,7 @@ func (w *walker) buildRulesFn(f *featurev1beta1.StaticFeature) overridesFn {
 				Rule:       rulesLang,
 				RuleAstNew: astNew,
 			}
-			protoVal, featureType, err := w.extractValue(&o.v, f)
+			protoVal, featureType, err := w.extractValue(&o.v, f) // #nosec G601
 			if err != nil {
 				return errors.Wrapf(err, "rule #%d: extract value", i)
 			}
