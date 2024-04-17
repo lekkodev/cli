@@ -279,8 +279,9 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 	// default branch name. Query remote, and save the result
 	remote, err := r.repo.Remote(RemoteName)
 	if err != nil {
-		//return errors.Wrap(err, "remote")
-		//lint:ignore nilerr Why do we need a remote?  We don't need no stinking remote
+		defaultBranch = "main"
+		r.defaultBranch = defaultBranch
+		//lint:ignore nilerr no remote, default to "main"
 		return nil
 	}
 	if len(remote.Config().URLs) == 0 {

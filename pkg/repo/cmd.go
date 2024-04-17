@@ -30,7 +30,6 @@ import (
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -58,6 +57,9 @@ type Repository struct {
 	Description string
 	URL         string
 }
+
+var ErrRemoteHasChanges = errors.New("Remote repository has new changes, " +
+	fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko pull")))
 
 func (r *RepoCmd) List(ctx context.Context) ([]*Repository, error) {
 	resp, err := r.lekkoBFFClient.ListRepositories(ctx, connect_go.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
@@ -239,18 +241,8 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	}
 
 	// Pull to get remote branches
-	w, err := gitRepo.Worktree()
+	err = GitPull(gitRepo, r.rs)
 	if err != nil {
-		return errors.Wrap(err, "get worktree")
-	}
-	err = w.Pull(&git.PullOptions{
-		RemoteName: "origin",
-		Auth: &http.BasicAuth{
-			Username: r.rs.GetGithubUser(),
-			Password: r.rs.GetGithubToken(),
-		},
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "pull from GitHub")
 	}
 
@@ -273,36 +265,6 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	}))
 	if err != nil {
 		return errors.Wrap(err, "import repository into Lekko")
-	}
-	return nil
-}
-
-func ResetAndClean(gitRepo *git.Repository) error {
-	worktree, err := gitRepo.Worktree()
-	if err != nil {
-		return errors.Wrap(err, "get worktree")
-	}
-	head, err := gitRepo.Head()
-	if err != nil {
-		return errors.Wrap(err, "get head")
-	}
-	err = worktree.Reset(&git.ResetOptions{
-		Commit: head.Hash(),
-		Mode:   git.HardReset,
-	})
-	if err != nil {
-		return errors.Wrap(err, "reset")
-	}
-	err = worktree.Clean(&git.CleanOptions{Dir: true})
-	if err != nil {
-		return errors.Wrap(err, "clean")
-	}
-
-	err = worktree.Checkout(&git.CheckoutOptions{
-		Branch: plumbing.NewBranchReferenceName("main"),
-	})
-	if err != nil {
-		return errors.Wrap(err, "checkout main")
 	}
 	return nil
 }
@@ -360,11 +322,33 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		return errors.New("No remote found, please finish setup instructions")
 	}
 
-	// run 2-way sync
 	lekkoPath, err := DetectLekkoPath()
 	if err != nil || len(lekkoPath) == 0 {
 		return errors.New("could not find a valid lekko/ directory in file tree")
 	}
+	lekkoLock := &LekkoLock{}
+	err = lekkoLock.ReadLekkoLock(lekkoPath)
+	if err != nil {
+		return errors.Wrap(err, "read lekko lock")
+	}
+
+	err = ResetAndClean(gitRepo)
+	if err != nil {
+		return errors.Wrap(err, "reset and clean")
+	}
+	err = GitPull(gitRepo, r.rs)
+	if err != nil {
+		return errors.Wrap(err, "pull from GitHub")
+	}
+	head, err := gitRepo.Head()
+	if err != nil {
+		return errors.Wrap(err, "get head")
+	}
+	if head.Hash().String() != lekkoLock.Commit {
+		return ErrRemoteHasChanges
+	}
+
+	// run 2-way sync
 	tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
 	output, err := tsSyncCmd.CombinedOutput()
 	fmt.Println(string(output))
@@ -431,8 +415,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if strings.Contains(err.Error(), "non-fast-forward update") {
-			return errors.New("Remote repository has new changes, " +
-				fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko pull")))
+			return ErrRemoteHasChanges
 		}
 		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
@@ -450,7 +433,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 		fmt.Println("Already up to date.")
 		return nil
 	}
-	head, err := gitRepo.Head()
+	head, err = gitRepo.Head()
 	if err != nil {
 		return err
 	}
@@ -459,13 +442,6 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 
 	// Take commit SHA for synchronizing with code repo
 	if !skipLock {
-		lekkoPath, err := DetectLekkoPath()
-		if err != nil {
-			return errors.Wrap(err, "detect lekko path")
-		}
-		if lekkoPath == "" {
-			return errors.New("could not find a valid lekko/ directory in file tree")
-		}
 		lekkoLock := &LekkoLock{Commit: headSHA}
 		if err := lekkoLock.WriteFile(lekkoPath); err != nil {
 			return errors.Wrap(err, "write lockfile")
@@ -473,19 +449,5 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	}
 
 	// Pull to get remote branches
-	w, err := gitRepo.Worktree()
-	if err != nil {
-		return err
-	}
-	err = w.Pull(&git.PullOptions{
-		RemoteName: "origin",
-		Auth: &http.BasicAuth{
-			Username: r.rs.GetGithubUser(),
-			Password: r.rs.GetGithubToken(),
-		},
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		return err
-	}
-	return nil
+	return GitPull(gitRepo, r.rs)
 }
