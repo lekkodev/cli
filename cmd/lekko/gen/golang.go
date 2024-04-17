@@ -58,7 +58,7 @@ const defaultOutputPath = "internal/lekko"
 func structpbValueToKindStringGo(v *structpb.Value) string {
 	switch v.GetKind().(type) {
 	case *structpb.Value_NumberValue:
-		// technically doubles may not work for ints....
+		// TODO: figure out how to handle this ambiguity better
 		return "float64"
 	case *structpb.Value_BoolValue:
 		return "bool"
@@ -800,6 +800,7 @@ package lekko
 
 import (
 	"context"
+	"os"
 
 	client "github.com/lekkodev/go-sdk/client"
 	{{- range $.Namespaces}}
@@ -812,11 +813,17 @@ type LekkoClient struct {
 	Close client.CloseFunc
 }
 
+// Initializes the Lekko SDK client.
+// For remote configs to be fetched correctly, the LEKKO_API_KEY, LEKKO_REPOSITORY_OWNER, and LEKKO_REPOSITORY_NAME env variables are required.
+// If these values are missing or if there are any connection errors, the static fallbacks will be used.
 func NewLekkoClient(ctx context.Context) *LekkoClient {
+	apiKey := os.Getenv("LEKKO_API_KEY")
+	repoOwner := os.Getenv("LEKKO_REPOSITORY_OWNER")
+	repoName := os.Getenv("LEKKO_REPOSITORY_NAME")
 	provider, _ := client.CachedAPIProvider(ctx, &client.RepositoryKey{
-		OwnerName: "",
-		RepoName: "",
-	})
+		OwnerName: repoOwner,
+		RepoName: repoName,
+	}, client.WithAPIKey(apiKey))
 	cli, close := client.NewClient(provider)
 	return &LekkoClient{
 		{{- range $.Namespaces}}
