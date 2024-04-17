@@ -322,26 +322,6 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 	}
 }
 
-// Template body for json config code
-// TODO: Actually figure out how we want to do json configs
-func getJSONTemplateBody() *configCodeTemplate { //nolint:unused,deadcode
-	return &configCodeTemplate{
-		public: `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}(ctx context.Context, result interface{}) {
-		{{ $.CtxStuff }}
-		err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
-	if err == nil {
-		return result
-		}
-		return {{$.PrivateFunc}}({{$.CallString}})
-}`,
-		private: `// {{$.Description}}
-// func {{$.PrivateFunc}}(ctx context.Context, result interface{}) {
-//  	{{range  $.NaturalLanguage}}{{ . }}{{end}}
-//}`,
-	}
-}
-
 // Template body for configs that are top-level enums
 // TODO: This isn't actually supported, figure this out as well
 // Includes const declarations for the enums
@@ -439,8 +419,7 @@ func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *fea
 			}
 		}
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
-		// getFunction = "GetJSON"
-		// templateBody = getJSONTemplateBody()
+		// TODO: Actually figure out how we want to do json configs
 		return nil, fmt.Errorf("unsupported json config %s/%s", ns, f.Key)
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
