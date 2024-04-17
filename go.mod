@@ -38,7 +38,7 @@ require (
 )
 
 require (
-	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.33.0-20230419180142-0694c10ef23c.1 // indirect
+	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.33.0-20230810202034-1c821065b9a0.1 // indirect
 	dario.cat/mergo v1.0.0 // indirect
 	github.com/Microsoft/go-winio v0.6.1 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect

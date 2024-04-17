@@ -18,7 +18,6 @@ linters:
     - bodyclose
     - containedctx
     - contextcheck
-    - deadcode
     - decorder
     # - depguard
     - dogsled
@@ -49,12 +48,10 @@ linters:
     - promlinter
     - rowserrcheck
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unused
-    - varcheck
     - wastedassign
     - whitespace
     - unparam
