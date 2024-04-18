@@ -152,7 +152,10 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 		if err := proto.Unmarshal(fff, f); err != nil {
 			return err
 		}
-		generated := try.To1(g.genGoForFeature(ctx, r, f, g.namespace, staticCtxType))
+		generated, err := g.genGoForFeature(ctx, r, f, g.namespace, staticCtxType)
+		if err != nil {
+			return errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
+		}
 		publicFuncStrings = append(publicFuncStrings, generated.public)
 		privateFuncStrings = append(privateFuncStrings, generated.private)
 		if generated.usedStrings {
@@ -859,14 +862,15 @@ type LekkoClient struct {
 // Initializes the Lekko SDK client.
 // For remote configs to be fetched correctly, the LEKKO_API_KEY, LEKKO_REPOSITORY_OWNER, and LEKKO_REPOSITORY_NAME env variables are required.
 // If these values are missing or if there are any connection errors, the static fallbacks will be used.
-func NewLekkoClient(ctx context.Context) *LekkoClient {
+func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoClient {
 	apiKey := os.Getenv("LEKKO_API_KEY")
 	repoOwner := os.Getenv("LEKKO_REPOSITORY_OWNER")
 	repoName := os.Getenv("LEKKO_REPOSITORY_NAME")
+	opts = append(opts, client.WithAPIKey(apiKey))
 	provider, err := client.CachedAPIProvider(ctx, &client.RepositoryKey{
 		OwnerName: repoOwner,
 		RepoName: repoName,
-	}, client.WithAPIKey(apiKey))
+	}, opts...)
 	if err != nil {
 		provider = &noOpProvider{}
 	}
