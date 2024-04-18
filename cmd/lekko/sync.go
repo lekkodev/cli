@@ -62,8 +62,9 @@ type Namespace struct {
 }
 
 func exprToValue(expr ast.Expr) string {
-	// This works better than it should...
-	return fmt.Sprintf("%s", expr)
+	ident, ok := expr.(*ast.Ident)
+	assert.Equal(ok, true, "value expr is not an identifier")
+	return strcase.ToSnake(ident.Name)
 }
 
 // TODO -- We know the return type..
@@ -72,7 +73,7 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types, want featurev1beta1
 	case *ast.BasicLit:
 		switch node.Kind {
 		case token.STRING:
-			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"")})
+			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"`")})
 			if err != nil {
 				panic(err)
 			}
@@ -208,7 +209,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 		case *ast.BasicLit:
 			switch node.Kind {
 			case token.STRING:
-				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
+				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"`")))
 			case token.INT:
 				if field.Kind() == protoreflect.EnumKind {
 					intValue, err := strconv.ParseInt(node.Value, 10, 32)
@@ -279,7 +280,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 					case *ast.BasicLit:
 						switch v.Kind {
 						case token.STRING:
-							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"")))
+							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"`")))
 						case token.INT:
 							if field.Kind() == protoreflect.EnumKind {
 								intValue, err := strconv.ParseInt(v.Value, 10, 32)
@@ -332,7 +333,7 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 		case token.STRING:
 			return &structpb.Value{
 				Kind: &structpb.Value_StringValue{
-					StringValue: strings.Trim(node.Value, "\""),
+					StringValue: strings.Trim(node.Value, "\"`"),
 				},
 			}
 		case token.INT:
