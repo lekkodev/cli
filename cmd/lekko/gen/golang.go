@@ -59,6 +59,15 @@ type goGenerator struct {
 	typeRegistry *protoregistry.Types
 }
 
+func NewGoGenerator(moduleRoot, outputPath, repoPath, namespace string) *goGenerator {
+	return &goGenerator{
+		moduleRoot: moduleRoot,
+		outputPath: outputPath,
+		repoPath:   repoPath,
+		namespace:  namespace,
+	}
+}
+
 // TODO make this work for GO
 func structpbValueToKindStringGo(v *structpb.Value) string {
 	switch v.GetKind().(type) {
@@ -83,7 +92,7 @@ func GenGoCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			b, err := os.ReadFile("go.mod")
 			if err != nil {
-				return errors.Wrap(err, "find go.mod in current directory")
+				return errors.Wrap(err, "find go.mod in working directory")
 			}
 			mf, err := modfile.ParseLax("go.mod", b, nil)
 			if err != nil {
@@ -96,13 +105,8 @@ func GenGoCmd() *cobra.Command {
 				}
 				rp = rs.GetLekkoRepoPath()
 			}
-			generator := &goGenerator{
-				moduleRoot: mf.Module.Mod.Path,
-				outputPath: op,
-				repoPath:   rp,
-				namespace:  ns,
-			}
-			return generator.gen(cmd.Context())
+			generator := NewGoGenerator(mf.Module.Mod.Path, op, rp, ns)
+			return generator.Gen(cmd.Context())
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
@@ -112,7 +116,7 @@ func GenGoCmd() *cobra.Command {
 	return cmd
 }
 
-func (g *goGenerator) gen(ctx context.Context) error {
+func (g *goGenerator) Gen(ctx context.Context) error {
 	rs := secrets.NewSecretsOrFail()
 	r, err := repo.NewLocal(g.repoPath, rs)
 	if err != nil {
