@@ -182,10 +182,10 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 package lekko{{$.Namespace}}
 
 import (
-"context"
+	"context"
 {{range $.ProtoImports}}
-{{ . }}{{end}}
-client "github.com/lekkodev/go-sdk/client"
+	{{ . }}{{end}}
+	client "github.com/lekkodev/go-sdk/client"
 )
 
 type LekkoClient struct {
@@ -201,12 +201,14 @@ client.Client
 	//   - but if doing 2-way and directive already exists, should respect original
 	const privateFileTemplateBody = `package lekko{{$.Namespace}}
 
+{{if or $.AddStringsImport $.AddSlicesImport (gt (len $.ProtoImports) 0)}}
 import (
-{{if $.AddStringsImport}}"strings"{{end}}
+	{{if $.AddStringsImport}}"strings"{{end}}
 {{range $.ProtoImports}}
-{{ . }}{{end}}
-{{if $.AddSlicesImport}}"golang.org/x/exp/slices"{{end}}
+	{{ . }}{{end}}
+	{{if $.AddSlicesImport}}"golang.org/x/exp/slices"{{end}}
 )
+{{end}}
 
 {{range $.PrivateFuncStrings}}
 {{ . }}{{end}}`
