@@ -98,6 +98,7 @@ func GenGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Sort configs in alphabetical order
 			sort.SliceStable(ffs, func(i, j int) bool {
 				return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 			})
@@ -239,7 +240,6 @@ import (
 				// Final canonical Go format
 				formatted, err := format.Source(contents.Bytes())
 				if err != nil {
-					fmt.Printf("dbg// fmt %v\n", contents.String())
 					return errors.Wrap(err, fmt.Sprintf("format %s", output.fileName))
 				}
 				if f, err := os.Create(path.Join(defaultOutputPath, ns, output.fileName)); err != nil {
@@ -469,14 +469,16 @@ func genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *fea
 		data.CtxStuff = "ctx := context.Background()\n"
 		data.NaturalLanguage = translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
+		var ctxAddLines []string
 		for f, t := range usedVariables {
 			arguments = append(arguments, fmt.Sprintf("%s %s", strcase.ToLowerCamel(f), t))
-			// TODO: sort this as well
-			data.CtxStuff += fmt.Sprintf("ctx = client.Add(ctx, \"%s\", %s)\n", f, strcase.ToLowerCamel(f))
+			ctxAddLines = append(ctxAddLines, fmt.Sprintf("ctx = client.Add(ctx, \"%s\", %s)", f, strcase.ToLowerCamel(f)))
 		}
 		// TODO: Sorting by name might not be the best solution for long-term UX... but it's simple and it works for now
 		slices.Sort(arguments)
+		slices.Sort(ctxAddLines)
 		data.ArgumentString = strings.Join(arguments, ", ")
+		data.CtxStuff += strings.Join(ctxAddLines, "\n")
 		var keys []string
 		for f := range usedVariables {
 			keys = append(keys, strcase.ToLowerCamel(f))
@@ -713,15 +715,22 @@ func FieldValueToString(parent protoreflect.Message, f protoreflect.FieldDescrip
 		case protoreflect.MessageKind:
 			if f.IsMap() {
 				var lines []string
-				res := fmt.Sprintf("map[%s]%s{ ", f.MapKey().Kind().String(), f.MapValue().Kind().String()) // TODO - this probbaly breaks for nested
+				res := fmt.Sprintf("map[%s]%s{", f.MapKey().Kind().String(), f.MapValue().Kind().String()) // TODO - this probbaly breaks for nested
 				val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
 					lines = append(lines, fmt.Sprintf("\"%s\": %s",
 						mk.String(),
 						FieldValueToString(parent, f.MapValue(), mv, protoType)))
 					return true
 				})
-				res += strings.Join(lines, ", ")
-				res += " }"
+				if len(lines) > 1 {
+					slices.Sort(lines)
+					res += "\n"
+					res += strings.Join(lines, ",\n")
+					res += ",\n}"
+				} else {
+					res += strings.Join(lines, "")
+					res += "}"
+				}
 				return res
 			} else if f.IsList() {
 				panic(fmt.Sprintf("Do not know how to count: %+v", f))
@@ -770,8 +779,13 @@ func translateProtoValue(msg protoreflect.ProtoMessage, protoType *ProtoImport) 
 		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), FieldValueToString(msg.ProtoReflect(), f, val, protoType)))
 		return true
 	})
-	// Replace this with interface pointing stuff
-	return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ", "))
+	if len(lines) > 1 {
+		slices.Sort(lines)
+		// Replace this with interface pointing stuff
+		return fmt.Sprintf("&%s.%s{\n%s,\n}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ",\n"))
+	} else {
+		return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ""))
+	}
 }
 
 // TODO: Generify
