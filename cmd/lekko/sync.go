@@ -662,6 +662,10 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 			return errors.Wrap(err, "write after mutation")
 		}
 
+		// TODO: Consider silencing compile output or batching them somehow - right now it's very verbose
+		// r.ConfigureLogger(&repo.LoggingConfiguration{
+		// 	Writer: io.Discard,
+		// })
 		// compile newly generated starlark file
 		_, err = r.Compile(ctx, &repo.CompileRequest{
 			Registry:        registry,

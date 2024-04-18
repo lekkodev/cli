@@ -66,7 +66,7 @@ func bisyncGoCmd() *cobra.Command {
 					if err := generator.Gen(ctx); err != nil {
 						return errors.Wrapf(err, "generate code for %s", namespace)
 					}
-					fmt.Printf("Successfully bisynced namespace %s\n", logging.Bold(p))
+					fmt.Printf("Successfully bisynced %s\n", logging.Bold(p))
 				}
 				// Ignore others
 				return nil
