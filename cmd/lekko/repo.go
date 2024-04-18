@@ -472,6 +472,7 @@ func pullCmd() *cobra.Command {
 			lekkoLock := &repo.LekkoLock{}
 			err = lekkoLock.ReadLekkoLock(lekkoPath)
 			if err != nil || len(lekkoLock.Commit) == 0 {
+				fmt.Println("No lekko.lock file found, syncing from remote")
 				// no lekko lock, sync from remote
 				if !force {
 					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
