@@ -1,5 +1,3 @@
-run:
-  skip-dirs-use-default: false
 linters-settings:
   errcheck:
     check-type-assertions: true
@@ -8,6 +6,7 @@ linters-settings:
       - "^print$"
       - "^println$"
 issues:
+  exclude-dirs-use-default: false
   exclude-rules:
     - path: cmd/lekko/main.go
       text: "File is not `goimports`-ed"

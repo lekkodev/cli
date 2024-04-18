@@ -272,11 +272,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 func DetectLekkoPath() (string, error) {
 	// Walk through fs tree until we find lekko/, the managed directory
 	var lekkoPath string
-	wd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	if err := filepath.WalkDir(wd, func(path string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -305,7 +301,7 @@ func DetectLekkoPath() (string, error) {
 	return lekkoPath, nil
 }
 
-func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skipLock bool) error {
+func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forceLock bool) error {
 	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
 	if err != nil {
 		return err
@@ -326,11 +322,6 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	if err != nil || len(lekkoPath) == 0 {
 		return errors.New("could not find a valid lekko/ directory in file tree")
 	}
-	lekkoLock := &LekkoLock{}
-	err = lekkoLock.ReadLekkoLock(lekkoPath)
-	if err != nil {
-		return errors.Wrap(err, "read lekko lock")
-	}
 
 	err = ResetAndClean(gitRepo)
 	if err != nil {
@@ -344,8 +335,18 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	if err != nil {
 		return errors.Wrap(err, "get head")
 	}
-	if head.Hash().String() != lekkoLock.Commit {
-		return ErrRemoteHasChanges
+
+	lekkoLock := &LekkoLock{}
+	err = lekkoLock.ReadLekkoLock(lekkoPath)
+	// ignore err if forceLock == true
+	if !forceLock {
+		if err != nil {
+			// TODO: explain it better
+			return errors.New("No valid lekko.lock found, please run with --force flag to push anyway")
+		}
+		if head.Hash().String() != lekkoLock.Commit {
+			return ErrRemoteHasChanges
+		}
 	}
 
 	// run 2-way sync
@@ -441,11 +442,9 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, skip
 	fmt.Printf("Successfully pushed changes as %s\n", headSHA)
 
 	// Take commit SHA for synchronizing with code repo
-	if !skipLock {
-		lekkoLock := &LekkoLock{Commit: headSHA}
-		if err := lekkoLock.WriteFile(lekkoPath); err != nil {
-			return errors.Wrap(err, "write lockfile")
-		}
+	lekkoLock.Commit = headSHA
+	if err := lekkoLock.WriteFile(lekkoPath); err != nil {
+		return errors.Wrap(err, "write lockfile")
 	}
 
 	// Pull to get remote branches

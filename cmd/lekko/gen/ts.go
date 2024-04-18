@@ -21,6 +21,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -133,6 +134,27 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 	}
 
 	return fmt.Sprintf("{%s}: %s", strings.Join(fields, ", "), d.Name())
+}
+
+// Pipe `GenTS` to prettier
+func GenFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error {
+	prettierCmd := exec.Command("npx", "prettier", "--parser", "typescript")
+	stdinPipe, err := prettierCmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+	err = GenTS(ctx, repoPath, ns, func() (io.Writer, error) {
+		return stdinPipe, nil
+	})
+	if err != nil {
+		return err
+	}
+	stdinPipe.Close()
+	out, err := prettierCmd.Output()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(outFilename, out, 0600)
 }
 
 func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer, error)) error {
