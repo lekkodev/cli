@@ -17,7 +17,7 @@ require (
 	github.com/go-git/go-git/v5 v5.12.0
 	github.com/google/go-github/v52 v52.0.0
 	github.com/iancoleman/strcase v0.3.0
-	github.com/lainio/err2 v0.9.51
+	github.com/lainio/err2 v1.0.0
 	github.com/lekkodev/go-sdk v0.4.0
 	github.com/lekkodev/rules v1.5.3-0.20240206041635-dda452b36d1c
 	github.com/migueleliasweb/go-github-mock v0.0.16
