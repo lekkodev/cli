@@ -19,6 +19,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -356,19 +357,19 @@ func remoteCmd() *cobra.Command {
 
 func pushCmd() *cobra.Command {
 	var commitMessage, repoPath string
-	var skipLock bool
+	var forceLock bool
 	cmd := &cobra.Command{
 		Use:   "push",
 		Short: "Push local changes to remote Lekko repo. Typescript only.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-			return repo.Push(cmd.Context(), repoPath, commitMessage, skipLock)
+			return repo.Push(cmd.Context(), repoPath, commitMessage, forceLock)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
-	cmd.Flags().BoolVar(&skipLock, "skip-lock", false, "whether to skip version locking")
+	cmd.Flags().BoolVarP(&forceLock, "force", "f", false, "whether to force push, ignoring base commit information from lekko.lock")
 	return cmd
 }
 
@@ -414,8 +415,52 @@ func pathCmd() *cobra.Command {
 	return cmd
 }
 
+func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(lekkoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && d.Name() == "gen" {
+			return fs.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func HasLekkoChanges(lekkoPath string) (bool, error) {
+	codeRepo, err := git.PlainOpen(".")
+	if err != nil {
+		return false, err
+	}
+	wt, err := codeRepo.Worktree()
+	if err != nil {
+		return false, err
+	}
+	st, err := wt.Status()
+	if err != nil {
+		return false, err
+	}
+	for p, s := range st {
+		if strings.HasPrefix(p, lekkoPath) {
+			if s.Staging != git.Unmodified || s.Worktree != git.Unmodified {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func pullCmd() *cobra.Command {
 	var repoPath string
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull",
 		Short: "Pull remote changes and merge them with local changes. Typescript only.",
@@ -426,8 +471,29 @@ func pullCmd() *cobra.Command {
 			}
 			lekkoLock := &repo.LekkoLock{}
 			err = lekkoLock.ReadLekkoLock(lekkoPath)
-			if err != nil {
-				return errors.Wrap(err, "read lekko lock")
+			if err != nil || len(lekkoLock.Commit) == 0 {
+				// no lekko lock, sync from remote
+				if !force {
+					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
+					if err != nil {
+						return errors.New("Lekko requires code to be in a git repository")
+					}
+					if hasLekkoChanges {
+						return fmt.Errorf("please commit or stash changes in '%s' directory before pulling", lekkoPath)
+					}
+				}
+				nativeFiles, err := ListNativeConfigFiles(lekkoPath, ".ts")
+				if err != nil {
+					return err
+				}
+				for _, f := range nativeFiles {
+					ns := strings.TrimSuffix(filepath.Base(f), ".ts")
+					err := gen.GenFormattedTS(cmd.Context(), repoPath, ns, f)
+					if err != nil {
+						return err
+					}
+				}
+				return nil
 			}
 
 			// this should be safe as we generate all changes from native lang
@@ -498,6 +564,7 @@ func pullCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "allow dirty git state when pulling without valid lekko.lock")
 	return cmd
 }
 
@@ -551,26 +618,6 @@ func mergeFileCmd() *cobra.Command {
 				return errors.Wrap(err, "get worktree")
 			}
 
-			genTS := func(outFilename string) error {
-				prettierCmd := exec.Command("npx", "prettier", "--parser", "typescript")
-				stdinPipe, err := prettierCmd.StdinPipe()
-				if err != nil {
-					return err
-				}
-				err = gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
-					return stdinPipe, nil
-				})
-				if err != nil {
-					return err
-				}
-				stdinPipe.Close()
-				out, err := prettierCmd.Output()
-				if err != nil {
-					return err
-				}
-				return os.WriteFile(outFilename, out, 0600)
-			}
-
 			// base
 			err = worktree.Checkout(&git.CheckoutOptions{
 				Hash: plumbing.NewHash(lekkoLock.Commit),
@@ -579,7 +626,7 @@ func mergeFileCmd() *cobra.Command {
 				return errors.Wrap(err, fmt.Sprintf("checkout %s", lekkoLock.Commit))
 			}
 			baseFilename := tsFilename + ".base"
-			err = genTS(baseFilename)
+			err = gen.GenFormattedTS(cmd.Context(), repoPath, ns, baseFilename)
 			if err != nil {
 				return errors.Wrap(err, "gen ts: base")
 			}
@@ -611,7 +658,7 @@ func mergeFileCmd() *cobra.Command {
 				return errors.Wrap(err, "checkout main")
 			}
 			remoteFilename := tsFilename + ".remote"
-			err = genTS(remoteFilename)
+			err = gen.GenFormattedTS(cmd.Context(), repoPath, ns, remoteFilename)
 			if err != nil {
 				return errors.Wrap(err, "gen ts: remote")
 			}
