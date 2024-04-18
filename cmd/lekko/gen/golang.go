@@ -89,6 +89,13 @@ func GenGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if rp == "" {
+				rs := secrets.NewSecretsOrFail()
+				if len(rs.GetLekkoRepoPath()) == 0 {
+					return errors.New("no local config repository available, pass '--config-path' or use 'lekko repo path --set'")
+				}
+				rp = rs.GetLekkoRepoPath()
+			}
 			generator := &goGenerator{
 				moduleRoot: mf.Module.Mod.Path,
 				outputPath: op,
@@ -101,7 +108,7 @@ func GenGoCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	// TODO: should be read from Lekko config file
 	cmd.Flags().StringVarP(&op, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under")
-	cmd.Flags().StringVarP(&rp, "config-path", "c", ".", "path to configuration repository")
+	cmd.Flags().StringVarP(&rp, "config-path", "c", "", "path to config repository, will use from 'lekko repo path' if not set")
 	return cmd
 }
 
