@@ -22,6 +22,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/browser"
+	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/apikey"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
@@ -145,9 +146,25 @@ func setupCmd() *cobra.Command {
 					}
 					repoPath = filepath.Join(base, rs.GetLekkoTeam(), githubRepo)
 				}
-				_, err := repo.NewLocalClone(repoPath, githubRepoURL, rs)
-				if err != nil {
-					return err
+				if _, err := os.Stat(repoPath); err == nil {
+					gitRepo, err := git.PlainOpen(repoPath)
+					if err != nil {
+						return errors.Wrapf(err, "invalid git repo at %s", repoPath)
+					}
+					remote, err := gitRepo.Remote("origin")
+					if err != nil {
+						return errors.Wrapf(err, "invalid git repo at %s", repoPath)
+					}
+					if len(remote.Config().URLs) == 0 || remote.Config().URLs[0] != githubRepoURL {
+						return errors.Errorf("repo already exists at %s but with different origin: %s", repoPath, remote.Config().URLs[0])
+					}
+					fmt.Printf("Repo already exists at %s\n\n", repoPath)
+				} else {
+					_, err := repo.NewLocalClone(repoPath, githubRepoURL, rs)
+					if err != nil {
+						return err
+					}
+					fmt.Printf("Cloned into %s\n\n", repoPath)
 				}
 				err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 					ws.SetLekkoRepoPath(repoPath)
@@ -158,7 +175,6 @@ func setupCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
-				fmt.Printf("Cloned into %s\n\n", repoPath)
 			} else {
 				for {
 					if len(githubOrgName) > 0 {

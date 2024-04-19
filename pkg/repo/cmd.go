@@ -18,6 +18,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -269,6 +270,26 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	return nil
 }
 
+func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(lekkoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && d.Name() == "gen" {
+			return fs.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) error {
 	// TODO: Can clone based on info from dotlekko
 	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
@@ -301,13 +322,37 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forc
 		return errors.Wrap(err, "get head")
 	}
 
-	// ignore err if forceLock == true
+	configRepo, err := NewLocal(repoPath, r.rs)
+	if err != nil {
+		return errors.Wrap(err, "failed to open config repo")
+	}
+
+	updatesExistingNamespace := false
+	rootMD, _, err := configRepo.ParseMetadata(ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse config repo metadata")
+	}
+	nsMap := make(map[string]bool)
+	for _, ns := range rootMD.Namespaces {
+		nsMap[ns] = true
+	}
+	nativeFiles, err := ListNativeConfigFiles(lekkoPath, ".ts")
+	if err != nil {
+		return errors.Wrap(err, "list native config files")
+	}
+	for _, f := range nativeFiles {
+		ns := strings.TrimSuffix(filepath.Base(f), ".ts")
+		if _, ok := nsMap[ns]; ok {
+			updatesExistingNamespace = true
+		}
+	}
+
 	if !forceLock {
-		if len(dot.LockSHA) == 0 {
-			// TODO: explain it better
+		// no lock and there is a potential conflict
+		if len(dot.LockSHA) == 0 && updatesExistingNamespace {
 			return errors.New("No Lekko lock information found, please run with --force flag to push anyway")
 		}
-		if head.Hash().String() != dot.LockSHA {
+		if len(dot.LockSHA) > 0 && head.Hash().String() != dot.LockSHA {
 			return ErrRemoteHasChanges
 		}
 	}
@@ -320,11 +365,7 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forc
 		return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
 	}
 
-	configRepo, err := NewLocal(repoPath, r.rs)
-	if err != nil {
-		return errors.Wrap(err, "failed to open config repo")
-	}
-	rootMD, _, err := configRepo.ParseMetadata(ctx)
+	rootMD, _, err = configRepo.ParseMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to parse config repo metadata")
 	}

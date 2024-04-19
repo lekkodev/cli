@@ -19,7 +19,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path"
@@ -420,26 +419,6 @@ func pathCmd() *cobra.Command {
 	return cmd
 }
 
-func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(lekkoPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() && d.Name() == "gen" {
-			return fs.SkipDir
-		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) {
-			files = append(files, path)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
 func HasLekkoChanges(lekkoPath string) (bool, error) {
 	codeRepo, err := git.PlainOpen(".")
 	if err != nil {
@@ -474,37 +453,7 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "read Lekko configuration file")
 			}
-			lekkoPath := dot.LekkoPath
-			if len(dot.LockSHA) == 0 {
-				fmt.Println("No Lekko lock information found, syncing from remote...")
-				// no lekko lock, sync from remote
-				if !force {
-					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
-					if err != nil {
-						return errors.New("Lekko requires code to be in a git repository")
-					}
-					if hasLekkoChanges {
-						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
-					}
-				}
-				nativeFiles, err := ListNativeConfigFiles(lekkoPath, ".ts")
-				if err != nil {
-					return err
-				}
-				for _, f := range nativeFiles {
-					ns := strings.TrimSuffix(filepath.Base(f), ".ts")
-					err := gen.GenFormattedTS(cmd.Context(), repoPath, ns, f)
-					if err != nil {
-						return err
-					}
-				}
-				return nil
-			}
-			// TODO: If repo doesn't exist in known location, clone based on dotlekko
 
-			// this should be safe as we generate all changes from native lang
-			// git reset --hard
-			// git clean -fd
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
 			if err != nil {
@@ -514,6 +463,9 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "open git repo")
 			}
+			// this should be safe as we generate all changes from native lang
+			// git reset --hard
+			// git clean -fd
 			err = repo.ResetAndClean(gitRepo)
 			if err != nil {
 				return errors.Wrap(err, "reset and clean")
@@ -523,7 +475,6 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "get worktree")
 			}
-
 			err = worktree.Checkout(&git.CheckoutOptions{
 				Branch: plumbing.NewBranchReferenceName("main"),
 			})
@@ -548,6 +499,40 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+
+			lekkoPath := dot.LekkoPath
+			if len(dot.LockSHA) == 0 {
+				fmt.Println("No Lekko lock information found, syncing from remote...")
+				// no lekko lock, sync from remote
+				if !force {
+					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
+					if err != nil {
+						return errors.New("Lekko requires code to be in a git repository")
+					}
+					if hasLekkoChanges {
+						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
+					}
+				}
+				nativeFiles, err := repo.ListNativeConfigFiles(lekkoPath, ".ts")
+				if err != nil {
+					return err
+				}
+				for _, f := range nativeFiles {
+					ns := strings.TrimSuffix(filepath.Base(f), ".ts")
+					err := gen.GenFormattedTS(cmd.Context(), repoPath, ns, f)
+					if err != nil {
+						return err
+					}
+				}
+
+				dot.LockSHA = newHead.Hash().String()
+				if err := dot.WriteBack(); err != nil {
+					return errors.Wrap(err, "write back .lekko")
+				}
+
+				return nil
+			}
+
 			if newHead.Hash().String() == dot.LockSHA {
 				fmt.Println("Already up to date.")
 				return nil
