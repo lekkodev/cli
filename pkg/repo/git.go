@@ -15,8 +15,11 @@
 package repo
 
 import (
+	"strings"
+
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
@@ -52,18 +55,37 @@ func ResetAndClean(gitRepo *git.Repository) error {
 	return nil
 }
 
+func GitAuthForRemote(r *git.Repository, remoteName string, ap AuthProvider) (transport.AuthMethod, error) {
+	remote, err := r.Remote(remoteName)
+	if err != nil {
+		return nil, err
+	}
+	return GitAuthForURL(remote.Config().URLs[0], ap), nil
+}
+
+func GitAuthForURL(url string, ap AuthProvider) transport.AuthMethod {
+	if strings.HasPrefix(url, "https://") {
+		return &http.BasicAuth{
+			Username: ap.GetUsername(),
+			Password: ap.GetToken(),
+		}
+	}
+	return nil
+}
+
 // TODO: consolidate with pkg/repo/repo.go
 func GitPull(r *git.Repository, rs secrets.ReadSecrets) error {
 	w, err := r.Worktree()
 	if err != nil {
 		return err
 	}
+	auth, err := GitAuthForRemote(r, "origin", rs)
+	if err != nil {
+		return err
+	}
 	err = w.Pull(&git.PullOptions{
 		RemoteName: "origin",
-		Auth: &http.BasicAuth{
-			Username: rs.GetGithubUser(),
-			Password: rs.GetGithubToken(),
-		},
+		Auth:       auth,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return err

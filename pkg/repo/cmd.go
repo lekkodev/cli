@@ -30,7 +30,6 @@ import (
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"
@@ -230,11 +229,9 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	}
 
 	// push to GitHub
+	auth, err := GitAuthForRemote(gitRepo, "origin", r.rs)
 	err = gitRepo.Push(&git.PushOptions{
-		Auth: &http.BasicAuth{
-			Username: r.rs.GetGithubUser(),
-			Password: r.rs.GetGithubToken(),
-		},
+		Auth: auth,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "push to GitHub")
@@ -408,11 +405,9 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forc
 	// push to GitHub
 	// assuming that there is only one remote and one URL
 	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
+	auth, err := GitAuthForRemote(gitRepo, "origin", r.rs)
 	err = gitRepo.Push(&git.PushOptions{
-		Auth: &http.BasicAuth{
-			Username: r.rs.GetGithubUser(),
-			Password: r.rs.GetGithubToken(),
-		},
+		Auth: auth,
 	})
 	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		if strings.Contains(err.Error(), "non-fast-forward update") {

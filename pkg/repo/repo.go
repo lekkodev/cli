@@ -33,7 +33,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/plumbing/transport"
 	gitclient "github.com/go-git/go-git/v5/plumbing/transport/client"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/lekkodev/cli/pkg/fs"
 	"github.com/lekkodev/cli/pkg/gh"
@@ -148,13 +147,6 @@ type AuthProvider interface {
 	GetToken() string
 }
 
-func basicAuth(ap AuthProvider) transport.AuthMethod {
-	return &http.BasicAuth{
-		Username: ap.GetUsername(),
-		Password: ap.GetToken(),
-	}
-}
-
 func credentialsExist(ap AuthProvider) error {
 	if ap.GetUsername() == "" || ap.GetToken() == "" {
 		return ErrMissingCredentials
@@ -191,7 +183,7 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 func NewLocalClone(path, url string, auth AuthProvider) (ConfigurationRepository, error) {
 	r, err := git.PlainClone(path, false, &git.CloneOptions{
 		URL:  url,
-		Auth: basicAuth(auth),
+		Auth: GitAuthForURL(url, auth),
 		// Note: the default branch selection logic below relies on
 		// us cloning from the default branch here.
 	})
@@ -220,11 +212,8 @@ func NewEphemeral(url string, auth AuthProvider, branchName *string) (Configurat
 	// clone from default, then check out the requested branch.
 	// this allows us to populate the repo's default branch name.
 	r, err := git.Clone(memory.NewStorage(), memfs.New(), &git.CloneOptions{
-		URL: url,
-		Auth: &http.BasicAuth{
-			Username: auth.GetUsername(),
-			Password: auth.GetToken(),
-		},
+		URL:  url,
+		Auth: GitAuthForURL(url, auth),
 	})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to clone in-mem repo")
@@ -279,7 +268,6 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 	// default branch name. Query remote, and save the result
 	remote, err := r.repo.Remote(RemoteName)
 	if err != nil {
-		//lint:ignore nilerr no remote, default to "main"
 		defaultBranch = "main"
 		r.defaultBranch = defaultBranch
 		//lint:ignore nilerr no remote, default to "main"
@@ -299,7 +287,7 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 		return errors.Wrap(err, "new git client")
 	}
 
-	s, err := cli.NewUploadPackSession(e, basicAuth(ap))
+	s, err := cli.NewUploadPackSession(e, GitAuthForURL(remote.Config().URLs[0], ap))
 	if err != nil {
 		return errors.Wrap(err, "new upload pack session")
 	}
@@ -546,9 +534,13 @@ func (r *repository) Cleanup(ctx context.Context, branchName *string, ap AuthPro
 
 func (r *repository) Pull(ctx context.Context, ap AuthProvider, branchName string) error {
 	operation := func() error {
+		auth, err := GitAuthForRemote(r.repo, RemoteName, ap)
+		if err != nil {
+			return err
+		}
 		if err := r.wt.PullContext(ctx, &git.PullOptions{
 			RemoteName:    RemoteName,
-			Auth:          basicAuth(ap),
+			Auth:          auth,
 			ReferenceName: plumbing.NewBranchReferenceName(branchName),
 		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return errors.Wrap(err, "failed to pull")
@@ -571,13 +563,17 @@ func (r *repository) Push(ctx context.Context, ap AuthProvider, branchName strin
 		refspec = config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))
 	}
 	operation := func() error {
+		auth, err := GitAuthForRemote(r.repo, RemoteName, ap)
+		if err != nil {
+			return err
+		}
 		if err := r.repo.PushContext(ctx, &git.PushOptions{
 			RemoteName: RemoteName,
 			// We push only the branch provided. To understand how refspecs
 			// are constructed, see https://git-scm.com/book/en/v2/Git-Internals-The-Refspec
 			// and https://stackoverflow.com/a/48430450.
 			RefSpecs: []config.RefSpec{refspec},
-			Auth:     basicAuth(ap),
+			Auth:     auth,
 		}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 			return errors.Wrap(err, "failed to push")
 		}
@@ -881,7 +877,7 @@ func (r *repository) mirror(ctx context.Context, ap AuthProvider, url string) er
 	if err := r.repo.PushContext(ctx, &git.PushOptions{
 		RemoteName: remote.Config().Name,
 		RefSpecs:   []config.RefSpec{config.RefSpec(fmt.Sprintf("%s:%s", ref, ref))},
-		Auth:       basicAuth(ap),
+		Auth:       GitAuthForURL(url, ap),
 	}); err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
 		return errors.Wrap(err, "failed to push")
 	}
