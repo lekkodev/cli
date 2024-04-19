@@ -230,6 +230,9 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 
 	// push to GitHub
 	auth, err := GitAuthForRemote(gitRepo, "origin", r.rs)
+	if err != nil {
+		return err
+	}
 	err = gitRepo.Push(&git.PushOptions{
 		Auth: auth,
 	})
@@ -406,6 +409,9 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forc
 	// assuming that there is only one remote and one URL
 	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
 	auth, err := GitAuthForRemote(gitRepo, "origin", r.rs)
+	if err != nil {
+		return err
+	}
 	err = gitRepo.Push(&git.PushOptions{
 		Auth: auth,
 	})

@@ -268,10 +268,12 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 	// default branch name. Query remote, and save the result
 	remote, err := r.repo.Remote(RemoteName)
 	if err != nil {
-		defaultBranch = "main"
-		r.defaultBranch = defaultBranch
-		//lint:ignore nilerr no remote, default to "main"
-		return nil
+		if err == git.ErrRemoteNotFound {
+			defaultBranch = "main"
+			r.defaultBranch = defaultBranch
+			return nil
+		}
+		return errors.Wrap(err, "get remote")
 	}
 	if len(remote.Config().URLs) == 0 {
 		return errors.Errorf("no urls found for '%s' remote config", RemoteName)
