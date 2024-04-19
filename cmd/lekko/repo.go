@@ -30,6 +30,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/cmd/lekko/gen"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -362,9 +363,13 @@ func pushCmd() *cobra.Command {
 		Use:   "push",
 		Short: "Push local changes to remote Lekko repo. Typescript only.",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				return errors.Wrap(err, "read Lekko configuration file")
+			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-			return repo.Push(cmd.Context(), repoPath, commitMessage, forceLock)
+			return repo.Push(cmd.Context(), repoPath, commitMessage, forceLock, dot)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
@@ -465,14 +470,13 @@ func pullCmd() *cobra.Command {
 		Use:   "pull",
 		Short: "Pull remote changes and merge them with local changes. Typescript only.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			lekkoPath, err := repo.DetectLekkoPath()
-			if err != nil || len(lekkoPath) == 0 {
-				return errors.New("could not find a valid lekko/ directory in file tree")
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				return errors.Wrap(err, "read Lekko configuration file")
 			}
-			lekkoLock := &repo.LekkoLock{}
-			err = lekkoLock.ReadLekkoLock(lekkoPath)
-			if err != nil || len(lekkoLock.Commit) == 0 {
-				fmt.Println("No lekko.lock file found, syncing from remote")
+			lekkoPath := dot.LekkoPath
+			if len(dot.LockSHA) == 0 {
+				fmt.Println("No Lekko lock information found, syncing from remote...")
 				// no lekko lock, sync from remote
 				if !force {
 					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
@@ -480,7 +484,7 @@ func pullCmd() *cobra.Command {
 						return errors.New("Lekko requires code to be in a git repository")
 					}
 					if hasLekkoChanges {
-						return fmt.Errorf("please commit or stash changes in '%s' directory before pulling", lekkoPath)
+						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
 					}
 				}
 				nativeFiles, err := ListNativeConfigFiles(lekkoPath, ".ts")
@@ -496,6 +500,7 @@ func pullCmd() *cobra.Command {
 				}
 				return nil
 			}
+			// TODO: If repo doesn't exist in known location, clone based on dotlekko
 
 			// this should be safe as we generate all changes from native lang
 			// git reset --hard
@@ -543,11 +548,11 @@ func pullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if newHead.Hash().String() == lekkoLock.Commit {
+			if newHead.Hash().String() == dot.LockSHA {
 				fmt.Println("Already up to date.")
 				return nil
 			}
-			fmt.Printf("Rebasing from %s to %s\n\n", lekkoLock.Commit, newHead.Hash().String())
+			fmt.Printf("Rebasing from %s to %s\n\n", dot.LockSHA, newHead.Hash().String())
 
 			tsPullCmd := exec.Command("npx", "lekko-repo-pull", "--lekko-dir", lekkoPath)
 			output, err := tsPullCmd.CombinedOutput()
@@ -556,9 +561,9 @@ func pullCmd() *cobra.Command {
 				return errors.Wrap(err, "ts pull")
 			}
 
-			lekkoLock.Commit = newHead.Hash().String()
-			if err := lekkoLock.WriteFile(lekkoPath); err != nil {
-				return errors.Wrap(err, "write lockfile")
+			dot.LockSHA = newHead.Hash().String()
+			if err := dot.WriteBack(); err != nil {
+				return errors.Wrap(err, "write back .lekko")
 			}
 
 			return nil
@@ -577,6 +582,10 @@ func mergeFileCmd() *cobra.Command {
 			"Assumes that the repo is up-to-date. Typescript only."),
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				return errors.Wrap(err, "open Lekko configuration file")
+			}
 			base := filepath.Base(tsFilename)
 			if !strings.HasSuffix(base, ".ts") {
 				return errors.New("Unsupported language")
@@ -591,14 +600,8 @@ func mergeFileCmd() *cobra.Command {
 				return fmt.Errorf("%s has unresolved merge conflicts", tsFilename)
 			}
 
-			lekkoPath, err := repo.DetectLekkoPath()
-			if err != nil || len(lekkoPath) == 0 {
-				return errors.New("could not find a valid lekko/ directory in file tree")
-			}
-			lekkoLock := &repo.LekkoLock{}
-			err = lekkoLock.ReadLekkoLock(lekkoPath)
-			if err != nil {
-				return errors.Wrap(err, "read lekko lock")
+			if len(dot.LockSHA) == 0 {
+				return errors.New("no Lekko lock information found")
 			}
 
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
@@ -621,10 +624,10 @@ func mergeFileCmd() *cobra.Command {
 
 			// base
 			err = worktree.Checkout(&git.CheckoutOptions{
-				Hash: plumbing.NewHash(lekkoLock.Commit),
+				Hash: plumbing.NewHash(dot.LockSHA),
 			})
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("checkout %s", lekkoLock.Commit))
+				return errors.Wrap(err, fmt.Sprintf("checkout %s", dot.LockSHA))
 			}
 			baseFilename := tsFilename + ".base"
 			err = gen.GenFormattedTS(cmd.Context(), repoPath, ns, baseFilename)
