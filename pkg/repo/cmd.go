@@ -348,12 +348,12 @@ func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forc
 	}
 
 	if !forceLock {
-		if len(dot.LockSHA) > 0 && head.Hash().String() != dot.LockSHA {
-			return ErrRemoteHasChanges
-		}
 		// no lock and there is a potential conflict
 		if len(dot.LockSHA) == 0 && updatesExistingNamespace {
-			return errors.New("No valid lekko.lock found, please run with --force flag to push anyway")
+			return errors.New("No Lekko lock information found, please run with --force flag to push anyway")
+		}
+		if len(dot.LockSHA) > 0 && head.Hash().String() != dot.LockSHA {
+			return ErrRemoteHasChanges
 		}
 	}
 

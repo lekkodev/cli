@@ -500,6 +500,7 @@ func pullCmd() *cobra.Command {
 				return err
 			}
 
+			lekkoPath := dot.LekkoPath
 			if len(dot.LockSHA) == 0 {
 				fmt.Println("No Lekko lock information found, syncing from remote...")
 				// no lekko lock, sync from remote
@@ -523,10 +524,12 @@ func pullCmd() *cobra.Command {
 						return err
 					}
 				}
-				lekkoLock = &repo.LekkoLock{Commit: newHead.Hash().String()}
-				if err := lekkoLock.WriteFile(lekkoPath); err != nil {
-					return errors.Wrap(err, "write lockfile")
+
+				dot.LockSHA = newHead.Hash().String()
+				if err := dot.WriteBack(); err != nil {
+					return errors.Wrap(err, "write back .lekko")
 				}
+
 				return nil
 			}
 
