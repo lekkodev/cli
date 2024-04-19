@@ -19,6 +19,7 @@ package gen
 
 import (
 	"fmt"
+	"path"
 	"strings"
 )
 
@@ -33,7 +34,7 @@ type ProtoImport struct {
 // and purely `fully.qualified.v1beta1.Proto`
 //
 // return nil if typeURL is empty. Panics on any problems like the rest of the file.
-func UnpackProtoType(moduleRoot string, typeURL string) *ProtoImport {
+func UnpackProtoType(moduleRoot, outputPath, typeURL string) *ProtoImport {
 	if typeURL == "" {
 		return nil
 	}
@@ -50,7 +51,7 @@ func UnpackProtoType(moduleRoot string, typeURL string) *ProtoImport {
 	// moduleRoot/internal/lekko/proto/default/config/v1beta1
 	typeParts := strings.Split(fqType, ".")
 	// TODO: un-hardcode import path
-	importPath := strings.Join(append([]string{moduleRoot + "/internal/lekko/proto"}, typeParts[:len(typeParts)-1]...), "/")
+	importPath := path.Join(append([]string{moduleRoot, outputPath, "proto"}, typeParts[:len(typeParts)-1]...)...)
 	// e.g. configv1beta1
 	// TODO: shouldn't we be doing namespace + configv1beta1? what if there are multiple namespaces?
 	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])

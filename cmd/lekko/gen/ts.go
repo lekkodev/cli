@@ -42,11 +42,14 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+var typeRegistry *protoregistry.Types
 
 func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	var t string
@@ -223,7 +226,8 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			return err
 		}
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-			pImport := UnpackProtoType("", f.Tree.Default.TypeUrl)
+			// TODO: refactor this shared function?
+			pImport := UnpackProtoType("", "internal/lekko", f.Tree.Default.TypeUrl)
 			if strings.HasPrefix(pImport.ImportPath, "google.golang.org") {
 				protoImports["import * as protobuf from '@bufbuild/protobuf';"] = struct{}{}
 			} else {
@@ -322,7 +326,8 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_JSON:
 		retType = "any" // TODO
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
-		protoType = UnpackProtoType("", f.Tree.Default.TypeUrl)
+		// TODO: refactor this shared function?
+		protoType = UnpackProtoType("", "internal/lekko", f.Tree.Default.TypeUrl)
 		if strings.HasPrefix(protoType.ImportPath, "google") {
 			retType = fmt.Sprintf("protobuf.%s", protoType.Type)
 		} else {

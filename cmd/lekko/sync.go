@@ -15,6 +15,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -62,8 +63,9 @@ type Namespace struct {
 }
 
 func exprToValue(expr ast.Expr) string {
-	// This works better than it should...
-	return fmt.Sprintf("%s", expr)
+	ident, ok := expr.(*ast.Ident)
+	assert.Equal(ok, true, "value expr is not an identifier")
+	return strcase.ToSnake(ident.Name)
 }
 
 // TODO -- We know the return type..
@@ -72,7 +74,7 @@ func exprToAny(expr ast.Expr, registry *protoregistry.Types, want featurev1beta1
 	case *ast.BasicLit:
 		switch node.Kind {
 		case token.STRING:
-			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"")})
+			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"`")})
 			if err != nil {
 				panic(err)
 			}
@@ -208,7 +210,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 		case *ast.BasicLit:
 			switch node.Kind {
 			case token.STRING:
-				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"")))
+				msg.Set(field, protoreflect.ValueOf(strings.Trim(node.Value, "\"`")))
 			case token.INT:
 				if field.Kind() == protoreflect.EnumKind {
 					intValue, err := strconv.ParseInt(node.Value, 10, 32)
@@ -279,7 +281,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 					case *ast.BasicLit:
 						switch v.Kind {
 						case token.STRING:
-							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"")))
+							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"`")))
 						case token.INT:
 							if field.Kind() == protoreflect.EnumKind {
 								intValue, err := strconv.ParseInt(v.Value, 10, 32)
@@ -332,7 +334,7 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 		case token.STRING:
 			return &structpb.Value{
 				Kind: &structpb.Value_StringValue{
-					StringValue: strings.Trim(node.Value, "\""),
+					StringValue: strings.Trim(node.Value, "\"`"),
 				},
 			}
 		case token.INT:
@@ -479,186 +481,201 @@ func syncGoCmd() *cobra.Command {
 	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "go",
-		Short: "sync go code to the repo",
+		Short: "sync a Go file with Lekko config functions to a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := cmd.Context()
-			src, err := os.ReadFile(f)
-			if err != nil {
-				return err
-			}
-			fset := token.NewFileSet()
-			pf, err := parser.ParseFile(fset, f, src, parser.ParseComments)
-			if err != nil {
-				return err
-			}
-			namespace := Namespace{}
-
-			r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
-			if err != nil {
-				return err
-			}
-			rootMD, _, err := r.ParseMetadata(ctx)
-			if err != nil {
-				return err
-			}
-			registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-			if err != nil {
-				return err
-			}
-
-			ast.Inspect(pf, func(n ast.Node) bool {
-				switch x := n.(type) {
-				case *ast.File:
-					namespace.Name = x.Name.Name[5:]
-				case *ast.FuncDecl:
-					if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
-						var commentLines []string
-						if x.Doc != nil {
-							for _, comment := range x.Doc.List {
-								commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
-							}
-						}
-						privateName := x.Name.Name
-						configName := strcase.ToKebab(privateName[3:])
-						results := x.Type.Results.List
-						if results == nil {
-							panic("must have a return type")
-						}
-						if len(results) != 1 {
-							panic("must have one return type")
-						}
-						feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, " "), Tree: &featurev1beta1.Tree{}}
-						namespace.Features = append(namespace.Features, feature)
-						switch t := results[0].Type.(type) {
-						case *ast.Ident:
-							switch t.Name {
-							case "bool":
-								feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_BOOL
-							case "int64":
-								feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_INT
-							case "float64":
-								feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT
-							case "string":
-								feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
-							default:
-								fmt.Printf("Unknown Ident: %+v\n", t)
-							}
-						case *ast.StarExpr:
-							feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
-						default:
-							fmt.Printf("%#v\n", t)
-						}
-						for _, stmt := range x.Body.List {
-							switch n := stmt.(type) {
-							case *ast.ReturnStmt:
-								if feature.Tree.Default != nil {
-									panic("Panic. Or Noop.")
-								}
-								// TODO also need to take care of the possibility that the default is in an else
-								feature.Tree.Default = exprToAny(n.Results[0], registry, feature.Type) // can this be multiple things?
-							case *ast.IfStmt:
-								feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n, registry, feature.Type)...)
-							default:
-								panic("Panic!")
-							}
-						}
-					}
-					return false
+			if len(repoPath) == 0 {
+				rs := secrets.NewSecretsOrFail()
+				if len(rs.GetLekkoRepoPath()) == 0 {
+					return errors.New("no local config repository available, pass '--path' or use 'lekko repo path --set'")
 				}
-				return true
-			})
-			// TODO static context
-
-			// Now we need to write/merge it..
-			nsExists := false
-			for _, nsFromMeta := range rootMD.Namespaces {
-				if namespace.Name == nsFromMeta {
-					nsExists = true
-					break
-				}
+				repoPath = rs.GetLekkoRepoPath()
 			}
-			if !nsExists {
-				if err := r.AddNamespace(cmd.Context(), namespace.Name); err != nil {
-					return errors.Wrap(err, "add namespace")
-				}
-			}
-
-			for _, configProto := range namespace.Features {
-				// create a new starlark file from a template (based on the config type)
-				var starBytes []byte
-				starImports := make([]*featurev1beta1.ImportStatement, 0)
-
-				if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-					typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
-					messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
-					if !found {
-						return fmt.Errorf("can't parse type url: %s", typeURL)
-					}
-					starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
-					if err != nil {
-						return err
-					}
-					starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
-					if err != nil {
-						return err
-					}
-					for importPackage, importAlias := range starInputs.Packages {
-						starImports = append(starImports, &featurev1beta1.ImportStatement{
-							Lhs: &featurev1beta1.IdentExpr{
-								Token: importAlias,
-							},
-							Operator: "=",
-							Rhs: &featurev1beta1.ImportExpr{
-								Dot: &featurev1beta1.DotExpr{
-									X:    "proto",
-									Name: "package",
-								},
-								Args: []string{importPackage},
-							},
-						})
-					}
-				} else {
-					starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
-					if err != nil {
-						return err
-					}
-				}
-
-				// mutate starlark with the actual config
-				walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
-				newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
-					Key:  configProto.Key,
-					Type: configProto.GetType(),
-					Feature: &featurev1beta1.FeatureStruct{
-						Description: configProto.GetDescription(),
-					},
-					FeatureOld: configProto,
-					Imports:    starImports,
-				})
-				if err != nil {
-					return errors.Wrap(err, "walker mutate")
-				}
-				configFile := feature.NewFeatureFile(namespace.Name, configProto.Key)
-				// write starlark to disk
-				if err := r.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
-					return errors.Wrap(err, "write after mutation")
-				}
-
-				// compile newly generated starlark file
-				_, err = r.Compile(ctx, &repo.CompileRequest{
-					Registry:        registry,
-					NamespaceFilter: namespace.Name,
-					FeatureFilter:   configProto.Key,
-				})
-				if err != nil {
-					return errors.Wrap(err, "compile after mutation")
-				}
-			}
-
-			return nil
+			return SyncGo(cmd.Context(), f, repoPath)
 		},
 	}
-	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "file to sync") // TODO make this less dumb
-	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
+	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
+	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to config repository, will use from 'lekko repo path' if not set")
 	return cmd
+}
+
+func SyncGo(ctx context.Context, f, repoPath string) error {
+	src, err := os.ReadFile(f)
+	if err != nil {
+		return errors.Wrap(err, fmt.Sprintf("open %s", f))
+	}
+	fset := token.NewFileSet()
+	pf, err := parser.ParseFile(fset, f, src, parser.ParseComments)
+	if err != nil {
+		return err
+	}
+	namespace := Namespace{}
+
+	r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
+	if err != nil {
+		return err
+	}
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return err
+	}
+
+	ast.Inspect(pf, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.File:
+			// i.e. lekkodefault -> default (this requires the package name to be correct)
+			namespace.Name = x.Name.Name[5:]
+		case *ast.FuncDecl:
+			if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
+				var commentLines []string
+				if x.Doc != nil {
+					for _, comment := range x.Doc.List {
+						commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
+					}
+				}
+				privateName := x.Name.Name
+				configName := strcase.ToKebab(privateName[3:])
+				results := x.Type.Results.List
+				if results == nil {
+					panic("must have a return type")
+				}
+				if len(results) != 1 {
+					panic("must have one return type")
+				}
+				feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, " "), Tree: &featurev1beta1.Tree{}}
+				namespace.Features = append(namespace.Features, feature)
+				switch t := results[0].Type.(type) {
+				case *ast.Ident:
+					switch t.Name {
+					case "bool":
+						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_BOOL
+					case "int64":
+						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_INT
+					case "float64":
+						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT
+					case "string":
+						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
+					default:
+						fmt.Printf("Unknown Ident: %+v\n", t)
+					}
+				case *ast.StarExpr:
+					feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
+				default:
+					fmt.Printf("%#v\n", t)
+				}
+				for _, stmt := range x.Body.List {
+					switch n := stmt.(type) {
+					case *ast.ReturnStmt:
+						if feature.Tree.Default != nil {
+							panic("Panic. Or Noop.")
+						}
+						// TODO also need to take care of the possibility that the default is in an else
+						feature.Tree.Default = exprToAny(n.Results[0], registry, feature.Type) // can this be multiple things?
+					case *ast.IfStmt:
+						feature.Tree.Constraints = append(feature.Tree.Constraints, ifToConstraints(n, registry, feature.Type)...)
+					default:
+						panic("Panic!")
+					}
+				}
+			}
+			return false
+		}
+		return true
+	})
+	// TODO static context
+
+	// Now we need to write/merge it..
+	nsExists := false
+	for _, nsFromMeta := range rootMD.Namespaces {
+		if namespace.Name == nsFromMeta {
+			nsExists = true
+			break
+		}
+	}
+	if !nsExists {
+		if err := r.AddNamespace(ctx, namespace.Name); err != nil {
+			return errors.Wrap(err, "add namespace")
+		}
+	}
+
+	for _, configProto := range namespace.Features {
+		// create a new starlark file from a template (based on the config type)
+		var starBytes []byte
+		starImports := make([]*featurev1beta1.ImportStatement, 0)
+
+		if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
+			messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
+			if !found {
+				return fmt.Errorf("can't parse type url: %s", typeURL)
+			}
+			starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
+			if err != nil {
+				return err
+			}
+			starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
+			if err != nil {
+				return err
+			}
+			for importPackage, importAlias := range starInputs.Packages {
+				starImports = append(starImports, &featurev1beta1.ImportStatement{
+					Lhs: &featurev1beta1.IdentExpr{
+						Token: importAlias,
+					},
+					Operator: "=",
+					Rhs: &featurev1beta1.ImportExpr{
+						Dot: &featurev1beta1.DotExpr{
+							X:    "proto",
+							Name: "package",
+						},
+						Args: []string{importPackage},
+					},
+				})
+			}
+		} else {
+			starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
+			if err != nil {
+				return err
+			}
+		}
+
+		// mutate starlark with the actual config
+		walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
+		newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
+			Key:  configProto.Key,
+			Type: configProto.GetType(),
+			Feature: &featurev1beta1.FeatureStruct{
+				Description: configProto.GetDescription(),
+			},
+			FeatureOld: configProto,
+			Imports:    starImports,
+		})
+		if err != nil {
+			return errors.Wrap(err, "walker mutate")
+		}
+		configFile := feature.NewFeatureFile(namespace.Name, configProto.Key)
+		// write starlark to disk
+		if err := r.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
+			return errors.Wrap(err, "write after mutation")
+		}
+
+		// TODO: Consider silencing compile output or batching them somehow - right now it's very verbose
+		// r.ConfigureLogger(&repo.LoggingConfiguration{
+		// 	Writer: io.Discard,
+		// })
+		// compile newly generated starlark file
+		_, err = r.Compile(ctx, &repo.CompileRequest{
+			Registry:        registry,
+			NamespaceFilter: namespace.Name,
+			FeatureFilter:   configProto.Key,
+		})
+		if err != nil {
+			return errors.Wrap(err, "compile after mutation")
+		}
+	}
+
+	return nil
 }

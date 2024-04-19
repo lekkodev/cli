@@ -68,6 +68,7 @@ func main() {
 	// code generation
 	experimentalCmd.AddCommand(genCmd())
 	experimentalCmd.AddCommand(syncCmd())
+	experimentalCmd.AddCommand(bisyncCmd())
 	rootCmd.AddCommand(experimentalCmd)
 
 	// setup
