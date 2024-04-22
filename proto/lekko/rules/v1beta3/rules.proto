@@ -37,6 +37,8 @@ message Rule {
     bool bool_const = 4;
     CallExpression call_expression = 5;
   }
+  // Comments right after the rule
+  repeated string comments = 6;
 }
 
 // LogicalExpression operator applies a logical operator like "and" or "or" to n rules.
