@@ -99,6 +99,7 @@ func bisyncGoCmd() *cobra.Command {
 			return nil
 		},
 	}
+	// Hidden because we normally use info from .lekko
 	cmd.Flags().StringVarP(&path, "path", "p", "internal/lekko", "path in current project containing Lekko files")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to local config repository, will use autodetect if not set")
 	_ = cmd.Flags().MarkHidden("path")
