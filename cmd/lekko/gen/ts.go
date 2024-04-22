@@ -341,8 +341,9 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 		var keys []string
 		var keyAndTypes []string
 		for k, t := range usedVariables {
-			keys = append(keys, k)
-			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", k, t))
+			casedK := strcase.ToLowerCamel(k)
+			keys = append(keys, casedK)
+			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", casedK, t))
 		}
 		parameters = fmt.Sprintf("{%s}: {%s}", strings.Join(keys, ","), strings.Join(keyAndTypes, ","))
 	}
@@ -421,38 +422,38 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("( %s === %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("( %s === %s )", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("( %s !== %s )", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("( %s !== %s )", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue.GetListValue().GetValues()[0])
 			var elements []string
 			for _, comparisonVal := range v.Atom.ComparisonValue.GetListValue().GetValues() {
 				elements = append(elements, string(try.To1(marshalOptions.Marshal(comparisonVal))))
 			}
-			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), v.Atom.ContextKey)
+			return fmt.Sprintf("([%s].includes(%s))", strings.Join(elements, ", "), strcase.ToLowerCamel(v.Atom.ContextKey))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s < %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s < %s)", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s <= %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s <= %s)", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s > %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s > %s)", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s >= %s)", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s >= %s)", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.includes(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s.includes(%s))", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.startsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s.startsWith(%s))", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			return fmt.Sprintf("(%s.endsWith(%s))", v.Atom.ContextKey, try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
+			return fmt.Sprintf("(%s.endsWith(%s))", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		}
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
