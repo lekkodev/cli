@@ -36,6 +36,7 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
@@ -84,8 +85,8 @@ func structpbValueToKindStringGo(v *structpb.Value) string {
 
 func GenGoCmd() *cobra.Command {
 	var ns string
-	var op string
-	var rp string
+	var outputPath string
+	var repoPath string
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "generate Go library code from configs",
@@ -98,21 +99,28 @@ func GenGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if rp == "" {
-				rs := secrets.NewSecretsOrFail()
-				if len(rs.GetLekkoRepoPath()) == 0 {
-					return errors.New("no local config repository available, pass '--config-path' or use 'lekko repo path --set'")
+			if len(outputPath) == 0 {
+				dot, err := dotlekko.ReadDotLekko()
+				if err != nil {
+					return err
 				}
-				rp = rs.GetLekkoRepoPath()
+				outputPath = dot.LekkoPath
 			}
-			generator := NewGoGenerator(mf.Module.Mod.Path, op, rp, ns)
+			if len(repoPath) == 0 {
+				rs := secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
+				repoPath, err = repo.PrepareGithubRepo(rs)
+				if err != nil {
+					return err
+				}
+			}
+			generator := NewGoGenerator(mf.Module.Mod.Path, outputPath, repoPath, ns)
 			return generator.Gen(cmd.Context())
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	// TODO: should be read from Lekko config file
-	cmd.Flags().StringVarP(&op, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under")
-	cmd.Flags().StringVarP(&rp, "config-path", "c", "", "path to config repository, will use from 'lekko repo path' if not set")
+	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use from 'lekko repo path' if not set")
 	return cmd
 }
 

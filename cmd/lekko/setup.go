@@ -305,7 +305,6 @@ func setupCmd() *cobra.Command {
 				if err != nil {
 					return errors.Wrap(err, "import repo")
 				}
-
 			}
 
 			dot.Repository = fmt.Sprintf("%s/%s", githubOrgName, githubRepo)

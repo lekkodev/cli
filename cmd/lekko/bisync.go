@@ -21,7 +21,9 @@ import (
 	"path/filepath"
 
 	"github.com/lekkodev/cli/cmd/lekko/gen"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/logging"
+	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -56,12 +58,19 @@ func bisyncGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if repoPath == "" {
-				rs := secrets.NewSecretsOrFail()
-				if len(rs.GetLekkoRepoPath()) == 0 {
-					return errors.New("no local config repository available, pass '--config-path' or use 'lekko repo path --set'")
+			if len(path) == 0 {
+				dot, err := dotlekko.ReadDotLekko()
+				if err != nil {
+					return err
 				}
-				repoPath = rs.GetLekkoRepoPath()
+				path = dot.LekkoPath
+			}
+			if len(repoPath) == 0 {
+				rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
+				repoPath, err = repo.PrepareGithubRepo(rs)
+				if err != nil {
+					return err
+				}
 			}
 			// Traverse target path, finding namespaces
 			// TODO: consider making this more efficient for batch gen/sync
