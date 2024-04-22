@@ -495,7 +495,8 @@ func syncGoCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use from 'lekko repo path' if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	_ = cmd.Flags().MarkHidden("repo-path")
 	return cmd
 }
 

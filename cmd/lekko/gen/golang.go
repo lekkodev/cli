@@ -120,7 +120,9 @@ func GenGoCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	// TODO: should be read from Lekko config file
 	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under")
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use from 'lekko repo path' if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	_ = cmd.Flags().MarkHidden("output-path")
+	_ = cmd.Flags().MarkHidden("repo-path")
 	return cmd
 }
 
