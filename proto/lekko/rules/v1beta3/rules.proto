@@ -123,3 +123,10 @@ message CallExpression {
     EvaluateTo evaluate_to = 2;
   }
 }
+
+message ConfigCall {
+  string type_url = 1;
+  string namespace = 2;
+  string key = 3;
+  uint64 field_number = 4;
+}
