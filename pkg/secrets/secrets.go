@@ -28,8 +28,6 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const AuthenticateGituhubMessage = "User is not authenticated.\nRun 'lekko auth login' to authenticate with GitHub."
-
 // WriteSecrets holds all the user-specific information that needs to exist for the cli
 // to work, but should not live in a shared config repo. For instance, it holds
 // the github auth token. The secrets are backed by the filesystem under the user's home
@@ -39,12 +37,9 @@ type WriteSecrets interface {
 	SetLekkoUsername(username string)
 	SetLekkoToken(token string)
 	SetLekkoTeam(team string)
-	SetLekkoRepoPath(repoPath string)
 	SetGithubToken(token string)
 	SetGithubUser(user string)
 	SetLekkoAPIKey(apikey string)
-	SetGithubOwner(githubOwner string)
-	SetGithubRepo(githubRepo string)
 }
 
 type ReadSecrets interface {
@@ -54,15 +49,11 @@ type ReadSecrets interface {
 	GetLekkoTeam() string
 	HasLekkoAPIKey() bool
 	GetLekkoAPIKey() string
-	GetLekkoRepoPath() string
-	HasLekkoRepoPath() bool
 	GetGithubToken() string
 	GetGithubUser() string
 	HasGithubToken() bool
 	GetUsername() string
 	GetToken() string
-	GetGithubOwner() string
-	GetGithubRepo() string
 }
 
 type secrets struct {
@@ -73,8 +64,6 @@ type secrets struct {
 	LekkoRepoPath string `json:"lekko_repo_path,omitempty" yaml:"lekko_repo_path,omitempty"`
 	GithubUser    string `json:"github_user,omitempty" yaml:"github_user,omitempty"`
 	GithubToken   string `json:"github_token,omitempty" yaml:"github_token,omitempty"`
-	GithubOwner   string `json:"github_owner,omitempty" yaml:"github_owner,omitempty"`
-	GithubRepo    string `json:"github_repo,omitempty" yaml:"github_repo,omitempty"`
 
 	homeDir      string
 	changed      bool
@@ -207,32 +196,6 @@ func (s *secrets) SetGithubUser(user string) {
 	s.GithubUser = user
 }
 
-func (s *secrets) GetGithubOwner() string {
-	s.RLock()
-	defer s.RUnlock()
-	return s.GithubOwner
-}
-
-func (s *secrets) SetGithubOwner(user string) {
-	s.Lock()
-	defer s.Unlock()
-	s.changed = true
-	s.GithubOwner = user
-}
-
-func (s *secrets) GetGithubRepo() string {
-	s.RLock()
-	defer s.RUnlock()
-	return s.GithubRepo
-}
-
-func (s *secrets) SetGithubRepo(user string) {
-	s.Lock()
-	defer s.Unlock()
-	s.changed = true
-	s.GithubRepo = user
-}
-
 func (s *secrets) GetLekkoUsername() string {
 	s.RLock()
 	defer s.RUnlock()
@@ -295,23 +258,6 @@ func (s *secrets) SetLekkoAPIKey(apikey string) {
 
 func (s *secrets) HasGithubToken() bool {
 	return len(s.GetGithubToken()) > 0
-}
-
-func (s *secrets) HasLekkoRepoPath() bool {
-	return len(s.GetLekkoRepoPath()) > 0
-}
-
-func (s *secrets) GetLekkoRepoPath() string {
-	s.RLock()
-	defer s.RUnlock()
-	return s.LekkoRepoPath
-}
-
-func (s *secrets) SetLekkoRepoPath(path string) {
-	s.Lock()
-	defer s.Unlock()
-	s.changed = true
-	s.LekkoRepoPath = path
 }
 
 /*

@@ -164,7 +164,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 	// TODO to avoid weird error message we should compile first.
 	var err error
 	rs := secrets.NewSecretsOrFail()
-	repoPath, err = repo.InitIfNotExists(ctx, rs, repoPath)
+	repoPath, err = repo.PrepareGithubRepo(rs)
 	if err != nil {
 		return errors.Wrap(err, "init repo")
 	}
