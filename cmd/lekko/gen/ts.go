@@ -107,7 +107,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
 		t := fieldDescriptorToTS(f)
-		fields = append(fields, fmt.Sprintf("%s?: %s;", f.TextName(), t))
+		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToSnake(f.TextName()), t))
 	}
 
 	data := struct {
@@ -384,9 +384,7 @@ func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]stri
 			ifToken = "if"
 		}
 		rule := translateRuleTS(constraint.GetRuleAstNew(), usedVariables)
-		k := fmt.Sprintf("\t%s %s {", ifToken, rule)
-		log.Println((k))
-		buffer = append(buffer, k)
+		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
 		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, f.Type)))
@@ -424,9 +422,7 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
-			r := fmt.Sprintf("( %s === %s )", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
-			log.Println(r)
-			return r
+			return fmt.Sprintf("( %s === %s )", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
 			usedVariables[v.Atom.ContextKey] = structpbValueToKindString(v.Atom.ComparisonValue)
 			return fmt.Sprintf("( %s !== %s )", strcase.ToLowerCamel(v.Atom.ContextKey), try.To1(marshalOptions.Marshal(v.Atom.ComparisonValue)))
@@ -550,9 +546,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	// TODO double
 	if t != featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 		// we are guessing this is a primitive, (unless we have i64 so let's do that later)
-		r := marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
-		//log.Println((r))
-		return r
+		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
 	}
 
 	switch strings.Split(val.TypeUrl, "/")[1] {
@@ -571,9 +565,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			valueStr := FieldValueToTS(f, val)
-			fieldName := f.TextName()
-			lines = append(lines, fmt.Sprintf("\t%s: %s", fieldName, valueStr))
+			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToSnake(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
 
