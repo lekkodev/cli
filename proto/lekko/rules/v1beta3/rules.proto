@@ -37,6 +37,8 @@ message Rule {
     bool bool_const = 4;
     CallExpression call_expression = 5;
   }
+  // Comments right after the rule
+  repeated string comments = 6;
 }
 
 // LogicalExpression operator applies a logical operator like "and" or "or" to n rules.
@@ -120,4 +122,11 @@ message CallExpression {
     Bucket bucket = 1;
     EvaluateTo evaluate_to = 2;
   }
+}
+
+message ConfigCall {
+  string type_url = 1;
+  string namespace = 2;
+  string key = 3;
+  uint64 field_number = 4;
 }

@@ -54,8 +54,10 @@ message Tree {
   google.protobuf.Any default = 1;
   repeated Constraint constraints = 2;
   Any default_new = 3;
+  repeated string comments_before_return = 4;
 }
 
+// This is basically an `if` statement
 message Constraint {
   // RulesLang string. Purely for readability. All edits to ruleslang
   // are made through rule_ast_new instead.
@@ -78,6 +80,9 @@ message Constraint {
   lekko.rules.v1beta3.Rule rule_ast_new = 5;
 
   Any value_new = 6;
+
+  repeated string comments_before_if = 7;
+  repeated string comments_before_return = 8;
 }
 
 // New custom any type which allows us to manage dynamic types and values
