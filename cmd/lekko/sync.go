@@ -535,6 +535,9 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 		switch x := n.(type) {
 		case *ast.File:
 			// i.e. lekkodefault -> default (this requires the package name to be correct)
+			if x.Name.Name[:5] != "lekko" {
+				panic("packages for lekko must start with 'lekko'")
+			}
 			namespace.Name = x.Name.Name[5:]
 		case *ast.FuncDecl:
 			// TODO: We should support numbers (e.g. v2) but the strcase pkg has some non-ideal behavior with numbers,
