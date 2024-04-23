@@ -47,6 +47,7 @@ func NewDotLekko(lekkoPath string) *DotLekko {
 	return &DotLekko{
 		Version:   "v1",
 		LekkoPath: lekkoPath,
+		path:      ".lekko",
 	}
 }
 
