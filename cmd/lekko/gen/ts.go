@@ -559,10 +559,19 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
+			var valueStr string
+			if f.Kind() == protoreflect.StringKind {
+				valueStr = fmt.Sprintf("`%s`", strings.ReplaceAll(val.String(), "`", "` + \"`\" + `"))
+			} else {
+				valueStr = FieldValueToTS(f, val)
+			}
+
+			fieldName := strcase.ToLowerCamel(f.TextName())
+			lines = append(lines, fmt.Sprintf("\t%s: %s", fieldName, valueStr))
 			return true
 		})
+
 		sort.Strings(lines)
-		return fmt.Sprintf("{\n%s}", strings.Join(lines, ",\n"))
+		return fmt.Sprintf("{\n%s\n}", strings.Join(lines, ",\n"))
 	}
 }
