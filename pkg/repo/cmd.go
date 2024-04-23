@@ -121,22 +121,72 @@ func DefaultRepoBasePath() (string, error) {
 	return filepath.Join(home, "Library/Application Support/Lekko/Config Repositories"), nil
 }
 
-func InitIfNotExists(ctx context.Context, rs secrets.ReadSecrets, repoPath string) (string, error) {
-	if len(repoPath) == 0 {
-		if len(rs.GetLekkoRepoPath()) > 0 {
-			repoPath = rs.GetLekkoRepoPath()
-		} else {
-			base, err := DefaultRepoBasePath()
-			if err != nil {
-				return "", err
-			}
-			repoPath = filepath.Join(base, "default")
+func PrepareGithubRepo(rs secrets.ReadSecrets) (string, error) {
+	base, err := DefaultRepoBasePath()
+	if err != nil {
+		return "", err
+	}
+	dot, err := dotlekko.ReadDotLekko()
+	if err != nil || len(dot.Repository) == 0 {
+		return InitIfNotExists(rs, "")
+	}
+	repoOwner, repoName := dot.GetRepoInfo()
+	repoPath := filepath.Join(base, repoOwner, repoName)
+
+	shouldClone := false
+	fi, err := os.Stat(repoPath)
+	if errors.Is(err, fs.ErrNotExist) {
+		shouldClone = true
+	}
+	if err == nil && fi.IsDir() {
+		entries, err := os.ReadDir(repoPath)
+		if err != nil {
+			return "", err
 		}
+		if len(entries) == 0 {
+			shouldClone = true
+		}
+	}
+
+	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
+
+	if shouldClone {
+		_, err := NewLocalClone(repoPath, githubRepoURL, rs)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		gitRepo, err := git.PlainOpen(repoPath)
+		if err == nil {
+			remote, err := gitRepo.Remote("origin")
+			if err == nil {
+				// TODO: support comparing ssh and https urls
+				if len(remote.Config().URLs) == 0 || remote.Config().URLs[0] != githubRepoURL {
+					return "", errors.Errorf("repo already exists at %s but with different origin: %s", repoPath, remote.Config().URLs[0])
+				}
+				// TODO: checkout main and pull?
+			}
+		}
+		if err != nil {
+			return "", errors.Wrapf(err, "invalid git repo at %s", repoPath)
+		}
+	}
+	return repoPath, nil
+}
+
+func InitIfNotExists(rs secrets.ReadSecrets, repoPath string) (string, error) {
+	if len(repoPath) == 0 {
+		base, err := DefaultRepoBasePath()
+		if err != nil {
+			return "", err
+		}
+		repoPath = filepath.Join(base, "default")
 	}
 	err := os.MkdirAll(repoPath, 0777)
 	if err != nil {
 		return "", err
 	}
+
 	entries, err := os.ReadDir(repoPath)
 	if err != nil {
 		return "", err
@@ -159,7 +209,7 @@ func InitIfNotExists(ctx context.Context, rs secrets.ReadSecrets, repoPath strin
 }
 
 func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
-	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
+	repoPath, err := InitIfNotExists(r.rs, repoPath)
 	if err != nil {
 		return errors.Wrap(err, "init repo")
 	}
@@ -290,9 +340,8 @@ func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
 	return files, nil
 }
 
-func (r *RepoCmd) Push(ctx context.Context, repoPath, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) error {
-	// TODO: Can clone based on info from dotlekko
-	repoPath, err := InitIfNotExists(ctx, r.rs, repoPath)
+func (r *RepoCmd) Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) error {
+	repoPath, err := PrepareGithubRepo(r.rs)
 	if err != nil {
 		return err
 	}

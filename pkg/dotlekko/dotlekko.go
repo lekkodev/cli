@@ -20,7 +20,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
@@ -42,6 +41,14 @@ type DotLekko struct {
 	repoOwner string
 	repoName  string
 	path      string
+}
+
+func NewDotLekko(lekkoPath string) *DotLekko {
+	return &DotLekko{
+		Version:   "v1",
+		LekkoPath: lekkoPath,
+		path:      ".lekko",
+	}
 }
 
 // Looks for .lekko or .lekko.(yaml|yml) in the working directory
@@ -106,14 +113,6 @@ func ParseDotLekko(r io.Reader) (*DotLekko, error) {
 		}
 		dot.repoOwner = cr[0]
 		dot.repoName = cr[1]
-	} else {
-		// If not set, try to read remote info from stored secrets
-		rs := secrets.NewSecretsOrFail()
-		if len(rs.GetGithubOwner()) > 0 && len(rs.GetGithubRepo()) > 0 {
-			dot.Repository = fmt.Sprintf("%s/%s", rs.GetGithubOwner(), rs.GetGithubRepo())
-			dot.repoOwner = rs.GetGithubOwner()
-			dot.repoName = rs.GetGithubRepo()
-		}
 	}
 	if len(dot.LekkoPath) == 0 {
 		return nil, errors.New("missing lekko_path")

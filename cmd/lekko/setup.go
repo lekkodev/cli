@@ -19,11 +19,13 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/browser"
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/apikey"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -36,7 +38,7 @@ import (
 )
 
 func setupCmd() *cobra.Command {
-	var repoPath, email, githubOrgName, githubRepo string
+	var email, githubOrgName, githubRepo string
 	var resume bool
 	cmd := &cobra.Command{
 		Use:   "setup",
@@ -103,9 +105,61 @@ func setupCmd() *cobra.Command {
 			}
 			fmt.Println()
 
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				fmt.Println("Lekko is not detected in this project.")
+				doInit := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: "Initialize Lekko?",
+					Default: true,
+				}, &doInit); err != nil {
+					return errors.Wrap(err, "prompt init lekko")
+				}
+				if !doInit {
+					return errors.New("Aborted!")
+				}
+
+				// naive check for "known" project types
+				isGo := false
+				isNode := false
+				if _, err = os.Stat("go.mod"); err == nil {
+					isGo = true
+				} else if _, err = os.Stat("package.json"); err == nil {
+					isNode = true
+				}
+				if !isGo && !isNode {
+					return errors.New("Unknown project type, Lekko currently supports Go and NPM projects.")
+				}
+
+				lekkoPath := "lekko"
+				if fi, err := os.Stat("src"); err == nil && fi.IsDir() && isNode {
+					lekkoPath = "src/lekko"
+				}
+				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && isGo {
+					lekkoPath = "internal/lekko"
+				}
+
+				if err := survey.AskOne(&survey.Input{
+					Message: "Location for Lekko config functions (relative to project root):",
+					Default: lekkoPath,
+				}, &lekkoPath, survey.WithValidator(func(val interface{}) error {
+					s, ok := val.(string)
+					if !ok {
+						return errors.New("invalid path")
+					}
+					if !strings.HasSuffix(s, "lekko") {
+						return errors.New("path must end with 'lekko'")
+					}
+					return nil
+				})); err != nil {
+					return errors.Wrap(err, "prompt lekko path")
+				}
+
+				dot = dotlekko.NewDotLekko(lekkoPath)
+			}
+
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekkoToken(), secrets.RequireGithub())
 			bff = lekko.NewBFFClient(rs)
-
 			ghCli := gh.NewGithubClientFromToken(cmd.Context(), rs.GetGithubToken())
 
 			// if the user is already a member of a team and `githubRepo` repo exists under that team,
@@ -139,13 +193,11 @@ func setupCmd() *cobra.Command {
 			}
 
 			if useExistingRepo {
-				if len(repoPath) == 0 {
-					base, err := repo.DefaultRepoBasePath()
-					if err != nil {
-						return err
-					}
-					repoPath = filepath.Join(base, rs.GetLekkoTeam(), githubRepo)
+				base, err := repo.DefaultRepoBasePath()
+				if err != nil {
+					return err
 				}
+				repoPath := filepath.Join(base, rs.GetLekkoTeam(), githubRepo)
 				if _, err := os.Stat(repoPath); err == nil {
 					gitRepo, err := git.PlainOpen(repoPath)
 					if err != nil {
@@ -155,6 +207,7 @@ func setupCmd() *cobra.Command {
 					if err != nil {
 						return errors.Wrapf(err, "invalid git repo at %s", repoPath)
 					}
+					// TODO: support comparing ssh and https urls
 					if len(remote.Config().URLs) == 0 || remote.Config().URLs[0] != githubRepoURL {
 						return errors.Errorf("repo already exists at %s but with different origin: %s", repoPath, remote.Config().URLs[0])
 					}
@@ -166,15 +219,7 @@ func setupCmd() *cobra.Command {
 					}
 					fmt.Printf("Cloned into %s\n\n", repoPath)
 				}
-				err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-					ws.SetLekkoRepoPath(repoPath)
-					ws.SetGithubOwner(rs.GetLekkoTeam())
-					ws.SetGithubRepo(githubRepo)
-					return nil
-				})
-				if err != nil {
-					return err
-				}
+				githubOrgName = rs.GetLekkoTeam()
 			} else {
 				for {
 					if len(githubOrgName) > 0 {
@@ -262,28 +307,22 @@ func setupCmd() *cobra.Command {
 				rs = secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
 				bff = lekko.NewBFFClient(rs)
 
-				if len(repoPath) == 0 {
-					base, err := repo.DefaultRepoBasePath()
-					if err != nil {
-						return err
-					}
-					repoPath = filepath.Join(base, githubOrgName, githubRepo)
+				base, err := repo.DefaultRepoBasePath()
+				if err != nil {
+					return err
 				}
+				repoPath := filepath.Join(base, githubOrgName, githubRepo)
 
 				repoCmd := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
 				err = repoCmd.Import(cmd.Context(), repoPath, githubOrgName, githubRepo, "")
 				if err != nil {
 					return errors.Wrap(err, "import repo")
 				}
-				err = secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-					ws.SetLekkoRepoPath(repoPath)
-					ws.SetGithubOwner(githubOrgName)
-					ws.SetGithubRepo(githubRepo)
-					return nil
-				})
-				if err != nil {
-					return err
-				}
+			}
+
+			dot.Repository = fmt.Sprintf("%s/%s", githubOrgName, githubRepo)
+			if err := dot.WriteBack(); err != nil {
+				return err
 			}
 
 			if !rs.HasLekkoAPIKey() {
@@ -309,7 +348,6 @@ func setupCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&email, "email", "e", "", "email to create Lekko account with")
 	cmd.Flags().StringVarP(&githubOrgName, "org", "o", "", "GitHub organization to house repository in")
 	cmd.Flags().StringVarP(&githubRepo, "repo", "r", "lekko-configs", "GitHub repository name")
-	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to the repo location")
 	cmd.Flags().BoolVar(&resume, "resume", false, "resume setup using currently authenticated user")
 	return cmd
 }

@@ -286,7 +286,7 @@ func defaultRepoInitCmd() *cobra.Command {
 		Short: "Initialize a new template git repository in the default location",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			rs := secrets.NewSecretsOrFail()
-			_, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
+			_, err := repo.InitIfNotExists(rs, repoPath)
 			return err
 		},
 	}
@@ -318,6 +318,11 @@ func remoteCmd() *cobra.Command {
 		Use:   "remote",
 		Short: "Show the remote Lekko repo currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				return err
+			}
+
 			if len(remoteRepo) > 0 {
 				doIt := false
 				if err := survey.AskOne(&survey.Confirm{
@@ -330,24 +335,19 @@ func remoteCmd() *cobra.Command {
 					fmt.Println("Aborted!")
 					return nil
 				}
-				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-					parts := strings.Split(remoteRepo, "/")
-					if len(parts) != 2 {
-						return errors.New("Invalid remote repo format, shoud be '<GitHub owner>/<GitHub repo>'")
-					}
-					ws.SetGithubOwner(parts[0])
-					ws.SetGithubRepo(parts[1])
-					return nil
-				}); err != nil {
-					return err
+				parts := strings.Split(remoteRepo, "/")
+				if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
+					return errors.New("Invalid remote repo format, shoud be '<GitHub owner>/<GitHub repo>'")
 				}
-				return nil
+				dot.Repository = remoteRepo
+				return dot.WriteBack()
 			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-			if len(rs.GetGithubOwner()) == 0 || len(rs.GetGithubRepo()) == 0 {
-				return errors.New("no remote repo info in Lekko config")
+
+			if len(dot.Repository) == 0 {
+				return errors.New("Repository info is not set in .lekko")
 			}
-			fmt.Printf("%s/%s\n", rs.GetGithubOwner(), rs.GetGithubRepo())
+
+			fmt.Println(dot.Repository)
 			return nil
 		},
 	}
@@ -356,7 +356,7 @@ func remoteCmd() *cobra.Command {
 }
 
 func pushCmd() *cobra.Command {
-	var commitMessage, repoPath string
+	var commitMessage string
 	var forceLock bool
 	cmd := &cobra.Command{
 		Use:   "push",
@@ -368,54 +368,35 @@ func pushCmd() *cobra.Command {
 			}
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 			repo := repo.NewRepoCmd(lekko.NewBFFClient(rs), rs)
-			return repo.Push(cmd.Context(), repoPath, commitMessage, forceLock, dot)
+			return repo.Push(cmd.Context(), commitMessage, forceLock, dot)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
 	cmd.Flags().BoolVarP(&forceLock, "force", "f", false, "whether to force push, ignoring base commit information from lekko.lock")
 	return cmd
 }
 
 func pathCmd() *cobra.Command {
-	var path string
 	cmd := &cobra.Command{
 		Use:   "path",
 		Short: "Show the local repo path currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(path) > 0 {
-				doIt := false
-				absPath, err := filepath.Abs(path)
-				if err != nil {
-					return err
-				}
-				if err := survey.AskOne(&survey.Confirm{
-					Message: fmt.Sprintf("Set local repo path to '%s'?", absPath),
-					Default: false,
-				}, &doIt); err != nil {
-					return err
-				}
-				if !doIt {
-					fmt.Println("Aborted!")
-					return nil
-				}
-				if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-					ws.SetLekkoRepoPath(absPath)
-					return nil
-				}); err != nil {
-					return err
-				}
-				return nil
+			dot, err := dotlekko.ReadDotLekko()
+			if err != nil {
+				return err
 			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireLekko())
-			if len(rs.GetLekkoRepoPath()) == 0 {
-				return errors.New("no local repo info in Lekko config")
+			if len(dot.Repository) == 0 {
+				return errors.New("Repository info is not set in .lekko")
 			}
-			fmt.Println(rs.GetLekkoRepoPath())
+			base, err := repo.DefaultRepoBasePath()
+			if err != nil {
+				return err
+			}
+			repoOwner, repoName := dot.GetRepoInfo()
+			fmt.Println(filepath.Join(base, repoOwner, repoName))
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&path, "set", "", "set the local repo path")
 	return cmd
 }
 
@@ -452,7 +433,6 @@ func HasLekkoChanges(lekkoPath string) (bool, error) {
 }
 
 func pullCmd() *cobra.Command {
-	var repoPath string
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull",
@@ -464,7 +444,7 @@ func pullCmd() *cobra.Command {
 			}
 
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
+			repoPath, err := repo.PrepareGithubRepo(rs)
 			if err != nil {
 				return err
 			}
@@ -563,13 +543,12 @@ func pullCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository, defaults to auto-detected path")
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "allow dirty git state when pulling without valid lekko.lock")
 	return cmd
 }
 
 func mergeFileCmd() *cobra.Command {
-	var repoPath, tsFilename string
+	var tsFilename string
 	cmd := &cobra.Command{
 		Use: "merge-file",
 		Short: ("Merge native lekko file with remote changes. " +
@@ -599,7 +578,7 @@ func mergeFileCmd() *cobra.Command {
 			}
 
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-			repoPath, err := repo.InitIfNotExists(cmd.Context(), rs, repoPath)
+			repoPath, err := repo.PrepareGithubRepo(rs)
 			if err != nil {
 				return err
 			}
@@ -692,7 +671,6 @@ func mergeFileCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
 	cmd.Flags().StringVarP(&tsFilename, "filename", "f", "", "path to ts file to pull changes into")
 	return cmd
 }

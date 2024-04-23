@@ -483,18 +483,19 @@ func syncGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "sync a Go file with Lekko config functions to a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var err error
 			if len(repoPath) == 0 {
-				rs := secrets.NewSecretsOrFail()
-				if len(rs.GetLekkoRepoPath()) == 0 {
-					return errors.New("no local config repository available, pass '--path' or use 'lekko repo path --set'")
+				rs := secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
+				repoPath, err = repo.PrepareGithubRepo(rs)
+				if err != nil {
+					return err
 				}
-				repoPath = rs.GetLekkoRepoPath()
 			}
 			return SyncGo(cmd.Context(), f, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
-	cmd.Flags().StringVarP(&repoPath, "path", "p", "", "path to config repository, will use from 'lekko repo path' if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	return cmd
 }
 
