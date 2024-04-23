@@ -530,15 +530,18 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 	}
 
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
-	// so we can report them properly
+	// so we can report them properly (and not look sketchy)
 	ast.Inspect(pf, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.File:
 			// i.e. lekkodefault -> default (this requires the package name to be correct)
-			if x.Name.Name[:5] != "lekko" {
+			if !strings.HasPrefix(x.Name.Name, "lekko") {
 				panic("packages for lekko must start with 'lekko'")
 			}
 			namespace.Name = x.Name.Name[5:]
+			if len(namespace.Name) == 0 {
+				panic("namespace name cannot be empty")
+			}
 		case *ast.FuncDecl:
 			// TODO: We should support numbers (e.g. v2) but the strcase pkg has some non-ideal behavior with numbers,
 			// we might want to write our own librar(ies) with cross-language consistency
