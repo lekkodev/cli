@@ -61,7 +61,6 @@ func repoCmd() *cobra.Command {
 		pushCmd(),
 		pullCmd(),
 		mergeFileCmd(),
-		testCmd(),
 	)
 	return cmd
 }
