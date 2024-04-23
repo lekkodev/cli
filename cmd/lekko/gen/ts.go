@@ -84,7 +84,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("\t%s?: %s;\n", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -107,7 +107,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
 		t := fieldDescriptorToTS(f)
-		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToSnake(f.TextName()), t))
+		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 	}
 
 	data := struct {
@@ -565,7 +565,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToSnake(f.TextName()), FieldValueToTS(f, val)))
+			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
 
