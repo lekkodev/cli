@@ -19,6 +19,7 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/cli/browser"
@@ -134,11 +135,23 @@ func setupCmd() *cobra.Command {
 				if fi, err := os.Stat("src"); err == nil && fi.IsDir() && isNode {
 					lekkoPath = "src/lekko"
 				}
+				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && isGo {
+					lekkoPath = "internal/lekko"
+				}
 
 				if err := survey.AskOne(&survey.Input{
-					Message: "Where Lekko should store configs? (relative to project root)",
+					Message: "Location for Lekko config functions (relative to project root):",
 					Default: lekkoPath,
-				}, &lekkoPath); err != nil {
+				}, &lekkoPath, survey.WithValidator(func(val interface{}) error {
+					s, ok := val.(string)
+					if !ok {
+						return errors.New("invalid path")
+					}
+					if !strings.HasSuffix(s, "lekko") {
+						return errors.New("path must end with 'lekko'")
+					}
+					return nil
+				})); err != nil {
 					return errors.Wrap(err, "prompt lekko path")
 				}
 

@@ -344,7 +344,7 @@ func remoteCmd() *cobra.Command {
 			}
 
 			if len(dot.Repository) == 0 {
-				return errors.New("Remote repo info is not set")
+				return errors.New("Repository info is not set in .lekko")
 			}
 
 			fmt.Println(dot.Repository)
@@ -386,7 +386,7 @@ func pathCmd() *cobra.Command {
 				return err
 			}
 			if len(dot.Repository) == 0 {
-				return errors.New("Local repo info is not set")
+				return errors.New("Repository info is not set in .lekko")
 			}
 			base, err := repo.DefaultRepoBasePath()
 			if err != nil {
