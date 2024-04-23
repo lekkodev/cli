@@ -33,6 +33,7 @@ import (
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
@@ -87,6 +88,7 @@ func GenGoCmd() *cobra.Command {
 	var ns string
 	var outputPath string
 	var repoPath string
+	var initMode bool
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "generate Go library code from configs",
@@ -113,14 +115,72 @@ func GenGoCmd() *cobra.Command {
 					return err
 				}
 			}
+			if len(ns) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Namespace:",
+					Help:    "Lekko namespace to generate code for, determines Go package name",
+				}, &ns); err != nil {
+					return errors.Wrap(err, "namespace prompt")
+				}
+			}
+			if !regexp.MustCompile("[a-z]+").MatchString(ns) {
+				return errors.New("namespace must be a lowercase alphanumeric string")
+			}
+			if ns == "proto" {
+				return errors.New("'proto' is a reserved name")
+			}
 			generator := NewGoGenerator(mf.Module.Mod.Path, outputPath, repoPath, ns)
+			if initMode {
+				return generator.Init(cmd.Context())
+			}
 			return generator.Gen(cmd.Context())
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
 	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under, autodetects if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, autodetects if not set")
+	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	return cmd
+}
+
+// Initialize a blank Lekko config function file
+func (g *goGenerator) Init(ctx context.Context) error {
+	const templateBody = `package lekko{{$.Namespace}}
+
+// This is an example description for an example config
+func getExample() bool {
+	return true
+}`
+	fullOutputPath := path.Join(g.outputPath, g.namespace, "lekko.go")
+	if _, err := os.Stat(fullOutputPath); err == nil {
+		return fmt.Errorf("file %s already exists", fullOutputPath)
+	}
+
+	data := struct {
+		Namespace string
+	}{
+		Namespace: g.namespace,
+	}
+	var contents bytes.Buffer
+	templ := template.Must(template.New("lekko.go").Parse(templateBody))
+	if err := templ.Execute(&contents, data); err != nil {
+		return errors.Wrap(err, "lekko.go template")
+	}
+	formatted, err := format.Source(contents.Bytes())
+	if err != nil {
+		return errors.Wrap(err, "format lekko.go")
+	}
+	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
+		return err
+	}
+	f, err := os.Create(fullOutputPath)
+	if err != nil {
+		return errors.Wrap(err, "create lekko.go")
+	}
+	if _, err := f.Write(formatted); err != nil {
+		return errors.Wrap(err, "write lekko.go")
+	}
+	return nil
 }
 
 func (g *goGenerator) Gen(ctx context.Context) error {
@@ -238,7 +298,6 @@ import (
 		fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
 		return err
 	}
-	// TODO: Fix hardcoded paths
 	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
 		return err
 	}
