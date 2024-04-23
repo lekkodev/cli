@@ -518,7 +518,13 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 				res += " }"
 				return res
 			} else if f.IsList() {
-				panic(fmt.Sprintf("Do not know how to count: %+v", f))
+				var results []string
+				list := val.List()
+				for i := 0; i < list.Len(); i++ {
+					item := list.Get(i)
+					results = append(results, FieldValueToTS(f, item))
+				}
+				return "[" + strings.Join(results, ", ") + "]"
 			}
 		default:
 			panic(fmt.Sprintf("Unknown: %+v", f))
