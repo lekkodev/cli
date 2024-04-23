@@ -420,7 +420,15 @@ func pathCmd() *cobra.Command {
 }
 
 func HasLekkoChanges(lekkoPath string) (bool, error) {
-	codeRepo, err := git.PlainOpen(".")
+	gitRoot, err := repo.GetGitRootPath()
+	if err != nil {
+		return false, err
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return false, err
+	}
+	codeRepo, err := git.PlainOpen(gitRoot)
 	if err != nil {
 		return false, err
 	}
@@ -433,7 +441,8 @@ func HasLekkoChanges(lekkoPath string) (bool, error) {
 		return false, err
 	}
 	for p, s := range st {
-		if strings.HasPrefix(p, lekkoPath) {
+		relPath, err := filepath.Rel(wd, filepath.Join(gitRoot, p))
+		if err == nil && strings.HasPrefix(relPath, lekkoPath) {
 			if s.Staging != git.Unmodified || s.Worktree != git.Unmodified {
 				return true, nil
 			}

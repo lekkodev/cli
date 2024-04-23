@@ -15,6 +15,7 @@
 package repo
 
 import (
+	"os/exec"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
@@ -91,4 +92,13 @@ func GitPull(r *git.Repository, rs secrets.ReadSecrets) error {
 		return err
 	}
 	return nil
+}
+
+func GetGitRootPath() (string, error) {
+	c := exec.Command("git", "rev-parse", "--show-toplevel")
+	out, err := c.Output()
+	if err != nil {
+		return "", errors.Wrap(err, "not a git repository")
+	}
+	return strings.TrimSpace(string(out)), nil
 }
