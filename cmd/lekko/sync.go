@@ -20,6 +20,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"log"
 	"os"
 	"path"
@@ -515,6 +516,11 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 	if err != nil {
 		return err
 	}
+	// Discard logs, mainly for silencing compilation later
+	// TODO: Maybe a verbose flag
+	r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer: io.Discard,
+	})
 	rootMD, _, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return err
@@ -524,12 +530,22 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 		return err
 	}
 
+	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
+	// so we can report them properly (and not look sketchy)
 	ast.Inspect(pf, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.File:
 			// i.e. lekkodefault -> default (this requires the package name to be correct)
+			if !strings.HasPrefix(x.Name.Name, "lekko") {
+				panic("packages for lekko must start with 'lekko'")
+			}
 			namespace.Name = x.Name.Name[5:]
+			if len(namespace.Name) == 0 {
+				panic("namespace name cannot be empty")
+			}
 		case *ast.FuncDecl:
+			// TODO: We should support numbers (e.g. v2) but the strcase pkg has some non-ideal behavior with numbers,
+			// we might want to write our own librar(ies) with cross-language consistency
 			if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
 				var commentLines []string
 				if x.Doc != nil {
@@ -581,18 +597,28 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 						panic("Panic!")
 					}
 				}
+				return false
 			}
-			return false
+			panic(fmt.Sprintf("sync %s: only functions like 'getConfig' are supported", x.Name.Name))
 		}
 		return true
 	})
 	// TODO static context
 
-	// Now we need to write/merge it..
 	nsExists := false
+	// Need to keep track of which configs were synced
+	// Any configs that were already present but not synced should be removed
+	toRemove := make(map[string]struct{}) // Set of config names in existing namespace
 	for _, nsFromMeta := range rootMD.Namespaces {
 		if namespace.Name == nsFromMeta {
 			nsExists = true
+			ffs, err := r.GetFeatureFiles(ctx, namespace.Name)
+			if err != nil {
+				return errors.Wrap(err, "read existing configs")
+			}
+			for _, ff := range ffs {
+				toRemove[ff.Name] = struct{}{}
+			}
 			break
 		}
 	}
@@ -601,7 +627,6 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 			return errors.Wrap(err, "add namespace")
 		}
 	}
-
 	for _, configProto := range namespace.Features {
 		// create a new starlark file from a template (based on the config type)
 		var starBytes []byte
@@ -663,10 +688,6 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 			return errors.Wrap(err, "write after mutation")
 		}
 
-		// TODO: Consider silencing compile output or batching them somehow - right now it's very verbose
-		// r.ConfigureLogger(&repo.LoggingConfiguration{
-		// 	Writer: io.Discard,
-		// })
 		// compile newly generated starlark file
 		_, err = r.Compile(ctx, &repo.CompileRequest{
 			Registry:        registry,
@@ -675,6 +696,13 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 		})
 		if err != nil {
 			return errors.Wrap(err, "compile after mutation")
+		}
+		delete(toRemove, configProto.Key)
+	}
+	// Remove leftovers
+	for configName := range toRemove {
+		if err := r.RemoveFeature(ctx, namespace.Name, configName); err != nil {
+			return errors.Wrapf(err, "remove %s", configName)
 		}
 	}
 
