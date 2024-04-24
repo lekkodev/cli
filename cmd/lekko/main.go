@@ -66,6 +66,10 @@ func main() {
 	experimentalCmd.AddCommand(cleanupCmd)
 	experimentalCmd.AddCommand(formatCmd())
 	// code generation
+	rootCmd.AddCommand(genCmd())
+	rootCmd.AddCommand(syncCmd())
+	rootCmd.AddCommand(bisyncCmd())
+	// also leaving these in experimental for backwards compatibility just in case
 	experimentalCmd.AddCommand(genCmd())
 	experimentalCmd.AddCommand(syncCmd())
 	experimentalCmd.AddCommand(bisyncCmd())
