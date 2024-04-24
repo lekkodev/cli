@@ -84,7 +84,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("\t%s?: %s;\n", f.TextName(), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), fieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -489,7 +489,7 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 		case protoreflect.EnumKind:
 			fallthrough
 		case protoreflect.StringKind:
-			return fmt.Sprintf("\"%s\"", val.String())
+			return fmt.Sprintf("%q", val.String())
 		case protoreflect.BoolKind:
 			return val.String()
 		case protoreflect.BytesKind:
@@ -520,7 +520,13 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 				res += " }"
 				return res
 			} else if f.IsList() {
-				panic(fmt.Sprintf("Do not know how to count: %+v", f))
+				var results []string
+				list := val.List()
+				for i := 0; i < list.Len(); i++ {
+					item := list.Get(i)
+					results = append(results, FieldValueToTS(f, item))
+				}
+				return "[" + strings.Join(results, ", ") + "]"
 			}
 		default:
 			panic(fmt.Sprintf("Unknown: %+v", f))
@@ -564,7 +570,8 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
 			return true
 		})
+
 		sort.Strings(lines)
-		return fmt.Sprintf("{\n%s}", strings.Join(lines, ",\n"))
+		return fmt.Sprintf("{\n%s\n}", strings.Join(lines, ",\n"))
 	}
 }
