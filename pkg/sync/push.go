@@ -23,11 +23,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/dotlekko"
+	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
+	"golang.org/x/mod/modfile"
 )
 
 type NativeLang string
@@ -150,9 +153,24 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 		}
 	}
 
+	// Generate native configs from remote main.
+	// Will be used below to detect and print changes.
+	remoteDir, err := os.MkdirTemp("", "lekko-push-")
+	if err != nil {
+		return errors.Wrap(err, "create temp dir")
+	}
+	defer os.RemoveAll(remoteDir)
+	for _, f := range nativeFiles {
+		ns := nativeLang.GetNamespace(f)
+		err = GenNative(ctx, nativeLang, lekkoPath, repoPath, ns, remoteDir)
+		if err != nil {
+			return errors.Wrap(err, "generate native config for remote")
+		}
+	}
+
+	// run 2-way sync
 	switch nativeLang {
 	case TS:
-		// run 2-way sync
 		tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
 		output, err := tsSyncCmd.CombinedOutput()
 		fmt.Println(string(output))
@@ -166,6 +184,40 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 		}
 	default:
 		return fmt.Errorf("unsupported language: %s", nativeLang)
+	}
+
+	// Print diff between local and remote
+	hasChanges := false
+	for _, f := range nativeFiles {
+		fmt.Println()
+		gitDiffCmd := exec.Command("git", "diff", "--no-index", "--src-prefix=remote/", "--dst-prefix=local/", filepath.Join(remoteDir, f), f) // #nosec G204
+		gitDiffCmd.Stdout = os.Stdout
+		err := gitDiffCmd.Run()
+		if err != nil {
+			exitErr, ok := err.(*exec.ExitError)
+			if !ok {
+				return errors.Wrap(err, "git diff")
+			}
+			if exitErr.ExitCode() > 0 {
+				hasChanges = true
+			}
+		}
+	}
+	if !hasChanges {
+		fmt.Println("Already up to date.")
+		return nil
+	}
+
+	doIt := false
+	fmt.Println()
+	if err := survey.AskOne(&survey.Confirm{
+		Message: "Continue?",
+		Default: false,
+	}, &doIt); err != nil {
+		return errors.Wrap(err, "prompt")
+	}
+	if !doIt {
+		return errors.New("Aborted")
 	}
 
 	rootMD, _, err = configRepo.ParseMetadata(ctx)
@@ -257,4 +309,38 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 
 	// Pull to get remote branches
 	return repo.GitPull(gitRepo, rs)
+}
+
+func GenNative(ctx context.Context, nativeLang NativeLang, lekkoPath, repoPath, ns, dir string) error {
+	switch nativeLang {
+	case TS:
+		err := os.MkdirAll(filepath.Join(dir, lekkoPath), 0770)
+		if err != nil {
+			return errors.Wrap(err, "create output dir")
+		}
+		outFilename := filepath.Join(dir, lekkoPath, ns+nativeLang.Ext())
+		return gen.GenFormattedTS(ctx, repoPath, ns, outFilename)
+	case GO:
+		outDir := filepath.Join(dir, lekkoPath)
+		return genFormattedGo(ctx, ns, repoPath, outDir, lekkoPath)
+	default:
+		return errors.New("Unsupported language")
+	}
+}
+
+func genFormattedGo(ctx context.Context, namespace, repoPath, outDir, lekkoPath string) error {
+	b, err := os.ReadFile("go.mod")
+	if err != nil {
+		return errors.Wrap(err, "find go.mod in working directory")
+	}
+	mf, err := modfile.ParseLax("go.mod", b, nil)
+	if err != nil {
+		return err
+	}
+
+	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
+	if err := generator.Gen(ctx); err != nil {
+		return errors.Wrapf(err, "generate code for %s", namespace)
+	}
+	return nil
 }
