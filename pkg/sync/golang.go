@@ -55,7 +55,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func Bisync(ctx context.Context, path, repoPath string) ([]string, error) {
+func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
 		return nil, errors.Wrap(err, "find go.mod in working directory")
@@ -68,7 +68,7 @@ func Bisync(ctx context.Context, path, repoPath string) ([]string, error) {
 	// Traverse target path, finding namespaces
 	// TODO: consider making this more efficient for batch gen/sync
 	files := make([]string, 0)
-	if err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+	if err := filepath.WalkDir(lekkoPath, func(p string, d fs.DirEntry, err error) error {
 		// Skip generated proto dir
 		if d.IsDir() && d.Name() == "proto" {
 			return filepath.SkipDir
@@ -79,7 +79,7 @@ func Bisync(ctx context.Context, path, repoPath string) ([]string, error) {
 				return errors.Wrapf(err, "sync %s", p)
 			}
 			namespace := filepath.Base(filepath.Dir(p))
-			generator := gen.NewGoGenerator(mf.Module.Mod.Path, path, repoPath, namespace)
+			generator := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoPath, namespace)
 			if err := generator.Gen(ctx); err != nil {
 				return errors.Wrapf(err, "generate code for %s", namespace)
 			}

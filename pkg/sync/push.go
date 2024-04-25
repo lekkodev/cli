@@ -160,7 +160,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 			return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
 		}
 	case GO:
-		_, err = Bisync(ctx, lekkoPath, repoPath)
+		_, err = Bisync(ctx, lekkoPath, lekkoPath, repoPath)
 		if err != nil {
 			return err
 		}

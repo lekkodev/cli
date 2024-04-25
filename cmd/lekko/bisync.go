@@ -57,7 +57,7 @@ func bisyncGoCmd() *cobra.Command {
 					return err
 				}
 			}
-			_, err = sync.Bisync(ctx, path, repoPath)
+			_, err = sync.Bisync(ctx, path, path, repoPath)
 			return err
 		},
 	}

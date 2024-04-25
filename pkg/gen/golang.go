@@ -55,16 +55,18 @@ import (
 // TODO: this can hold more state to clean up functions a bit, like storing usedVariables, etc.
 type goGenerator struct {
 	moduleRoot   string
-	outputPath   string
+	outputPath   string // Location for destination file, can be absolute or relative. Its suffix should be the same as lekkoPath. In most cases can be same as lekkoPath.
+	lekkoPath    string // Location relative to project root where Lekko files are stored, e.g. internal/lekko.
 	repoPath     string
 	namespace    string
 	typeRegistry *protoregistry.Types
 }
 
-func NewGoGenerator(moduleRoot, outputPath, repoPath, namespace string) *goGenerator {
+func NewGoGenerator(moduleRoot, outputPath, lekkoPath, repoPath, namespace string) *goGenerator {
 	return &goGenerator{
 		moduleRoot: moduleRoot,
 		outputPath: outputPath,
+		lekkoPath:  filepath.Clean(lekkoPath),
 		repoPath:   repoPath,
 		namespace:  namespace,
 	}
@@ -129,7 +131,7 @@ func GenGoCmd() *cobra.Command {
 			if ns == "proto" {
 				return errors.New("'proto' is a reserved name")
 			}
-			generator := NewGoGenerator(mf.Module.Mod.Path, outputPath, repoPath, ns)
+			generator := NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
 			if initMode {
 				return generator.Init(cmd.Context())
 			}
@@ -137,7 +139,7 @@ func GenGoCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
-	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "internal/lekko", "path to write generated directories and Go files under, autodetects if not set")
+	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "", "path to write generated directories and Go files under, autodetects if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, autodetects if not set")
 	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	return cmd
@@ -192,7 +194,7 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
 	// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
 	g.typeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
-	staticCtxType := UnpackProtoType(g.moduleRoot, g.outputPath, nsMDs[g.namespace].ContextProto)
+	staticCtxType := UnpackProtoType(g.moduleRoot, g.lekkoPath, nsMDs[g.namespace].ContextProto)
 	ffs, err := r.GetFeatureFiles(ctx, g.namespace)
 	if err != nil {
 		return err
@@ -232,7 +234,7 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 			addSlicesImport = true
 		}
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-			protoImport := UnpackProtoType(g.moduleRoot, g.outputPath, f.Tree.Default.TypeUrl)
+			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
 			protoImportSet[protoImport.ImportPath] = protoImport
 		}
 	}
@@ -290,7 +292,7 @@ import (
 		"buf",
 		"generate",
 		// TODO: Fix the hardcoded stuff
-		fmt.Sprintf(`--template={"managed": {"enabled": true, "go_package_prefix": {"default": "%s/%s/proto"}}, "version":"v1","plugins":[{"plugin":"buf.build/protocolbuffers/go:v1.33.0","out":"%s/proto", "opt": "paths=source_relative"}]}`, g.moduleRoot, g.outputPath, g.outputPath),
+		fmt.Sprintf(`--template={"managed": {"enabled": true, "go_package_prefix": {"default": "%s/%s/proto"}}, "version":"v1","plugins":[{"plugin":"buf.build/protocolbuffers/go:v1.33.0","out":"%s/proto", "opt": "paths=source_relative"}]}`, g.moduleRoot, g.lekkoPath, g.outputPath),
 		"--include-imports",
 		g.repoPath) // #nosec G204
 	pCmd.Dir = "."
@@ -522,7 +524,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		getFunction = "GetProto"
 		templateBody = g.getProtoTemplateBody()
 		// we don't need the import path so sending in empty string
-		protoType = UnpackProtoType("", g.outputPath, f.Tree.Default.TypeUrl)
+		protoType = UnpackProtoType("", g.lekkoPath, f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
 		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
 	}
@@ -777,7 +779,7 @@ func (g *goGenerator) fieldValueToString(parent protoreflect.Message, f protoref
 		// Found in type registry
 		return g.translateProtoValue(
 			msg.Interface(),
-			UnpackProtoType(g.moduleRoot, g.outputPath, string(msg.Descriptor().FullName())),
+			UnpackProtoType(g.moduleRoot, g.lekkoPath, string(msg.Descriptor().FullName())),
 		)
 	} else {
 		switch f.Kind() {
@@ -982,7 +984,7 @@ func (p *noOpProvider) Close(ctx context.Context) error {
 	}
 	clientTemplateFuncs := map[string]any{
 		"nsToImport": func(ns string) string {
-			return fmt.Sprintf("lekko%s \"%s/%s/%s\"", ns, moduleRoot, g.outputPath, ns)
+			return fmt.Sprintf("lekko%s \"%s/%s/%s\"", ns, moduleRoot, g.lekkoPath, ns)
 		},
 		"nsToClientFieldType": func(ns string) string {
 			return fmt.Sprintf("%s *lekko%s.LekkoClient", strcase.ToCamel(ns), ns)

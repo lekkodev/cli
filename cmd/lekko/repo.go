@@ -438,7 +438,7 @@ func pullCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull",
-		Short: "Pull remote changes and merge them with local changes. Typescript only.",
+		Short: "Pull remote changes and merge them with local changes.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dot, err := dotlekko.ReadDotLekko()
 			if err != nil {
@@ -544,7 +544,7 @@ func pullCmd() *cobra.Command {
 					return errors.Wrap(err, "ts pull")
 				}
 			case sync.GO:
-				files, err := sync.Bisync(cmd.Context(), lekkoPath, repoPath)
+				files, err := sync.Bisync(cmd.Context(), lekkoPath, lekkoPath, repoPath)
 				if err != nil {
 					return errors.Wrap(err, "go bisync")
 				}
@@ -682,6 +682,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		exitErr, ok := err.(*exec.ExitError)
 		// positive error code is fine, it signals number of conflicts
 		if ok && exitErr.ExitCode() > 0 {
+			fmt.Printf("dbg// exit code %s %v\n", mergeCmd.String(), exitErr.ExitCode())
 			fmt.Printf("CONFLICT (content): Merge conflict in %s\n", filename)
 		} else {
 			return errors.Wrap(err, "git merge-file")
@@ -702,13 +703,13 @@ func genNative(ctx context.Context, nativeLang sync.NativeLang, lekkoPath, repoP
 		return gen.GenFormattedTS(ctx, repoPath, ns, outFilename)
 	case sync.GO:
 		outDir := filepath.Join(dir, lekkoPath)
-		return genFormattedGo(ctx, ns, repoPath, outDir)
+		return genFormattedGo(ctx, ns, repoPath, outDir, lekkoPath)
 	default:
 		return errors.New("Unsupported language")
 	}
 }
 
-func genFormattedGo(ctx context.Context, namespace, repoPath, outDir string) error {
+func genFormattedGo(ctx context.Context, namespace, repoPath, outDir, lekkoPath string) error {
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
 		return errors.Wrap(err, "find go.mod in working directory")
@@ -718,7 +719,7 @@ func genFormattedGo(ctx context.Context, namespace, repoPath, outDir string) err
 		return err
 	}
 
-	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, repoPath, namespace)
+	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
 	if err := generator.Gen(ctx); err != nil {
 		return errors.Wrapf(err, "generate code for %s", namespace)
 	}
