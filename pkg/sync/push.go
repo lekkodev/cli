@@ -190,7 +190,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	hasChanges := false
 	for _, f := range nativeFiles {
 		fmt.Println()
-		gitDiffCmd := exec.Command("git", "diff", "--no-index", "--src-prefix=remote/", "--dst-prefix=local/", filepath.Join(remoteDir, f), f)
+		gitDiffCmd := exec.Command("git", "diff", "--no-index", "--src-prefix=remote/", "--dst-prefix=local/", filepath.Join(remoteDir, f), f) // #nosec G204
 		gitDiffCmd.Stdout = os.Stdout
 		err := gitDiffCmd.Run()
 		if err != nil {
