@@ -16,11 +16,9 @@ package repo
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -329,7 +327,7 @@ func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
 		if d.IsDir() && d.Name() == "gen" {
 			return fs.SkipDir
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) {
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) && !strings.HasSuffix(d.Name(), "_gen"+ext) {
 			files = append(files, path)
 		}
 		return nil
@@ -338,169 +336,4 @@ func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
 		return nil, err
 	}
 	return files, nil
-}
-
-func (r *RepoCmd) Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) error {
-	repoPath, err := PrepareGithubRepo(r.rs)
-	if err != nil {
-		return err
-	}
-	gitRepo, err := git.PlainOpen(repoPath)
-	if err != nil {
-		return errors.Wrap(err, "open git repo")
-	}
-	remotes, err := gitRepo.Remotes()
-	if err != nil {
-		return errors.Wrap(err, "get remotes")
-	}
-	if len(remotes) == 0 {
-		return errors.New("No remote found, please finish setup instructions")
-	}
-
-	lekkoPath := dot.LekkoPath
-	err = ResetAndClean(gitRepo)
-	if err != nil {
-		return errors.Wrap(err, "reset and clean")
-	}
-	err = GitPull(gitRepo, r.rs)
-	if err != nil {
-		return errors.Wrap(err, "pull from GitHub")
-	}
-	head, err := gitRepo.Head()
-	if err != nil {
-		return errors.Wrap(err, "get head")
-	}
-
-	configRepo, err := NewLocal(repoPath, r.rs)
-	if err != nil {
-		return errors.Wrap(err, "failed to open config repo")
-	}
-
-	updatesExistingNamespace := false
-	rootMD, _, err := configRepo.ParseMetadata(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse config repo metadata")
-	}
-	nsMap := make(map[string]bool)
-	for _, ns := range rootMD.Namespaces {
-		nsMap[ns] = true
-	}
-	nativeFiles, err := ListNativeConfigFiles(lekkoPath, ".ts")
-	if err != nil {
-		return errors.Wrap(err, "list native config files")
-	}
-	for _, f := range nativeFiles {
-		ns := strings.TrimSuffix(filepath.Base(f), ".ts")
-		if _, ok := nsMap[ns]; ok {
-			updatesExistingNamespace = true
-		}
-	}
-
-	if !forceLock {
-		// no lock and there is a potential conflict
-		if len(dot.LockSHA) == 0 && updatesExistingNamespace {
-			return errors.New("No Lekko lock information found, please run with --force flag to push anyway")
-		}
-		if len(dot.LockSHA) > 0 && head.Hash().String() != dot.LockSHA {
-			return ErrRemoteHasChanges
-		}
-	}
-
-	// run 2-way sync
-	tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
-	output, err := tsSyncCmd.CombinedOutput()
-	fmt.Println(string(output))
-	if err != nil {
-		return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
-	}
-
-	rootMD, _, err = configRepo.ParseMetadata(ctx)
-	if err != nil {
-		return errors.Wrap(err, "failed to parse config repo metadata")
-	}
-	// re-build proto
-	registry, err := configRepo.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, rootMD.UseExternalTypes)
-	if err != nil {
-		return errors.Wrap(err, "rebuild type registry")
-	}
-	_, err = configRepo.Compile(ctx, &CompileRequest{
-		Registry: registry,
-	})
-	if err != nil {
-		return errors.Wrap(err, "compile before push")
-	}
-	fmt.Printf("Compiled successfully\n\n")
-
-	worktree, err := gitRepo.Worktree()
-	if err != nil {
-		return err
-	}
-	status, err := worktree.Status()
-	if err != nil {
-		return err
-	}
-	headBefore, err := gitRepo.Head()
-	if err != nil {
-		return err
-	}
-	if !status.IsClean() {
-		_, err = worktree.Add(".")
-		if err != nil {
-			return err
-		}
-		if len(commitMessage) == 0 {
-			commitMessage = "Configs commit"
-		}
-		_, err = worktree.Commit(commitMessage, &git.CommitOptions{
-			All: true,
-		})
-		if err != nil {
-			return err
-		}
-	}
-	// push to GitHub
-	// assuming that there is only one remote and one URL
-	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
-	auth, err := GitAuthForRemote(gitRepo, "origin", r.rs)
-	if err != nil {
-		return err
-	}
-	err = gitRepo.Push(&git.PushOptions{
-		Auth: auth,
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		if strings.Contains(err.Error(), "non-fast-forward update") {
-			return ErrRemoteHasChanges
-		}
-		err = errors.Wrap(err, "failed to push")
-		// Undo commit that we made before push.
-		// Soft reset will keep changes as staged.
-		errReset := worktree.Reset(&git.ResetOptions{
-			Commit: headBefore.Hash(),
-			Mode:   git.SoftReset,
-		})
-		if errReset != nil {
-			return errors.Wrap(stderrors.Join(err, errReset), "failed to reset changes")
-		}
-		return err
-	}
-	if errors.Is(err, git.NoErrAlreadyUpToDate) {
-		fmt.Println("Already up to date.")
-		return nil
-	}
-	head, err = gitRepo.Head()
-	if err != nil {
-		return err
-	}
-	headSHA := head.Hash().String()
-	fmt.Printf("Successfully pushed changes as %s\n", headSHA)
-
-	// Take commit SHA for synchronizing with code repo
-	dot.LockSHA = headSHA
-	if err := dot.WriteBack(); err != nil {
-		return errors.Wrap(err, "write back .lekko file")
-	}
-
-	// Pull to get remote branches
-	return GitPull(gitRepo, r.rs)
 }

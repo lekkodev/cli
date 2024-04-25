@@ -15,19 +15,11 @@
 package main
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-
-	"github.com/lekkodev/cli/cmd/lekko/gen"
 	"github.com/lekkodev/cli/pkg/dotlekko"
-	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
-	"github.com/pkg/errors"
+	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/modfile"
 )
 
 func bisyncCmd() *cobra.Command {
@@ -50,14 +42,6 @@ func bisyncGoCmd() *cobra.Command {
 		Short: "Lekko bisync for Go. Should be run from project root.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			b, err := os.ReadFile("go.mod")
-			if err != nil {
-				return errors.Wrap(err, "find go.mod in working directory")
-			}
-			mf, err := modfile.ParseLax("go.mod", b, nil)
-			if err != nil {
-				return err
-			}
 			if len(path) == 0 {
 				dot, err := dotlekko.ReadDotLekko()
 				if err != nil {
@@ -65,6 +49,7 @@ func bisyncGoCmd() *cobra.Command {
 				}
 				path = dot.LekkoPath
 			}
+			var err error
 			if len(repoPath) == 0 {
 				rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 				repoPath, err = repo.PrepareGithubRepo(rs)
@@ -72,34 +57,11 @@ func bisyncGoCmd() *cobra.Command {
 					return err
 				}
 			}
-			// Traverse target path, finding namespaces
-			// TODO: consider making this more efficient for batch gen/sync
-			if err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
-				// Skip generated proto dir
-				if d.IsDir() && d.Name() == "proto" {
-					return filepath.SkipDir
-				}
-				// Sync and gen
-				if d.Name() == "lekko.go" {
-					if err := SyncGo(ctx, p, repoPath); err != nil {
-						return errors.Wrapf(err, "sync %s", p)
-					}
-					namespace := filepath.Base(filepath.Dir(p))
-					generator := gen.NewGoGenerator(mf.Module.Mod.Path, path, repoPath, namespace)
-					if err := generator.Gen(ctx); err != nil {
-						return errors.Wrapf(err, "generate code for %s", namespace)
-					}
-					fmt.Printf("Successfully bisynced %s\n", logging.Bold(p))
-				}
-				// Ignore others
-				return nil
-			}); err != nil {
-				return err
-			}
-			return nil
+			_, err = sync.Bisync(ctx, path, path, repoPath)
+			return err
 		},
 	}
-	cmd.Flags().StringVarP(&path, "path", "p", "internal/lekko", "path in current project containing Lekko files, autodetects if not set")
+	cmd.Flags().StringVarP(&path, "path", "p", "", "path in current project containing Lekko files, autodetects if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to local config repository, autodetects if not set")
 	return cmd
 }
