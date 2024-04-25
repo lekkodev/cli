@@ -682,7 +682,6 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		exitErr, ok := err.(*exec.ExitError)
 		// positive error code is fine, it signals number of conflicts
 		if ok && exitErr.ExitCode() > 0 {
-			fmt.Printf("dbg// exit code %s %v\n", mergeCmd.String(), exitErr.ExitCode())
 			fmt.Printf("CONFLICT (content): Merge conflict in %s\n", filename)
 		} else {
 			return errors.Wrap(err, "git merge-file")
