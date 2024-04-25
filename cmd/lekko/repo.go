@@ -514,8 +514,8 @@ func pullCmd() *cobra.Command {
 					return err
 				}
 				for _, f := range nativeFiles {
-					ns := strings.TrimSuffix(filepath.Base(f), nativeLang.Ext())
-					err := gen.GenFormattedTS(cmd.Context(), repoPath, ns, f)
+					ns := nativeLang.GetNamespace(f)
+					err := genNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, ns, ".")
 					if err != nil {
 						return err
 					}

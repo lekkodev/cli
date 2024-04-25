@@ -327,7 +327,7 @@ func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
 		if d.IsDir() && d.Name() == "gen" {
 			return fs.SkipDir
 		}
-		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) && !strings.HasSuffix(d.Name(), "_gen."+ext) {
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) && !strings.HasSuffix(d.Name(), "_gen"+ext) {
 			files = append(files, path)
 		}
 		return nil
