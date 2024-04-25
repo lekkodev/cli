@@ -30,7 +30,6 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/dotlekko"
-	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
@@ -39,7 +38,6 @@ import (
 	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"golang.org/x/mod/modfile"
 )
 
 const (
@@ -515,7 +513,7 @@ func pullCmd() *cobra.Command {
 				}
 				for _, f := range nativeFiles {
 					ns := nativeLang.GetNamespace(f)
-					err := genNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, ns, ".")
+					err := sync.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, ns, ".")
 					if err != nil {
 						return err
 					}
@@ -620,7 +618,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
-	err = genNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, baseDir)
+	err = sync.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, baseDir)
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}
@@ -656,7 +654,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	err = genNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, remoteDir)
+	err = sync.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, remoteDir)
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}
@@ -689,40 +687,6 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		}
 	}
 
-	return nil
-}
-
-func genNative(ctx context.Context, nativeLang sync.NativeLang, lekkoPath, repoPath, ns, dir string) error {
-	switch nativeLang {
-	case sync.TS:
-		err := os.MkdirAll(filepath.Join(dir, lekkoPath), 0770)
-		if err != nil {
-			return errors.Wrap(err, "create output dir")
-		}
-		outFilename := filepath.Join(dir, lekkoPath, ns+nativeLang.Ext())
-		return gen.GenFormattedTS(ctx, repoPath, ns, outFilename)
-	case sync.GO:
-		outDir := filepath.Join(dir, lekkoPath)
-		return genFormattedGo(ctx, ns, repoPath, outDir, lekkoPath)
-	default:
-		return errors.New("Unsupported language")
-	}
-}
-
-func genFormattedGo(ctx context.Context, namespace, repoPath, outDir, lekkoPath string) error {
-	b, err := os.ReadFile("go.mod")
-	if err != nil {
-		return errors.Wrap(err, "find go.mod in working directory")
-	}
-	mf, err := modfile.ParseLax("go.mod", b, nil)
-	if err != nil {
-		return err
-	}
-
-	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
-	if err := generator.Gen(ctx); err != nil {
-		return errors.Wrapf(err, "generate code for %s", namespace)
-	}
 	return nil
 }
 

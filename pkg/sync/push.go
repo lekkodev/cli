@@ -25,9 +25,11 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/dotlekko"
+	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
+	"golang.org/x/mod/modfile"
 )
 
 type NativeLang string
@@ -257,4 +259,38 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 
 	// Pull to get remote branches
 	return repo.GitPull(gitRepo, rs)
+}
+
+func GenNative(ctx context.Context, nativeLang NativeLang, lekkoPath, repoPath, ns, dir string) error {
+	switch nativeLang {
+	case TS:
+		err := os.MkdirAll(filepath.Join(dir, lekkoPath), 0770)
+		if err != nil {
+			return errors.Wrap(err, "create output dir")
+		}
+		outFilename := filepath.Join(dir, lekkoPath, ns+nativeLang.Ext())
+		return gen.GenFormattedTS(ctx, repoPath, ns, outFilename)
+	case GO:
+		outDir := filepath.Join(dir, lekkoPath)
+		return genFormattedGo(ctx, ns, repoPath, outDir, lekkoPath)
+	default:
+		return errors.New("Unsupported language")
+	}
+}
+
+func genFormattedGo(ctx context.Context, namespace, repoPath, outDir, lekkoPath string) error {
+	b, err := os.ReadFile("go.mod")
+	if err != nil {
+		return errors.Wrap(err, "find go.mod in working directory")
+	}
+	mf, err := modfile.ParseLax("go.mod", b, nil)
+	if err != nil {
+		return err
+	}
+
+	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
+	if err := generator.Gen(ctx); err != nil {
+		return errors.Wrapf(err, "generate code for %s", namespace)
+	}
+	return nil
 }
