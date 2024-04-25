@@ -694,6 +694,10 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 func genNative(ctx context.Context, nativeLang sync.NativeLang, lekkoPath, repoPath, ns, dir string) error {
 	switch nativeLang {
 	case sync.TS:
+		err := os.MkdirAll(filepath.Join(dir, lekkoPath), 0770)
+		if err != nil {
+			return errors.Wrap(err, "create output dir")
+		}
 		outFilename := filepath.Join(dir, lekkoPath, ns+nativeLang.Ext())
 		return gen.GenFormattedTS(ctx, repoPath, ns, outFilename)
 	case sync.GO:
