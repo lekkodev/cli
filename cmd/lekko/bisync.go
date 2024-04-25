@@ -61,7 +61,7 @@ func bisyncGoCmd() *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().StringVarP(&path, "path", "p", "internal/lekko", "path in current project containing Lekko files, autodetects if not set")
+	cmd.Flags().StringVarP(&path, "path", "p", "", "path in current project containing Lekko files, autodetects if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to local config repository, autodetects if not set")
 	return cmd
 }

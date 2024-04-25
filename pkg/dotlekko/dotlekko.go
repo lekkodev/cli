@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -117,6 +118,11 @@ func ParseDotLekko(r io.Reader) (*DotLekko, error) {
 	if len(dot.LekkoPath) == 0 {
 		return nil, errors.New("missing lekko_path")
 	}
+	if strings.Contains(dot.LekkoPath, "~") {
+		return nil, errors.New("lekko_path must be relative to project root")
+	}
+	// Resolve relative, etc.
+	dot.LekkoPath = filepath.Clean(dot.LekkoPath)
 
 	return dot, nil
 }
