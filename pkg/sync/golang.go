@@ -708,19 +708,20 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 	case *ast.CallExpr:
 		return callExprToRule(node)
 	default:
-		panic("Panic!!")
+		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
 	}
 }
 
 func ifToConstraints(ifStmt *ast.IfStmt, registry *protoregistry.Types, want featurev1beta1.FeatureType) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
 	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
+	assert.Equal(len(ifStmt.Body.List), 1, "if statements can only contain one return statement")
 	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
-	assert.Equal(ok, true)
+	assert.Equal(ok, true, "if statements can only contain return statements")
 	constraint.Value = exprToAny(returnStmt.Results[0], registry, want) // TODO
 	if ifStmt.Else != nil {                                             // TODO bare else?
 		elseIfStmt, ok := ifStmt.Else.(*ast.IfStmt)
-		assert.Equal(ok, true)
+		assert.Equal(ok, true, "bare else statements are not supported, must be else if")
 		return append([]*featurev1beta1.Constraint{constraint}, ifToConstraints(elseIfStmt, registry, want)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
