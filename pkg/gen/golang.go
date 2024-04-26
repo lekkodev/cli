@@ -39,7 +39,6 @@ import (
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/mod/modfile"
@@ -111,8 +110,7 @@ func GenGoCmd() *cobra.Command {
 				outputPath = dot.LekkoPath
 			}
 			if len(repoPath) == 0 {
-				rs := secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
-				repoPath, err = repo.PrepareGithubRepo(rs)
+				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
 					return err
 				}
@@ -186,8 +184,7 @@ func getExample() bool {
 }
 
 func (g *goGenerator) Gen(ctx context.Context) error {
-	rs := secrets.NewSecretsOrFail()
-	r, err := repo.NewLocal(g.repoPath, rs)
+	r, err := repo.NewLocal(g.repoPath, nil)
 	if err != nil {
 		return errors.Wrap(err, "read config repository")
 	}

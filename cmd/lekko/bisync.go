@@ -17,7 +17,6 @@ package main
 import (
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/spf13/cobra"
 )
@@ -51,8 +50,7 @@ func bisyncGoCmd() *cobra.Command {
 			}
 			var err error
 			if len(repoPath) == 0 {
-				rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-				repoPath, err = repo.PrepareGithubRepo(rs)
+				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
 					return err
 				}

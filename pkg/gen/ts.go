@@ -35,7 +35,6 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
@@ -163,14 +162,13 @@ func GenFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error
 func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer, error)) error {
 	// TODO to avoid weird error message we should compile first.
 	var err error
-	rs := secrets.NewSecretsOrFail()
 	if len(repoPath) == 0 {
-		repoPath, err = repo.PrepareGithubRepo(rs)
+		repoPath, err = repo.PrepareGithubRepo()
 		if err != nil {
 			return err
 		}
 	}
-	r, err := repo.NewLocal(repoPath, rs)
+	r, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return errors.Wrap(err, "new repo")
 	}

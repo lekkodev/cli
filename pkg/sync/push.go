@@ -27,8 +27,8 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/gitcli"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"golang.org/x/mod/modfile"
 )
@@ -82,13 +82,13 @@ func (l *NativeLang) GetNamespace(filename string) string {
 	return ""
 }
 
-func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.ReadSecrets, dot *dotlekko.DotLekko) error {
+func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) error {
 	nativeLang, err := DetectNativeLang()
 	if err != nil {
 		return err
 	}
 
-	repoPath, err := repo.PrepareGithubRepo(rs)
+	repoPath, err := repo.PrepareGithubRepo()
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	if err != nil {
 		return errors.Wrap(err, "reset and clean")
 	}
-	err = repo.GitPull(gitRepo, rs)
+	err = gitcli.Pull(repoPath)
 	if err != nil {
 		return errors.Wrap(err, "pull from GitHub")
 	}
@@ -118,7 +118,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 		return errors.Wrap(err, "get head")
 	}
 
-	configRepo, err := repo.NewLocal(repoPath, rs)
+	configRepo, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return errors.Wrap(err, "failed to open config repo")
 	}
@@ -173,7 +173,10 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	case TS:
 		tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
 		output, err := tsSyncCmd.CombinedOutput()
-		fmt.Println(string(output))
+		outputStr := strings.TrimSpace(string(output))
+		if len(outputStr) > 0 {
+			fmt.Println(string(output))
+		}
 		if err != nil {
 			return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
 		}
@@ -189,7 +192,6 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	// Print diff between local and remote
 	hasChanges := false
 	for _, f := range nativeFiles {
-		fmt.Println()
 		gitDiffCmd := exec.Command("git", "diff", "--no-index", "--src-prefix=remote/", "--dst-prefix=local/", filepath.Join(remoteDir, f), f) // #nosec G204
 		gitDiffCmd.Stdout = os.Stdout
 		err := gitDiffCmd.Run()
@@ -200,6 +202,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 			}
 			if exitErr.ExitCode() > 0 {
 				hasChanges = true
+				fmt.Println()
 			}
 		}
 	}
@@ -267,17 +270,19 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	// push to GitHub
 	// assuming that there is only one remote and one URL
 	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
-	auth, err := repo.GitAuthForRemote(gitRepo, "origin", rs)
+	pushOutput, err := gitcli.Push(repoPath)
+	fmt.Println(string(pushOutput))
+	// auth, err := repo.GitAuthForRemote(gitRepo, "origin", rs)
+	// if err != nil {
+	// 	return err
+	// }
+	// err = gitRepo.Push(&git.PushOptions{
+	// 	Auth: auth,
+	// })
 	if err != nil {
-		return err
-	}
-	err = gitRepo.Push(&git.PushOptions{
-		Auth: auth,
-	})
-	if err != nil && !errors.Is(err, git.NoErrAlreadyUpToDate) {
-		if strings.Contains(err.Error(), "non-fast-forward update") {
-			return repo.ErrRemoteHasChanges
-		}
+		// if strings.Contains(err.Error(), "non-fast-forward update") {
+		// 	return repo.ErrRemoteHasChanges
+		// }
 		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
 		// Soft reset will keep changes as staged.
@@ -290,10 +295,10 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 		}
 		return err
 	}
-	if errors.Is(err, git.NoErrAlreadyUpToDate) {
-		fmt.Println("Already up to date.")
-		return nil
-	}
+	// if errors.Is(err, git.NoErrAlreadyUpToDate) {
+	// 	fmt.Println("Already up to date.")
+	// 	return nil
+	// }
 	head, err = gitRepo.Head()
 	if err != nil {
 		return err
@@ -308,7 +313,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, rs secrets.
 	}
 
 	// Pull to get remote branches
-	return repo.GitPull(gitRepo, rs)
+	return gitcli.Pull(repoPath)
 }
 
 func GenNative(ctx context.Context, nativeLang NativeLang, lekkoPath, repoPath, ns, dir string) error {
