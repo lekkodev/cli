@@ -16,7 +16,6 @@ package main
 
 import (
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/spf13/cobra"
 )
@@ -39,8 +38,7 @@ func syncGoCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var err error
 			if len(repoPath) == 0 {
-				rs := secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
-				repoPath, err = repo.PrepareGithubRepo(rs)
+				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
 					return err
 				}

@@ -26,7 +26,6 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
@@ -55,7 +54,7 @@ func genStarlarkCmd() *cobra.Command {
 		Short: "generate Starlark from the json representation and compile it",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return errors.Wrap(err, "failed to open config repo")
 			}

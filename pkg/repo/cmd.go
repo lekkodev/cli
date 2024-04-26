@@ -30,6 +30,7 @@ import (
 	"github.com/go-git/go-git/v5/config"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/gitcli"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
@@ -119,14 +120,14 @@ func DefaultRepoBasePath() (string, error) {
 	return filepath.Join(home, "Library/Application Support/Lekko/Config Repositories"), nil
 }
 
-func PrepareGithubRepo(rs secrets.ReadSecrets) (string, error) {
+func PrepareGithubRepo() (string, error) {
 	base, err := DefaultRepoBasePath()
 	if err != nil {
 		return "", err
 	}
 	dot, err := dotlekko.ReadDotLekko()
 	if err != nil || len(dot.Repository) == 0 {
-		return InitIfNotExists(rs, "")
+		return InitIfNotExists("")
 	}
 	repoOwner, repoName := dot.GetRepoInfo()
 	repoPath := filepath.Join(base, repoOwner, repoName)
@@ -149,7 +150,7 @@ func PrepareGithubRepo(rs secrets.ReadSecrets) (string, error) {
 	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
 
 	if shouldClone {
-		_, err := NewLocalClone(repoPath, githubRepoURL, rs)
+		err := gitcli.Clone(githubRepoURL, repoPath)
 		if err != nil {
 			return "", err
 		}
@@ -172,7 +173,7 @@ func PrepareGithubRepo(rs secrets.ReadSecrets) (string, error) {
 	return repoPath, nil
 }
 
-func InitIfNotExists(rs secrets.ReadSecrets, repoPath string) (string, error) {
+func InitIfNotExists(repoPath string) (string, error) {
 	if len(repoPath) == 0 {
 		base, err := DefaultRepoBasePath()
 		if err != nil {
@@ -207,7 +208,7 @@ func InitIfNotExists(rs secrets.ReadSecrets, repoPath string) (string, error) {
 }
 
 func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, description string) error {
-	repoPath, err := InitIfNotExists(r.rs, repoPath)
+	repoPath, err := InitIfNotExists(repoPath)
 	if err != nil {
 		return errors.Wrap(err, "init repo")
 	}

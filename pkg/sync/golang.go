@@ -32,7 +32,6 @@ import (
 	"github.com/iancoleman/strcase"
 	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/logging"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/pkg/errors"
 	"golang.org/x/mod/modfile"
 
@@ -116,7 +115,7 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 	}
 	namespace := Namespace{}
 
-	r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
+	r, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return err
 	}
