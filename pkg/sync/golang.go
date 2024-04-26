@@ -465,7 +465,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 				if field.Kind() == protoreflect.EnumKind {
 					intValue, err := strconv.ParseInt(node.Value, 10, 32)
 					if err != nil {
-						panic(err)
+						panic(errors.Wrapf(err, "int parse token %s", node.Value))
 					}
 					msg.Set(field, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
 					continue
@@ -474,16 +474,17 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 				if intValue, err := strconv.ParseInt(node.Value, 10, 64); err == nil {
 					msg.Set(field, protoreflect.ValueOf(intValue))
 				} else {
-					panic(err)
+					panic(errors.Wrapf(err, "int parse token %s", node.Value))
 				}
 			case token.FLOAT:
 				if floatValue, err := strconv.ParseFloat(node.Value, 64); err == nil {
 					msg.Set(field, protoreflect.ValueOf(floatValue))
 				} else {
-					panic(err)
+					panic(errors.Wrapf(err, "float parse token %s", node.Value))
 				}
+			// Booleans are handled separately as literal identifiers below
 			default:
-				fmt.Printf("NV: %s\n", node.Value)
+				panic(fmt.Errorf("unsupported basic literal token type %v", node.Kind))
 			}
 		case *ast.Ident:
 			switch node.Name {
@@ -492,7 +493,7 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 			case "false":
 				msg.Set(field, protoreflect.ValueOf(false))
 			default:
-				fmt.Printf("NN: %s\n", node.Name)
+				panic(fmt.Errorf("unsupported identifier %v", node.Name))
 			}
 		case *ast.UnaryExpr:
 			switch node.Op {
@@ -501,25 +502,38 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 				case *ast.CompositeLit:
 					msg.Set(field, protoreflect.ValueOf(compositeLitToProto(ix, registry)))
 				default:
-					panic("Unknown X Type")
+					panic(fmt.Errorf("unsupported X type for unary & %T", ix))
 				}
 			default:
-				panic("Unknown Op")
+				panic(fmt.Errorf("unsupported unary operator %v", node.Op))
 			}
 		case *ast.CompositeLit:
-			switch mapTypeNode := node.Type.(type) {
+			switch clTypeNode := node.Type.(type) {
+			case *ast.ArrayType:
+				switch eltNode := clTypeNode.Elt.(type) {
+				case *ast.Ident:
+					// Primitive type array
+					// TODO
+				case *ast.StarExpr:
+					// Proto type array
+					// TODO
+				default:
+					panic(fmt.Errorf("unsupported slice element type %+v", eltNode))
+				}
 			case *ast.MapType:
+				mapTypeNode := clTypeNode
+				// TODO: Currently only supports primitive kvs
 				switch mapTypeNode.Key.(type) {
 				case *ast.Ident:
 					// Do something
 				default:
-					panic("Unknown Type")
+					panic(fmt.Errorf("unsupported map key type %+v", mapTypeNode))
 				}
 				switch mapTypeNode.Value.(type) {
 				case *ast.Ident:
 					// Do something
 				default:
-					panic("Unknown Type")
+					panic(fmt.Errorf("unsupported map value type %+v", mapTypeNode))
 				}
 				for _, elt := range node.Elts {
 					pair, ok := elt.(*ast.KeyValueExpr)
@@ -568,10 +582,10 @@ func compositeLitToProto(x *ast.CompositeLit, registry *protoregistry.Types) pro
 					}
 				}
 			default:
-				panic("Unknown Type")
+				panic(fmt.Errorf("unsupported composite literal type %T", clTypeNode))
 			}
 		default:
-			fmt.Printf("ETP: %#v\n", node)
+			panic(fmt.Errorf("unsupported composite literal value %+v", node))
 		}
 	}
 	return msg
