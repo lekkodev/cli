@@ -175,7 +175,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 		output, err := tsSyncCmd.CombinedOutput()
 		outputStr := strings.TrimSpace(string(output))
 		if len(outputStr) > 0 {
-			fmt.Println(string(output))
+			fmt.Println(outputStr)
 		}
 		if err != nil {
 			return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
@@ -272,17 +272,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 	fmt.Printf("Pushing to %s\n", remotes[0].Config().URLs[0])
 	pushOutput, err := gitcli.Push(repoPath)
 	fmt.Println(string(pushOutput))
-	// auth, err := repo.GitAuthForRemote(gitRepo, "origin", rs)
-	// if err != nil {
-	// 	return err
-	// }
-	// err = gitRepo.Push(&git.PushOptions{
-	// 	Auth: auth,
-	// })
 	if err != nil {
-		// if strings.Contains(err.Error(), "non-fast-forward update") {
-		// 	return repo.ErrRemoteHasChanges
-		// }
 		err = errors.Wrap(err, "failed to push")
 		// Undo commit that we made before push.
 		// Soft reset will keep changes as staged.
@@ -295,25 +285,19 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 		}
 		return err
 	}
-	// if errors.Is(err, git.NoErrAlreadyUpToDate) {
-	// 	fmt.Println("Already up to date.")
-	// 	return nil
-	// }
+
+	// Take commit SHA for synchronizing with code repo
 	head, err = gitRepo.Head()
 	if err != nil {
 		return err
 	}
 	headSHA := head.Hash().String()
-	fmt.Printf("Successfully pushed changes as %s\n", headSHA)
-
-	// Take commit SHA for synchronizing with code repo
 	dot.LockSHA = headSHA
 	if err := dot.WriteBack(); err != nil {
 		return errors.Wrap(err, "write back .lekko file")
 	}
 
-	// Pull to get remote branches
-	return gitcli.Pull(repoPath)
+	return nil
 }
 
 func GenNative(ctx context.Context, nativeLang NativeLang, lekkoPath, repoPath, ns, dir string) error {
