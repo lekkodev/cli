@@ -100,39 +100,21 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
-func SyncGo(ctx context.Context, f, repoPath string) error {
+func FileLocationToNamespace(ctx context.Context, f string, registry *protoregistry.Types) (*Namespace, error) {
 	src, err := os.ReadFile(f)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("open %s", f))
+		return nil, errors.Wrap(err, fmt.Sprintf("open %s", f))
 	}
 	if bytes.Contains(src, []byte("<<<<<<<")) {
-		return fmt.Errorf("%s has unresolved merge conflicts", f)
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", f)
 	}
 
 	fset := token.NewFileSet()
 	pf, err := parser.ParseFile(fset, f, src, parser.ParseComments)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	namespace := Namespace{}
-
-	r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
-	if err != nil {
-		return err
-	}
-	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	r.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
-	})
-	rootMD, _, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return err
-	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return err
-	}
 
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
@@ -208,6 +190,32 @@ func SyncGo(ctx context.Context, f, repoPath string) error {
 		return true
 	})
 	// TODO static context
+	return &namespace, nil
+}
+
+func SyncGo(ctx context.Context, f, repoPath string) error {
+	r, err := repo.NewLocal(repoPath, secrets.NewSecretsOrFail())
+	if err != nil {
+		return err
+	}
+	// Discard logs, mainly for silencing compilation later
+	// TODO: Maybe a verbose flag
+	r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer: io.Discard,
+	})
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return err
+	}
+
+	namespace, err := FileLocationToNamespace(ctx, f, registry)
+	if err != nil {
+		return err
+	}
 
 	nsExists := false
 	// Need to keep track of which configs were synced
@@ -651,9 +659,39 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 func binaryExprToRule(expr *ast.BinaryExpr) *rulesv1beta3.Rule {
 	switch expr.Op {
 	case token.LAND:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: []*rulesv1beta3.Rule{exprToRule(expr.X), exprToRule(expr.Y)}}}}
+		var rules []*rulesv1beta3.Rule
+		left := exprToRule(expr.X)
+		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
+			rules = append(rules, l.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, left)
+		}
+		right := exprToRule(expr.Y)
+		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
+			rules = append(rules, r.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, right)
+		}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: rules}}}
 	case token.LOR:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: []*rulesv1beta3.Rule{exprToRule(expr.X), exprToRule(expr.Y)}}}}
+		var rules []*rulesv1beta3.Rule
+		left := exprToRule(expr.X)
+		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
+			rules = append(rules, l.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, left)
+		}
+		right := exprToRule(expr.Y)
+		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
+			rules = append(rules, r.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, right)
+		}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: rules}}}
 	case token.EQL:
 		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
 	case token.LSS:
