@@ -28,12 +28,17 @@ import (
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star/prototypes"
+
 	"github.com/lekkodev/cli/pkg/sync"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
+
+	"golang.org/x/mod/modfile"
 )
 
 func syncCmd() *cobra.Command {
@@ -52,15 +57,30 @@ func syncGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "sync a Go file with Lekko config functions to a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var err error
+			b, err := os.ReadFile("go.mod")
+			if err != nil {
+				return errors.Wrap(err, "find go.mod in working directory")
+			}
+			mf, err := modfile.ParseLax("go.mod", b, nil)
+			if err != nil {
+				return err
+			}
+
 			if len(repoPath) == 0 {
-				rs := secrets.NewSecretsOrFail(secrets.RequireLekko(), secrets.RequireGithub())
-				repoPath, err = repo.PrepareGithubRepo(rs)
+				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
 					return err
 				}
 			}
-			return sync.SyncGo(cmd.Context(), f, repoPath)
+			r, err := repo.NewLocal(repoPath, nil)
+			if err != nil {
+				return err
+			}
+			syncer, err := sync.NewGoSyncer(cmd.Context(), mf.Module.Mod.Path, f, repoPath)
+			if err != nil {
+				return err
+			}
+			return syncer.Sync(cmd.Context(), r)
 		},
 	}
 	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
@@ -140,7 +160,8 @@ func diffCmd() *cobra.Command {
 				}
 			}
 			for _, f := range files {
-				namespace, err := sync.FileLocationToNamespace(ctx, f, registry)
+				g := sync.NewGoSyncerLite(f, registry)
+				namespace, err := g.FileLocationToNamespace(ctx)
 				if err != nil {
 					return err
 				}

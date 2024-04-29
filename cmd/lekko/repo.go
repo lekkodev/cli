@@ -31,6 +31,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
+	"github.com/lekkodev/cli/pkg/gitcli"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/repo"
@@ -286,8 +287,7 @@ func defaultRepoInitCmd() *cobra.Command {
 		Use:   "init-default",
 		Short: "Initialize a new template git repository in the default location",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rs := secrets.NewSecretsOrFail()
-			_, err := repo.InitIfNotExists(rs, repoPath)
+			_, err := repo.InitIfNotExists(repoPath)
 			return err
 		},
 	}
@@ -367,8 +367,7 @@ func pushCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "read Lekko configuration file")
 			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-			return sync.Push(cmd.Context(), commitMessage, forceLock, rs, dot)
+			return sync.Push(cmd.Context(), commitMessage, forceLock, dot)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
@@ -448,8 +447,7 @@ func pullCmd() *cobra.Command {
 				return err
 			}
 
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-			repoPath, err := repo.PrepareGithubRepo(rs)
+			repoPath, err := repo.PrepareGithubRepo()
 			if err != nil {
 				return err
 			}
@@ -485,7 +483,7 @@ func pullCmd() *cobra.Command {
 				return errors.New("No remote found, please finish setup instructions")
 			}
 			fmt.Printf("Pulling from %s\n", remotes[0].Config().URLs[0])
-			err = repo.GitPull(gitRepo, rs)
+			err = gitcli.Pull(repoPath)
 			if err != nil {
 				return errors.Wrap(err, "git pull")
 			}
@@ -587,8 +585,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) err
 		return errors.New("no Lekko lock information found")
 	}
 
-	rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
-	repoPath, err := repo.PrepareGithubRepo(rs)
+	repoPath, err := repo.PrepareGithubRepo()
 	if err != nil {
 		return err
 	}

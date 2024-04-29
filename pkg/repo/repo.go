@@ -175,7 +175,10 @@ func NewLocal(path string, auth AuthProvider) (ConfigurationRepository, error) {
 		},
 		bufEnabled: true,
 	}
-	return cr, cr.storeDefaultBranchName(auth)
+	if auth != nil {
+		return cr, cr.storeDefaultBranchName(auth)
+	}
+	return cr, nil
 }
 
 // Creates a local clone of a remote github config repository based on the
