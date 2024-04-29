@@ -54,9 +54,11 @@ func syncGoCmd() *cobra.Command {
 	var f string
 	var repoPath string
 	cmd := &cobra.Command{
-		Use:   "go",
+		Use:   "go path/to/lekko/file.go",
 		Short: "sync a Go file with Lekko config functions to a local config repository",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			b, err := os.ReadFile("go.mod")
 			if err != nil {
 				return errors.Wrap(err, "find go.mod in working directory")
@@ -72,18 +74,18 @@ func syncGoCmd() *cobra.Command {
 					return err
 				}
 			}
+			f = args[0]
+			syncer, err := sync.NewGoSyncer(ctx, mf.Module.Mod.Path, f, repoPath)
+			if err != nil {
+				return errors.Wrap(err, "initialize code syncer")
+			}
 			r, err := repo.NewLocal(repoPath, nil)
 			if err != nil {
 				return err
 			}
-			syncer, err := sync.NewGoSyncer(cmd.Context(), mf.Module.Mod.Path, f, repoPath)
-			if err != nil {
-				return err
-			}
-			return syncer.Sync(cmd.Context(), r)
+			return syncer.Sync(ctx, r)
 		},
 	}
-	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	return cmd
 }

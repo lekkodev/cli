@@ -76,17 +76,21 @@ func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]stri
 		if d.IsDir() && d.Name() == "proto" {
 			return filepath.SkipDir
 		}
-		// Sync and gen
-		if d.Name() == "lekko.go" { // TODO: Change file name to be based off namespace
+		// Sync and gen - only target <namespace>/<namespace>.go files
+		// Semi-duplicated logic from Syncer initializer
+		if !d.IsDir() && strings.TrimSuffix(d.Name(), ".go") == filepath.Base(filepath.Dir(p)) {
 			syncer, err := NewGoSyncer(ctx, mf.Module.Mod.Path, p, repoPath)
 			if err != nil {
-				return errors.Wrapf(err, "sync %s", p)
+				return errors.Wrap(err, "initialize code syncer")
 			}
 			if err := syncer.Sync(ctx, r); err != nil {
 				return errors.Wrapf(err, "sync %s", p)
 			}
 			namespace := filepath.Base(filepath.Dir(p))
-			generator := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoPath, namespace)
+			generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoPath, namespace)
+			if err != nil {
+				return errors.Wrap(err, "initialize code generator")
+			}
 			if err := generator.Gen(ctx); err != nil {
 				return errors.Wrapf(err, "generate code for %s", namespace)
 			}
@@ -223,6 +227,16 @@ type goSyncer struct {
 }
 
 func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*goSyncer, error) {
+	// Validate filePath ends with <namespace>/<namespace>.go
+	namespace := filepath.Dir(filePath)
+	if filepath.Base(filepath.Dir(filePath)) != strings.TrimSuffix(filepath.Base(filePath), ".go") {
+		return nil, fmt.Errorf("files to be synced by Lekko must have same name as parent directory (e.g. internal/lekko/default/default.go): %s", filePath)
+	}
+	// Validate namespace regex
+	if !regexp.MustCompile("[a-z]+").MatchString(namespace) {
+		return nil, fmt.Errorf("files to be synced by Lekko must have lowercase alphabetic names: %s", filePath)
+	}
+
 	r, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return nil, err

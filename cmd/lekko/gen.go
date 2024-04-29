@@ -96,7 +96,10 @@ func genGoCmd() *cobra.Command {
 			if ns == "proto" {
 				return errors.New("'proto' is a reserved name")
 			}
-			generator := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
+			generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
+			if err != nil {
+				return errors.Wrap(err, "initialize code generator")
+			}
 			if initMode {
 				return generator.Init(cmd.Context())
 			}
