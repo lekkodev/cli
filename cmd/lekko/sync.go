@@ -195,18 +195,18 @@ func diffCmd() *cobra.Command {
 						// These might still be equal, because the typescript path combines logical things in ways that the go path does not
 						// Using ts since it has fewer args..
 						gen.TypeRegistry = registry
-						otherAsTs, err := gen.GenTSForFeature(f, namespace.Name, "")
+						o, err := gen.GenTSForFeature(f, namespace.Name, "")
 						if err != nil {
 							return err
 						}
-						existingAsTs, err := gen.GenTSForFeature(existing[namespace.Name][f.Key], namespace.Name, "")
+						e, err := gen.GenTSForFeature(existing[namespace.Name][f.Key], namespace.Name, "")
 						if err != nil {
 							return err
 						}
-						if otherAsTs == existingAsTs {
+						if o == e {
 							fmt.Print("Equal! - from codeGen\n")
 						} else {
-							fmt.Printf("Not Equal:\n\n%s\n%s\n\n", otherAsTs, existingAsTs)
+							fmt.Printf("Not Equal:\n\n%s\n%s\n\n", o, e)
 						}
 					}
 				}
