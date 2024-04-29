@@ -139,7 +139,6 @@ func diffCmd() *cobra.Command {
 					existing[namespace.Name][config.Name] = config.StaticFeature
 				}
 			}
-			//marshaler := jsonpb.Marshaler{}
 			for _, f := range files {
 				namespace, err := sync.FileLocationToNamespace(ctx, f, registry)
 				if err != nil {
@@ -157,11 +156,8 @@ func diffCmd() *cobra.Command {
 					}
 
 					if proto.Equal(f.Tree, existing[namespace.Name][f.Key].Tree) {
-						fmt.Print("Equal!\n")
+						fmt.Print("Equal! - from proto.Equal\n")
 					} else {
-						//ot, _ := marshaler.MarshalToString(f.Tree)
-						//tt, _ := marshaler.MarshalToString(existing[namespace.Name][f.Key].Tree)
-						//fmt.Printf("\n%s\n%s\n\n", ot, tt)
 						// These might still be equal, because the typescript path combines logical things in ways that the go path does not
 						// Using ts since it has fewer args..
 						gen.TypeRegistry = registry
@@ -174,9 +170,9 @@ func diffCmd() *cobra.Command {
 							return err
 						}
 						if otherAsTs == existingAsTs {
-							fmt.Print("Equal!\n")
+							fmt.Print("Equal! - from codeGen\n")
 						} else {
-							fmt.Printf("\n%s\n%s\n\n", otherAsTs, existingAsTs)
+							fmt.Printf("Not Equal:\n\n%s\n%s\n\n", otherAsTs, existingAsTs)
 						}
 					}
 				}
