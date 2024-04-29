@@ -63,6 +63,10 @@ func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]stri
 	if err != nil {
 		return nil, err
 	}
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	// Traverse target path, finding namespaces
 	// TODO: consider making this more efficient for batch gen/sync
@@ -74,8 +78,11 @@ func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]stri
 		}
 		// Sync and gen
 		if d.Name() == "lekko.go" { // TODO: Change file name to be based off namespace
-			syncer := NewGoSyncer(mf.Module.Mod.Path, p, repoPath)
-			if err := syncer.Sync(ctx); err != nil {
+			syncer, err := NewGoSyncer(ctx, mf.Module.Mod.Path, p, repoPath)
+			if err != nil {
+				return errors.Wrapf(err, "sync %s", p)
+			}
+			if err := syncer.Sync(ctx, r); err != nil {
 				return errors.Wrapf(err, "sync %s", p)
 			}
 			namespace := filepath.Base(filepath.Dir(p))
@@ -100,63 +107,20 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
-// Translates Go code to Protobuf/Starlark and writes changes to local config repository
-type goSyncer struct {
-	moduleRoot string
-	lekkoPath  string
-	filePath   string // Path to Go source file to sync
-	repoPath   string // Path to config repository on local fs
-
-	typeRegistry  *protoregistry.Types
-	protoPackages map[string]string // Map of local package names to protobuf packages (e.g. configv1beta1 -> default.config.v1beta1)
-}
-
-func NewGoSyncer(moduleRoot, filePath, repoPath string) *goSyncer {
-	return &goSyncer{
-		moduleRoot: moduleRoot,
-		// Assumes target file is at <lekkoPath>/<namespace>/<file>
-		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
-		filePath:      filepath.Clean(filePath),
-		repoPath:      repoPath,
-		protoPackages: make(map[string]string),
-	}
-}
-
-func (g *goSyncer) Sync(ctx context.Context) error {
+func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
+	namespace := Namespace{}
 	src, err := os.ReadFile(g.filePath)
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
+		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
 	}
 	if bytes.Contains(src, []byte("<<<<<<<")) {
-		return fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
 	}
-
 	fset := token.NewFileSet()
 	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	namespace := Namespace{}
-
-	r, err := repo.NewLocal(g.repoPath, nil)
-	if err != nil {
-		return err
-	}
-	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	r.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
-	})
-	rootMD, _, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return err
-	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return err
-	}
-	g.typeRegistry = registry
-
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
 	ast.Inspect(pf, func(n ast.Node) bool {
@@ -245,6 +209,76 @@ func (g *goSyncer) Sync(ctx context.Context) error {
 		return true
 	})
 	// TODO static context
+	return &namespace, nil
+}
+
+// Translates Go code to Protobuf/Starlark and writes changes to local config repository
+type goSyncer struct {
+	moduleRoot string
+	lekkoPath  string
+	filePath   string // Path to Go source file to sync
+
+	typeRegistry  *protoregistry.Types
+	protoPackages map[string]string // Map of local package names to protobuf packages (e.g. configv1beta1 -> default.config.v1beta1)
+}
+
+func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*goSyncer, error) {
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Discard logs, mainly for silencing compilation later
+	// TODO: Maybe a verbose flag
+	r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer: io.Discard,
+	})
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, err
+	}
+	return &goSyncer{
+		moduleRoot: moduleRoot,
+		// Assumes target file is at <lekkoPath>/<namespace>/<file>
+		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
+		filePath:      filepath.Clean(filePath),
+		protoPackages: make(map[string]string),
+		typeRegistry:  registry,
+	}, nil
+}
+
+func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry.Types) *goSyncer {
+	return &goSyncer{
+		moduleRoot:    moduleRoot,
+		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
+		filePath:      filepath.Clean(filePath),
+		protoPackages: make(map[string]string),
+		typeRegistry:  registry,
+	}
+}
+
+func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) error {
+	// Discard logs, mainly for silencing compilation later
+	// TODO: Maybe a verbose flag
+	r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer: io.Discard,
+	})
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return err
+	}
+
+	namespace, err := g.FileLocationToNamespace(ctx)
+	if err != nil {
+		return err
+	}
 
 	nsExists := false
 	// Need to keep track of which configs were synced
@@ -422,7 +456,6 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 		}
 		panic(err)
 	}
-
 	parts := exprToNameParts(x.Type)
 	assert.Equal(len(parts), 2, fmt.Sprintf("expected message name to be 2 parts: %v", parts))
 	protoPackage, ok := g.protoPackages[parts[0]]
@@ -650,9 +683,39 @@ func (g *goSyncer) exprToComparisonValue(expr ast.Expr) *structpb.Value {
 func (g *goSyncer) binaryExprToRule(expr *ast.BinaryExpr) *rulesv1beta3.Rule {
 	switch expr.Op {
 	case token.LAND:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: []*rulesv1beta3.Rule{g.exprToRule(expr.X), g.exprToRule(expr.Y)}}}}
+		var rules []*rulesv1beta3.Rule
+		left := g.exprToRule(expr.X)
+		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
+			rules = append(rules, l.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, left)
+		}
+		right := g.exprToRule(expr.Y)
+		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
+			rules = append(rules, r.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, right)
+		}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: rules}}}
 	case token.LOR:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: []*rulesv1beta3.Rule{g.exprToRule(expr.X), g.exprToRule(expr.Y)}}}}
+		var rules []*rulesv1beta3.Rule
+		left := g.exprToRule(expr.X)
+		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
+			rules = append(rules, l.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, left)
+		}
+		right := g.exprToRule(expr.Y)
+		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
+		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
+			rules = append(rules, r.LogicalExpression.Rules...)
+		} else {
+			rules = append(rules, right)
+		}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: rules}}}
 	case token.EQL:
 		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.LSS:

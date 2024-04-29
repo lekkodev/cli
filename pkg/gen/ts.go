@@ -48,7 +48,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-var typeRegistry *protoregistry.Types
+var TypeRegistry *protoregistry.Types
 
 func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	var t string
@@ -173,14 +173,14 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 		return errors.Wrap(err, "new repo")
 	}
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
-	typeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
 	var parameters string
 	interfaces := make(map[string]string)
 	if _, ok := nsMDs[ns]; !ok {
 		log.Fatal("unknown namespace: ", ns)
 	}
 	if len(nsMDs[ns].ContextProto) > 0 {
-		ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
+		ptype, err := TypeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
 		if err != nil {
 			log.Fatal("error finding the message in the registry", err)
 		}
@@ -233,7 +233,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			} else {
 				name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
 				if _, ok := interfaces[name]; !ok {
-					ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
+					ptype, err := TypeRegistry.FindMessageByName(protoreflect.FullName(name))
 					if err != nil {
 						return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
 					}
@@ -245,7 +245,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 				}
 			}
 		}
-		codeString, err := genTSForFeature(f, ns, parameters)
+		codeString, err := GenTSForFeature(f, ns, parameters)
 		if err != nil {
 			return err
 		}
@@ -299,7 +299,7 @@ func GenTSCmd() *cobra.Command {
 	return cmd
 }
 
-func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
+func GenTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
 	// TODO: support multiline descriptions
 	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
@@ -476,9 +476,9 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 // returns only the formatted value
 func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) string {
 	if msg, ok := val.Interface().(protoreflect.Message); ok {
-		if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
+		if _, err := TypeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
 			// THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
-			try.To(typeRegistry.RegisterMessage(msg.Type()))
+			try.To(TypeRegistry.RegisterMessage(msg.Type()))
 		}
 		kind := featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
 		return translateRetValueTS(try.To1(anypb.New(msg.Interface())), kind)
@@ -514,6 +514,7 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 						FieldValueToTS(f.MapValue(), mv)))
 					return true
 				})
+				sort.Strings(lines)
 				res += strings.Join(lines, ", ")
 				res += " }"
 				return res
@@ -546,7 +547,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	// TODO double
 	if t != featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 		// we are guessing this is a primitive, (unless we have i64 so let's do that later)
-		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
+		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: TypeRegistry})))
 	}
 
 	switch strings.Split(val.TypeUrl, "/")[1] {
@@ -556,9 +557,9 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		try.To(val.UnmarshalTo(&v))
 		return fmt.Sprintf("protobuf.Duration.fromJsonString(%s)", marshalOptions.Format(&v))
 	default:
-		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
+		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: TypeRegistry})
 		if err != nil {
-			typeRegistry.RangeMessages(func(m protoreflect.MessageType) bool {
+			TypeRegistry.RangeMessages(func(m protoreflect.MessageType) bool {
 				return true
 			})
 			panic(fmt.Sprintf("idk what is going on: %e %+v", err, err))

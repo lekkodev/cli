@@ -85,6 +85,8 @@ func main() {
 	// short for `lekko repo merge-file`
 	rootCmd.AddCommand(mergeFileCmd())
 
+	rootCmd.AddCommand(diffCmd())
+
 	logging.InitColors()
 	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
 		fmt.Println(err)
