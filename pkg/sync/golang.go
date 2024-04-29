@@ -250,8 +250,9 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 	}, nil
 }
 
-func NewGoSyncerLite(filePath string, registry *protoregistry.Types) *goSyncer {
+func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry.Types) *goSyncer {
 	return &goSyncer{
+		moduleRoot:    moduleRoot,
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
@@ -455,7 +456,6 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 		}
 		panic(err)
 	}
-
 	parts := exprToNameParts(x.Type)
 	assert.Equal(len(parts), 2, fmt.Sprintf("expected message name to be 2 parts: %v", parts))
 	protoPackage, ok := g.protoPackages[parts[0]]

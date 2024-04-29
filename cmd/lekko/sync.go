@@ -124,6 +124,14 @@ func diffCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			b, err := os.ReadFile("go.mod")
+			if err != nil {
+				return err
+			}
+			mf, err := modfile.ParseLax("go.mod", b, nil)
+			if err != nil {
+				return err
+			}
 			files, err := findLekkoFiles(wd + "/internal/lekko")
 			if err != nil {
 				return err
@@ -160,7 +168,12 @@ func diffCmd() *cobra.Command {
 				}
 			}
 			for _, f := range files {
-				g := sync.NewGoSyncerLite(f, registry)
+				relativePath, err := filepath.Rel(wd, f)
+				if err != nil {
+					return err
+				}
+				fmt.Printf("%s\n\n", mf.Module.Mod.Path)
+				g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath, registry)
 				namespace, err := g.FileLocationToNamespace(ctx)
 				if err != nil {
 					return err
