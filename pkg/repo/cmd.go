@@ -138,6 +138,9 @@ func PrepareGithubRepo() (string, error) {
 		return InitIfNotExists("")
 	}
 	repoPath, err := GetRepoPath(dot)
+	if err != nil {
+		return "", err
+	}
 
 	shouldClone := false
 	fi, err := os.Stat(repoPath)

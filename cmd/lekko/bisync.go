@@ -36,7 +36,7 @@ Files at the provided path that contain valid Lekko config functions will first 
 This may affect ordering of functions/parameters and formatting.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nativeLang := try.To1(sync.DetectNativeLang())
-			return bisync(context.Background(), nativeLang, "", "")
+			return bisync(context.Background(), nativeLang, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
