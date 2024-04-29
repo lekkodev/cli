@@ -587,7 +587,7 @@ func (g *goGenerator) tryStoreUsedVariable(usedVariables map[string]string, k st
 	assert.Equal(t, existT)
 }
 
-// Recursively translate a rule, which is an n-ary tree. Additionally returns a bool indicating if it was a logical expression.
+// Recursively translate a rule, which is an n-ary tree. See lekko.rules.v1beta3.Rule.
 func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) string {
 	if rule == nil {
 		return ""
