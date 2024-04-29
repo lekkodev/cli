@@ -33,11 +33,15 @@ import (
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"golang.org/x/mod/modfile"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -79,6 +83,65 @@ func structpbValueToKindStringGo(v *structpb.Value) string {
 		return "string"
 	}
 	return "unknown" // do we just want to panic?
+}
+
+func GenGoCmd() *cobra.Command {
+	var ns string
+	var outputPath string
+	var repoPath string
+	var initMode bool
+	cmd := &cobra.Command{
+		Use:   "go",
+		Short: "generate Go library code from configs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			b, err := os.ReadFile("go.mod")
+			if err != nil {
+				return errors.Wrap(err, "find go.mod in working directory")
+			}
+			mf, err := modfile.ParseLax("go.mod", b, nil)
+			if err != nil {
+				return err
+			}
+			if len(outputPath) == 0 {
+				dot, err := dotlekko.ReadDotLekko()
+				if err != nil {
+					return err
+				}
+				outputPath = dot.LekkoPath
+			}
+			if len(repoPath) == 0 {
+				repoPath, err = repo.PrepareGithubRepo()
+				if err != nil {
+					return err
+				}
+			}
+			if len(ns) == 0 {
+				if err := survey.AskOne(&survey.Input{
+					Message: "Namespace:",
+					Help:    "Lekko namespace to generate code for, determines Go package name",
+				}, &ns); err != nil {
+					return errors.Wrap(err, "namespace prompt")
+				}
+			}
+			// TODO: Change this to a survey validator so it can keep re-asking
+			if !regexp.MustCompile("[a-z]+").MatchString(ns) {
+				return errors.New("namespace must be a lowercase alphanumeric string")
+			}
+			if ns == "proto" {
+				return errors.New("'proto' is a reserved name")
+			}
+			generator := NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
+			if initMode {
+				return generator.Init(cmd.Context())
+			}
+			return generator.Gen(cmd.Context())
+		},
+	}
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
+	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "", "path to write generated directories and Go files under, autodetects if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, autodetects if not set")
+	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
+	return cmd
 }
 
 // Initialize a blank Lekko config function file
