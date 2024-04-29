@@ -327,7 +327,10 @@ func genFormattedGo(ctx context.Context, namespace, repoPath, outDir, lekkoPath 
 		return err
 	}
 
-	generator := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
+	generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outDir, lekkoPath, repoPath, namespace)
+	if err != nil {
+		return errors.Wrap(err, "initialize code generator")
+	}
 	if err := generator.Gen(ctx); err != nil {
 		return errors.Wrapf(err, "generate code for %s", namespace)
 	}
