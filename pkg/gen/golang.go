@@ -123,6 +123,7 @@ func GenGoCmd() *cobra.Command {
 					return errors.Wrap(err, "namespace prompt")
 				}
 			}
+			// TODO: Change this to a survey validator so it can keep re-asking
 			if !regexp.MustCompile("[a-z]+").MatchString(ns) {
 				return errors.New("namespace must be a lowercase alphanumeric string")
 			}
@@ -191,7 +192,11 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
 	// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
 	g.typeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
-	staticCtxType := UnpackProtoType(g.moduleRoot, g.lekkoPath, nsMDs[g.namespace].ContextProto)
+	nsMD, ok := nsMDs[g.namespace]
+	if !ok {
+		return fmt.Errorf("%s is not a namespace in the config repository", g.namespace)
+	}
+	staticCtxType := UnpackProtoType(g.moduleRoot, g.lekkoPath, nsMD.ContextProto)
 	ffs, err := r.GetFeatureFiles(ctx, g.namespace)
 	if err != nil {
 		return err
@@ -231,6 +236,7 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 			addSlicesImport = true
 		}
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			// TODO: Return imports from gen methods and collect, this doesn't handle imports for nested
 			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
 			protoImportSet[protoImport.ImportPath] = protoImport
 		}
@@ -285,6 +291,10 @@ import (
 	// In OUR repos, and maybe some of our customers, they may already have a buf.gen.yml, so if
 	// that is the case, we should identify that, not run code gen (maybe?) and instead need to
 	// take the prefix by parsing the buf.gen.yml to understand where the go code goes.
+	//
+	// With proto packages with >= 3 segments, the go package only takes the last 2.
+	// e.g. default.config.v1beta1 -> configv1beta1
+	// https://github.com/bufbuild/buf/issues/1263
 	pCmd := exec.Command(
 		"buf",
 		"generate",
@@ -341,7 +351,7 @@ import (
 		// Final canonical Go format
 		formatted, err := format.Source(contents.Bytes())
 		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("format %s", output.fileName))
+			return errors.Wrap(err, fmt.Sprintf("format %s", path.Join(g.lekkoPath, output.fileName)))
 		}
 		if f, err := os.Create(path.Join(g.outputPath, g.namespace, output.fileName)); err != nil {
 			return err
@@ -520,8 +530,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
 		templateBody = g.getProtoTemplateBody()
-		// we don't need the import path so sending in empty string
-		protoType = UnpackProtoType("", g.lekkoPath, f.Tree.Default.TypeUrl)
+		protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
 		// creates configv1beta1.DBConfig
 		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
 	}
@@ -751,97 +760,96 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 	return ""
 }
 
-func (g *goGenerator) fieldValueToString(parent protoreflect.Message, f protoreflect.FieldDescriptor, val protoreflect.Value, protoType *ProtoImport) string {
-	if msg, ok := val.Interface().(protoreflect.Message); ok {
-		// Try finding in type registry
-		_, err := g.typeRegistry.FindMessageByName((msg.Descriptor().FullName()))
-		if errors.Is(err, protoregistry.NotFound) {
-			// Try finding in parent's nested message definitions
-			nestedMsgDesc := parent.Descriptor().Messages().ByName(msg.Descriptor().Name())
-			if nestedMsgDesc == nil {
-				panic(fmt.Sprintf("unable to find message type %s", msg.Descriptor().FullName()))
-			}
-			return g.translateProtoValue(
-				msg.Interface(),
-				// Need to use original import info but with different nested type name
-				&ProtoImport{
-					ImportPath:   protoType.ImportPath,
-					PackageAlias: protoType.PackageAlias,
-					Type:         fmt.Sprintf("%s_%s", string(parent.Descriptor().Name()), string(nestedMsgDesc.Name())),
-				},
-			)
-		} else if err != nil {
-			panic(errors.Wrap(err, "unknown error while checking type registry"))
+func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f protoreflect.FieldDescriptor, val protoreflect.Value) string {
+	if f.IsMap() {
+		// For map fields, f.Kind() is MessageKind but we need to handle key and value descriptors separately
+		// TODO: Add support for protobuf type values
+		assert.NotEqual(f.MapValue().Kind(), protoreflect.MessageKind, "unsupported protobuf type for map values")
+		var lines []string
+		res := fmt.Sprintf("map[%s]%s{", f.MapKey().Kind().String(), f.MapValue().Kind().String())
+		val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
+			lines = append(lines, fmt.Sprintf("\"%s\": %s",
+				mk.String(),
+				g.translateProtoFieldValue(parent, f.MapValue(), mv)))
+			return true
+		})
+		if len(lines) > 1 {
+			slices.Sort(lines)
+			res += "\n"
+			res += strings.Join(lines, ",\n")
+			res += ",\n}"
+		} else {
+			res += lines[0]
+			res += "}"
 		}
-		// Found in type registry
-		return g.translateProtoValue(
-			msg.Interface(),
-			UnpackProtoType(g.moduleRoot, g.lekkoPath, string(msg.Descriptor().FullName())),
-		)
+		return res
+	} else if f.IsList() {
+		// For list fields, f.Kind() is the type of each item (not necessarily MessageKind)
+		lVal := val.List()
+		var lines []string
+		res := fmt.Sprintf("[]%s{", f.Kind().String())
+		// For repeated messages, literal type can't just be stringified
+		if f.Kind() == protoreflect.MessageKind {
+			protoType := g.getProtoImportFromValue(parent, lVal.NewElement().Message()) // Not sure if this is the best way to get message type for list
+			res = fmt.Sprintf("[]*%s.%s{", protoType.PackageAlias, protoType.Type)
+		}
+		for i := range lVal.Len() {
+			lines = append(lines, g.translateProtoNonRepeatedValue(parent, f.Kind(), lVal.Get(i), true))
+		}
+		// Multiline formatting
+		if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
+			res += "\n"
+			res += strings.Join(lines, ",\n")
+			res += ",\n}"
+		} else {
+			res += strings.Join(lines, "")
+			res += "}"
+		}
+		return res
 	} else {
-		switch f.Kind() {
-		case protoreflect.EnumKind:
-			// TODO: Actually handle enums, right now they're just numbers
-			return val.String()
-		case protoreflect.StringKind:
-			// If the string value is multiline, transform to raw literal instead
-			valString := val.String()
-			quote := "\""
-			if strings.Count(valString, "\n") > 0 {
-				quote = "`"
-			}
-			return fmt.Sprintf("%s%s%s", quote, val.String(), quote)
-		case protoreflect.BoolKind:
-			return val.String()
-		case protoreflect.BytesKind:
-			panic("Don't know how to take bytes, try nibbles")
-		case protoreflect.FloatKind:
-			fallthrough
-		case protoreflect.DoubleKind:
-			fallthrough
-		case protoreflect.Int64Kind:
-			fallthrough
-		case protoreflect.Int32Kind:
-			fallthrough
-		case protoreflect.Uint64Kind:
-			fallthrough
-		case protoreflect.Uint32Kind:
-			return val.String()
-		case protoreflect.MessageKind:
-			if f.IsMap() {
-				var lines []string
-				res := fmt.Sprintf("map[%s]%s{", f.MapKey().Kind().String(), f.MapValue().Kind().String()) // TODO - this probbaly breaks for nested
-				val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
-					lines = append(lines, fmt.Sprintf("\"%s\": %s",
-						mk.String(),
-						g.fieldValueToString(parent, f.MapValue(), mv, protoType)))
-					return true
-				})
-				if len(lines) > 1 {
-					slices.Sort(lines)
-					res += "\n"
-					res += strings.Join(lines, ",\n")
-					res += ",\n}"
-				} else {
-					res += strings.Join(lines, "")
-					res += "}"
-				}
-				return res
-			} else if f.IsList() {
-				panic(fmt.Sprintf("Do not know how to count: %+v", f))
-			}
-		default:
-			panic(fmt.Sprintf("Unknown: %+v", f))
-		}
+		return g.translateProtoNonRepeatedValue(parent, f.Kind(), val, false)
 	}
-	panic("Unreachable code was reached")
+}
+
+func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message, kind protoreflect.Kind, val protoreflect.Value, omitLiteralType bool) string {
+	switch kind {
+	case protoreflect.EnumKind:
+		// TODO: Actually handle enums, right now they're just numbers
+		return val.String()
+	case protoreflect.StringKind:
+		// If the string value is multiline, transform to raw literal instead
+		valString := val.String()
+		quote := "\""
+		if strings.Count(valString, "\n") > 0 {
+			quote = "`"
+		}
+		return fmt.Sprintf("%s%s%s", quote, val.String(), quote)
+	case protoreflect.BoolKind:
+		return val.String()
+	case protoreflect.BytesKind:
+		panic("Don't know how to take bytes, try nibbles")
+	case protoreflect.FloatKind:
+		fallthrough
+	case protoreflect.DoubleKind:
+		fallthrough
+	case protoreflect.Int64Kind:
+		fallthrough
+	case protoreflect.Int32Kind:
+		fallthrough
+	case protoreflect.Uint64Kind:
+		fallthrough
+	case protoreflect.Uint32Kind:
+		// Don't need to do anything special for numerics
+		return val.String()
+	case protoreflect.MessageKind:
+		return g.translateProtoValue(parent, val.Message(), omitLiteralType)
+	default:
+		panic(fmt.Errorf("unsupported proto value type: %v", kind))
+	}
 }
 
 func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) string {
-	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: g.typeRegistry})
-	if err != nil {
-		panic(errors.Wrap(err, "unmarshal return value"))
-	}
+	msg := try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: g.typeRegistry}))
 	if protoType == nil {
 		// TODO we may need more special casing here for primitive types.
 		// This feels like horrific syntax, but I needed this because
@@ -864,22 +872,54 @@ func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) 
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
-	return g.translateProtoValue(msg, protoType)
+	return g.translateProtoValue(nil, msg.ProtoReflect(), false)
 }
 
-func (g *goGenerator) translateProtoValue(msg protoreflect.ProtoMessage, protoType *ProtoImport) string {
-	// todo multiline formatting
+func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val protoreflect.Message, omitLiteralType bool) string {
+	protoType := g.getProtoImportFromValue(parent, val)
 	var lines []string
-	msg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(f.TextName()), g.fieldValueToString(msg.ProtoReflect(), f, val, protoType)))
+	val.Range(func(fd protoreflect.FieldDescriptor, fv protoreflect.Value) bool {
+		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(fd.TextName()), g.translateProtoFieldValue(val, fd, fv)))
 		return true
 	})
-	if len(lines) > 1 {
+	literalType := ""
+	if !omitLiteralType {
+		literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
+	}
+	if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
 		slices.Sort(lines)
 		// Replace this with interface pointing stuff
-		return fmt.Sprintf("&%s.%s{\n%s,\n}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ",\n"))
+		return fmt.Sprintf("%s{\n%s,\n}", literalType, strings.Join(lines, ",\n"))
 	} else {
-		return fmt.Sprintf("&%s.%s{%s}", protoType.PackageAlias, protoType.Type, strings.Join(lines, ""))
+		return fmt.Sprintf("%s{%s}", literalType, strings.Join(lines, ""))
+	}
+}
+
+// Handles getting import & type literal information for both top-level and nested messages.
+// TODO: Consider moving logic into UnpackProtoType directly which is shared with TS codegen as well
+// TODO: This can definitely be cached, and doesn't need values, just descriptors
+func (g *goGenerator) getProtoImportFromValue(parent protoreflect.Message, val protoreflect.Message) *ProtoImport {
+	// Try finding in type registry
+	_, err := g.typeRegistry.FindMessageByName((val.Descriptor().FullName()))
+	if errors.Is(err, protoregistry.NotFound) {
+		// If there's no parent, this can't be a nested message, which is a problem
+		assert.NotEqual(parent, nil, "missing in type registry with no parent")
+		// Try finding in parent's nested message definitions
+		nestedMsgDesc := parent.Descriptor().Messages().ByName(val.Descriptor().Name())
+		if nestedMsgDesc == nil {
+			panic(fmt.Sprintf("unable to find message type %s", val.Descriptor().FullName()))
+		}
+		parentProtoType := g.getProtoImportFromValue(nil, parent)
+		return &ProtoImport{
+			ImportPath:   parentProtoType.ImportPath,
+			PackageAlias: parentProtoType.PackageAlias,
+			Type:         fmt.Sprintf("%s_%s", parentProtoType.Type, string(nestedMsgDesc.Name())),
+		}
+	} else if err != nil {
+		panic(errors.Wrap(err, "unknown error while checking type registry"))
+	} else {
+		// Found in type registry (i.e. top-level message)
+		return UnpackProtoType(g.moduleRoot, g.lekkoPath, string(val.Descriptor().FullName()))
 	}
 }
 

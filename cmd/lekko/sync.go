@@ -15,9 +15,13 @@
 package main
 
 import (
+	"os"
+
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/sync"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"golang.org/x/mod/modfile"
 )
 
 func syncCmd() *cobra.Command {
@@ -36,14 +40,23 @@ func syncGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "sync a Go file with Lekko config functions to a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var err error
+			b, err := os.ReadFile("go.mod")
+			if err != nil {
+				return errors.Wrap(err, "find go.mod in working directory")
+			}
+			mf, err := modfile.ParseLax("go.mod", b, nil)
+			if err != nil {
+				return err
+			}
+
 			if len(repoPath) == 0 {
 				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
 					return err
 				}
 			}
-			return sync.SyncGo(cmd.Context(), f, repoPath)
+			syncer := sync.NewGoSyncer(mf.Module.Mod.Path, f, repoPath)
+			return syncer.Sync(cmd.Context())
 		},
 	}
 	cmd.Flags().StringVarP(&f, "file", "f", "lekko.go", "Go file to sync to config repository") // TODO make this less dumb
