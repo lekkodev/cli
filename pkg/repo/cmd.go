@@ -120,17 +120,27 @@ func DefaultRepoBasePath() (string, error) {
 	return filepath.Join(home, "Library/Application Support/Lekko/Config Repositories"), nil
 }
 
-func PrepareGithubRepo() (string, error) {
+func GetRepoPath(dot *dotlekko.DotLekko) (string, error) {
 	base, err := DefaultRepoBasePath()
 	if err != nil {
 		return "", err
 	}
+	if len(dot.Repository) == 0 {
+		return "", errors.New("Repository info is not set in .lekko")
+	}
+	repoOwner, repoName := dot.GetRepoInfo()
+	return filepath.Join(base, repoOwner, repoName), nil
+}
+
+func PrepareGithubRepo() (string, error) {
 	dot, err := dotlekko.ReadDotLekko()
 	if err != nil || len(dot.Repository) == 0 {
 		return InitIfNotExists("")
 	}
-	repoOwner, repoName := dot.GetRepoInfo()
-	repoPath := filepath.Join(base, repoOwner, repoName)
+	repoPath, err := GetRepoPath(dot)
+	if err != nil {
+		return "", err
+	}
 
 	shouldClone := false
 	fi, err := os.Stat(repoPath)
@@ -147,6 +157,7 @@ func PrepareGithubRepo() (string, error) {
 		}
 	}
 
+	repoOwner, repoName := dot.GetRepoInfo()
 	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
 
 	if shouldClone {

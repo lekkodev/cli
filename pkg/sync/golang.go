@@ -54,7 +54,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
+func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
 		return nil, errors.Wrap(err, "find go.mod in working directory")
@@ -72,6 +72,9 @@ func Bisync(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]stri
 	// TODO: consider making this more efficient for batch gen/sync
 	files := make([]string, 0)
 	if err := filepath.WalkDir(lekkoPath, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
 		// Skip generated proto dir
 		if d.IsDir() && d.Name() == "proto" {
 			return filepath.SkipDir
