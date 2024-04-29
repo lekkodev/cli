@@ -62,6 +62,9 @@ func NewGoGenerator(moduleRoot, outputPath, lekkoPath, repoPath, namespace strin
 	if !regexp.MustCompile("[a-z]+").MatchString(namespace) {
 		return nil, fmt.Errorf("namespace must be a lowercase alphabetic string: %s", namespace)
 	}
+	if namespace == "proto" {
+		return nil, errors.New("'proto' is a reserved name")
+	}
 
 	return &goGenerator{
 		moduleRoot: moduleRoot,

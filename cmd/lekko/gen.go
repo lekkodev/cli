@@ -93,9 +93,6 @@ func genGoCmd() *cobra.Command {
 			if !regexp.MustCompile("[a-z]+").MatchString(ns) {
 				return errors.New("namespace must be a lowercase alphanumeric string")
 			}
-			if ns == "proto" {
-				return errors.New("'proto' is a reserved name")
-			}
 			generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
 			if err != nil {
 				return errors.Wrap(err, "initialize code generator")

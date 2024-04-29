@@ -274,6 +274,7 @@ func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry
 	}
 }
 
+// TODO: refactor - NewGoSyncer takes repoPath and gets local repo but here we expect it as an arg
 func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) error {
 	// Discard logs, mainly for silencing compilation later
 	// TODO: Maybe a verbose flag

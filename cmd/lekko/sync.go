@@ -116,8 +116,9 @@ func lekkoAnyToAny(a *featurev1beta1.Any) *anypb.Any {
 
 func diffCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "diff",
-		Short: "diff",
+		Use:    "diff",
+		Short:  "diff",
+		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
