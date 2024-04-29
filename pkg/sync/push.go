@@ -168,20 +168,14 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 		}
 	}
 
-	// run 2-way sync
 	switch nativeLang {
 	case TS:
-		tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
-		output, err := tsSyncCmd.CombinedOutput()
-		outputStr := strings.TrimSpace(string(output))
-		if len(outputStr) > 0 {
-			fmt.Println(outputStr)
-		}
+		err = BisyncTS(lekkoPath, repoPath)
 		if err != nil {
-			return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
+			return err
 		}
 	case GO:
-		_, err = Bisync(ctx, lekkoPath, lekkoPath, repoPath)
+		_, err = BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
 		if err != nil {
 			return err
 		}

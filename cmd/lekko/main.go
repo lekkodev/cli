@@ -21,9 +21,15 @@ import (
 	"path/filepath"
 	"strconv"
 
-	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/bufbuild/connect-go"
+	"github.com/lainio/err2"
+	"github.com/mitchellh/go-homedir"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/encoding/protojson"
+
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/k8s"
@@ -32,11 +38,6 @@ import (
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star/static"
-	"github.com/mitchellh/go-homedir"
-	"github.com/pkg/errors"
-	"google.golang.org/protobuf/encoding/protojson"
-
-	"github.com/spf13/cobra"
 )
 
 // Updated at build time using ldflags
@@ -88,9 +89,15 @@ func main() {
 	rootCmd.AddCommand(diffCmd())
 
 	logging.InitColors()
-	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+
+	handleErr := func(err error) error {
 		fmt.Println(err)
 		os.Exit(1)
+		return nil
+	}
+	defer err2.Catch(handleErr)
+	if err := rootCmd.ExecuteContext(context.Background()); err != nil {
+		_ = handleErr(err)
 	}
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/gitcli"
@@ -380,19 +381,9 @@ func pathCmd() *cobra.Command {
 		Use:   "path",
 		Short: "Show the local repo path currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dot, err := dotlekko.ReadDotLekko()
-			if err != nil {
-				return err
-			}
-			if len(dot.Repository) == 0 {
-				return errors.New("Repository info is not set in .lekko")
-			}
-			base, err := repo.DefaultRepoBasePath()
-			if err != nil {
-				return err
-			}
-			repoOwner, repoName := dot.GetRepoInfo()
-			fmt.Println(filepath.Join(base, repoOwner, repoName))
+			dot := try.To1(dotlekko.ReadDotLekko())
+			repoPath := try.To1(repo.GetRepoPath(dot))
+			fmt.Println(repoPath)
 			return nil
 		},
 	}
@@ -540,7 +531,7 @@ func pullCmd() *cobra.Command {
 					return errors.Wrap(err, "ts pull")
 				}
 			case sync.GO:
-				files, err := sync.Bisync(cmd.Context(), lekkoPath, lekkoPath, repoPath)
+				files, err := sync.BisyncGo(cmd.Context(), lekkoPath, lekkoPath, repoPath)
 				if err != nil {
 					return errors.Wrap(err, "go bisync")
 				}
