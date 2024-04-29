@@ -36,7 +36,6 @@ import (
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 	"golang.org/x/exp/maps"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -275,28 +274,6 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 	}
 	templ := template.Must(template.New("").Parse(templateBody))
 	return templ.Execute(wr, data)
-}
-
-func GenTSCmd() *cobra.Command {
-	var ns string
-	var repoPath string
-	var outDir string
-	cmd := &cobra.Command{
-		Use:   "ts",
-		Short: "generate typescript library code from configs",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
-				if len(outDir) == 0 {
-					return os.Stdout, nil
-				}
-				return os.Create(filepath.Join(outDir, ns+".ts"))
-			})
-		},
-	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
-	cmd.Flags().StringVarP(&outDir, "output", "o", "", "output directory for generated code")
-	return cmd
 }
 
 func genTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
