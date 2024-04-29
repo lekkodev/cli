@@ -291,6 +291,10 @@ import (
 	// In OUR repos, and maybe some of our customers, they may already have a buf.gen.yml, so if
 	// that is the case, we should identify that, not run code gen (maybe?) and instead need to
 	// take the prefix by parsing the buf.gen.yml to understand where the go code goes.
+	//
+	// With proto packages with >= 3 segments, the go package only takes the last 2.
+	// e.g. default.config.v1beta1 -> configv1beta1
+	// https://github.com/bufbuild/buf/issues/1263
 	pCmd := exec.Command(
 		"buf",
 		"generate",
