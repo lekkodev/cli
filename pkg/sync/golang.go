@@ -100,6 +100,7 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
+// Translates Go code to Protobuf/Starlark and writes changes to local config repository
 type goSyncer struct {
 	moduleRoot string
 	lekkoPath  string
@@ -216,12 +217,12 @@ func (g *goSyncer) Sync(ctx context.Context) error {
 					case "string":
 						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
 					default:
-						fmt.Printf("Unknown Ident: %+v\n", t)
+						panic(fmt.Errorf("unsupported primitive return type %s", t.Name))
 					}
 				case *ast.StarExpr:
 					feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
 				default:
-					fmt.Printf("%#v\n", t)
+					panic(fmt.Errorf("unsupported return type expression %+v", t))
 				}
 				for _, stmt := range x.Body.List {
 					switch n := stmt.(type) {
@@ -349,7 +350,7 @@ func (g *goSyncer) Sync(ctx context.Context) error {
 	return nil
 }
 
-func exprToValue(expr ast.Expr) string {
+func (g *goSyncer) exprToValue(expr ast.Expr) string {
 	ident, ok := expr.(*ast.Ident)
 	assert.Equal(ok, true, "value expr is not an identifier")
 	return strcase.ToSnake(ident.Name)
@@ -358,60 +359,6 @@ func exprToValue(expr ast.Expr) string {
 // TODO -- We know the return type..
 func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *anypb.Any {
 	switch node := expr.(type) {
-	case *ast.BasicLit:
-		switch node.Kind {
-		case token.STRING:
-			a, err := anypb.New(&wrapperspb.StringValue{Value: strings.Trim(node.Value, "\"`")})
-			if err != nil {
-				panic(err)
-			}
-			return a
-		case token.INT:
-			fallthrough
-		case token.FLOAT:
-			switch want {
-			case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
-				intValue, err := strconv.ParseInt(node.Value, 10, 64)
-				if err != nil {
-					panic(err)
-				}
-				a, err := anypb.New(&wrapperspb.Int64Value{Value: intValue})
-				if err != nil {
-					panic(err)
-				}
-				return a
-
-			case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
-				floatValue, err := strconv.ParseFloat(node.Value, 64)
-				if err != nil {
-					panic(err)
-				}
-				a, err := anypb.New(&wrapperspb.DoubleValue{Value: floatValue})
-				if err != nil {
-					panic(err)
-				}
-				return a
-			}
-		default:
-			fmt.Printf("NV: %s\n", node.Value)
-		}
-	case *ast.Ident:
-		switch node.Name {
-		case "true":
-			a, err := anypb.New(&wrapperspb.BoolValue{Value: true})
-			if err != nil {
-				panic(err)
-			}
-			return a
-		case "false":
-			a, err := anypb.New(&wrapperspb.BoolValue{Value: false})
-			if err != nil {
-				panic(err)
-			}
-			return a
-		default:
-			fmt.Printf("NN: %s\n", node.Name)
-		}
 	case *ast.UnaryExpr:
 		switch node.Op {
 		case token.AND:
@@ -423,15 +370,35 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *an
 				}
 				return a
 			default:
-				panic("Unknown X Type")
+				panic(fmt.Errorf("unsupported unary & target %+v", x))
 			}
 		default:
-			panic("Unknown Op")
+			panic(fmt.Errorf("unsupported unary operator %v", node.Op))
 		}
 	default:
-		fmt.Printf("ETA: %#v\n", node)
+		value := g.primitiveToProtoValue(expr)
+		switch typedValue := value.(type) {
+		case string:
+			return try.To1(anypb.New(&wrapperspb.StringValue{Value: typedValue}))
+		case int64:
+			// A value parsed as an integer might actually be for a float config
+			switch want {
+			case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+				return try.To1(anypb.New(&wrapperspb.Int64Value{Value: typedValue}))
+			case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+				// TODO: handle precision boundaries properly
+				return try.To1(anypb.New(&wrapperspb.DoubleValue{Value: float64(typedValue)}))
+			default:
+				panic(fmt.Errorf("unexpected primitive %v for target return type %v", typedValue, want))
+			}
+		case float64:
+			return try.To1(anypb.New(&wrapperspb.DoubleValue{Value: typedValue}))
+		case bool:
+			return try.To1(anypb.New(&wrapperspb.BoolValue{Value: typedValue}))
+		default:
+			panic(fmt.Errorf("unsupported value expression %+v", node))
+		}
 	}
-	return &anypb.Any{}
 }
 
 // e.g. configv1beta1.Message -> [configv1beta1, Message]
@@ -481,7 +448,7 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 	}
 }
 
-func primitiveToProtoValue(expr ast.Expr) any {
+func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 	switch x := expr.(type) {
 	case *ast.BasicLit:
 		switch x.Kind {
@@ -553,7 +520,7 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 				case *ast.Ident:
 					// Primitive type array
 					for _, elt := range node.Elts {
-						eltVal := primitiveToProtoValue(elt)
+						eltVal := g.primitiveToProtoValue(elt)
 						lVal.Append(protoreflect.ValueOf(eltVal))
 					}
 				case *ast.StarExpr:
@@ -612,45 +579,9 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 					basicLit, ok := pair.Key.(*ast.BasicLit)
 					assert.Equal(ok, true, "expected basic literal for map key")
 					key := protoreflect.ValueOfString(strings.Trim(basicLit.Value, "\"")).MapKey()
-					switch v := pair.Value.(type) {
-					case *ast.BasicLit:
-						switch v.Kind {
-						case token.STRING:
-							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(strings.Trim(v.Value, "\"`")))
-						case token.INT:
-							if field.Kind() == protoreflect.EnumKind {
-								intValue, err := strconv.ParseInt(v.Value, 10, 32)
-								if err != nil {
-									panic(err)
-								}
-								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
-								continue
-							}
-							// TODO - parse/validate based on field Kind
-							if intValue, err := strconv.ParseInt(v.Value, 10, 64); err == nil {
-								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(intValue))
-							} else {
-								panic(err)
-							}
-						case token.FLOAT:
-							if floatValue, err := strconv.ParseFloat(v.Value, 64); err == nil {
-								msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(floatValue))
-							} else {
-								panic(err)
-							}
-						default:
-							fmt.Printf("NV: %s\n", v.Value)
-						}
-					case *ast.Ident:
-						switch v.Name {
-						case "true":
-							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(true))
-						case "false":
-							msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(false))
-						default:
-							fmt.Printf("NN: %s\n", v.Name)
-						}
-					}
+					// For now, assume all map values are primitives
+					value := g.primitiveToProtoValue(pair.Value)
+					msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(value))
 				}
 			default:
 				panic(fmt.Errorf("unsupported composite literal type %T", clTypeNode))
@@ -658,7 +589,7 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 		default:
 			field.Kind()
 			// Value is not a composite literal - try handling as a primitive
-			value := primitiveToProtoValue(node)
+			value := g.primitiveToProtoValue(node)
 			if field.Kind() == protoreflect.EnumKind {
 				// Special handling for enums
 				intValue, ok := value.(int64)
@@ -672,65 +603,14 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 	return msg
 }
 
-// TODO: Use new primitive helper instead
-func exprToComparisonValue(expr ast.Expr) *structpb.Value {
+func (g *goSyncer) exprToComparisonValue(expr ast.Expr) *structpb.Value {
 	switch node := expr.(type) {
-	case *ast.BasicLit:
-		switch node.Kind {
-		case token.STRING:
-			return &structpb.Value{
-				Kind: &structpb.Value_StringValue{
-					StringValue: strings.Trim(node.Value, "\"`"),
-				},
-			}
-		case token.INT:
-			intValue, err := strconv.ParseInt(node.Value, 10, 64)
-			if err != nil {
-				panic(err)
-			}
-			return &structpb.Value{
-				Kind: &structpb.Value_NumberValue{
-					NumberValue: float64(intValue),
-				},
-			}
-
-		case token.FLOAT:
-			floatValue, err := strconv.ParseFloat(node.Value, 64)
-			if err != nil {
-				panic(err)
-			}
-			return &structpb.Value{
-				Kind: &structpb.Value_NumberValue{
-					NumberValue: floatValue,
-				},
-			}
-
-		default:
-			fmt.Printf("Unknown basicLit: %s\n", node.Value)
-		}
-	case *ast.Ident:
-		switch node.Name {
-		case "true":
-			return &structpb.Value{
-				Kind: &structpb.Value_BoolValue{
-					BoolValue: true,
-				},
-			}
-		case "false":
-			return &structpb.Value{
-				Kind: &structpb.Value_BoolValue{
-					BoolValue: false,
-				},
-			}
-		default:
-			fmt.Printf("NN: %s\n", node.Name)
-		}
 	case *ast.CompositeLit:
 		_, ok := node.Type.(*ast.ArrayType)
 		assert.Equal(ok, true, "only slices are allowed for composite literals in comparisons")
 		var list []*structpb.Value
 		for _, elt := range node.Elts {
-			list = append(list, exprToComparisonValue(elt))
+			list = append(list, g.exprToComparisonValue(elt))
 		}
 		return &structpb.Value{
 			Kind: &structpb.Value_ListValue{
@@ -740,71 +620,92 @@ func exprToComparisonValue(expr ast.Expr) *structpb.Value {
 			},
 		}
 	default:
-		fmt.Printf("ETC: %s", node)
+		// If not composite lit, must(/should) be primitive
+		value := g.primitiveToProtoValue(expr)
+		ret := &structpb.Value{}
+		switch typedValue := value.(type) {
+		case string:
+			ret.Kind = &structpb.Value_StringValue{
+				StringValue: typedValue,
+			}
+		case int64:
+			ret.Kind = &structpb.Value_NumberValue{
+				NumberValue: float64(typedValue),
+			}
+		case float64:
+			ret.Kind = &structpb.Value_NumberValue{
+				NumberValue: typedValue,
+			}
+		case bool:
+			ret.Kind = &structpb.Value_BoolValue{
+				BoolValue: typedValue,
+			}
+		default:
+			panic(fmt.Errorf("unexpected type for primitive value %v", typedValue))
+		}
+		return ret
 	}
-	return &structpb.Value{}
 }
 
-func binaryExprToRule(expr *ast.BinaryExpr) *rulesv1beta3.Rule {
+func (g *goSyncer) binaryExprToRule(expr *ast.BinaryExpr) *rulesv1beta3.Rule {
 	switch expr.Op {
 	case token.LAND:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: []*rulesv1beta3.Rule{exprToRule(expr.X), exprToRule(expr.Y)}}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: []*rulesv1beta3.Rule{g.exprToRule(expr.X), g.exprToRule(expr.Y)}}}}
 	case token.LOR:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: []*rulesv1beta3.Rule{exprToRule(expr.X), exprToRule(expr.Y)}}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: []*rulesv1beta3.Rule{g.exprToRule(expr.X), g.exprToRule(expr.Y)}}}}
 	case token.EQL:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.LSS:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.GTR:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.NEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.LEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	case token.GEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS, ContextKey: exprToValue(expr.X), ComparisonValue: exprToComparisonValue(expr.Y)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y)}}}
 	default:
-		panic("Don't know how to toke")
+		panic(fmt.Errorf("unexpected token in binary expression %v", expr.Op))
 	}
 }
 
-func callExprToRule(expr *ast.CallExpr) *rulesv1beta3.Rule {
+func (g *goSyncer) callExprToRule(expr *ast.CallExpr) *rulesv1beta3.Rule {
 	// TODO check Fun
-	//fmt.Printf("\t%+v\n", expr.Fun)
 	selectorExpr, ok := expr.Fun.(*ast.SelectorExpr)
 	assert.Equal(ok, true)
 	ident, ok := selectorExpr.X.(*ast.Ident)
 	assert.Equal(ok, true)
-	switch ident.Name { // TODO... brittle..
+	switch ident.Name { // TODO: is there a way to differentiate between an expr on a package vs. a struct/interface? could give better error messages
 	case "slices":
 		switch selectorExpr.Sel.Name {
 		case "Contains":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN, ContextKey: exprToValue(expr.Args[1]), ComparisonValue: exprToComparisonValue(expr.Args[0])}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN, ContextKey: g.exprToValue(expr.Args[1]), ComparisonValue: g.exprToComparisonValue(expr.Args[0])}}}
 		default:
-			panic("Ahhhh")
+			panic(fmt.Errorf("unsupported slices operator %s", selectorExpr.Sel.Name))
 		}
 	case "strings":
 		switch selectorExpr.Sel.Name {
 		case "Contains":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS, ContextKey: exprToValue(expr.Args[0]), ComparisonValue: exprToComparisonValue(expr.Args[1])}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1])}}}
 		case "HasPrefix":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH, ContextKey: exprToValue(expr.Args[0]), ComparisonValue: exprToComparisonValue(expr.Args[1])}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1])}}}
 		case "HasSuffix":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH, ContextKey: exprToValue(expr.Args[0]), ComparisonValue: exprToComparisonValue(expr.Args[1])}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1])}}}
 		default:
-			panic("Ahhhh")
+			panic(fmt.Errorf("unsupported strings operator %s", selectorExpr.Sel.Name))
 		}
 	default:
-		panic("Ahhhh")
+		panic(fmt.Errorf("unexpected identifier in rule %s", ident.Name))
 	}
 }
 
-func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
+func (g *goSyncer) exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 	switch node := expr.(type) {
 	case *ast.BinaryExpr:
-		return binaryExprToRule(node)
+		return g.binaryExprToRule(node)
 	case *ast.CallExpr:
-		return callExprToRule(node)
+		return g.callExprToRule(node)
 	default:
 		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
 	}
@@ -812,7 +713,7 @@ func exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 
 func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.FeatureType) []*featurev1beta1.Constraint {
 	constraint := &featurev1beta1.Constraint{}
-	constraint.RuleAstNew = exprToRule(ifStmt.Cond)
+	constraint.RuleAstNew = g.exprToRule(ifStmt.Cond)
 	assert.Equal(len(ifStmt.Body.List), 1, "if statements can only contain one return statement")
 	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
 	assert.Equal(ok, true, "if statements can only contain return statements")
