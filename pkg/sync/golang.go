@@ -781,12 +781,26 @@ func (g *goSyncer) callExprToRule(expr *ast.CallExpr) *rulesv1beta3.Rule {
 	}
 }
 
+func (g *goSyncer) unaryExprToRule(expr *ast.UnaryExpr) *rulesv1beta3.Rule {
+	switch expr.Op {
+	case token.NOT:
+		rule := g.exprToRule(expr.X)
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Not{Not: rule}}
+	default:
+		panic(fmt.Errorf("unsupported unary expression %+v", expr))
+	}
+}
+
 func (g *goSyncer) exprToRule(expr ast.Expr) *rulesv1beta3.Rule {
 	switch node := expr.(type) {
 	case *ast.BinaryExpr:
 		return g.binaryExprToRule(node)
 	case *ast.CallExpr:
 		return g.callExprToRule(node)
+	case *ast.ParenExpr:
+		return g.exprToRule(node.X)
+	case *ast.UnaryExpr:
+		return g.unaryExprToRule(node)
 	default:
 		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
 	}
