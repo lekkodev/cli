@@ -15,9 +15,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -104,6 +107,93 @@ func lekkoAnyToAny(a *featurev1beta1.Any) *anypb.Any {
 	}
 }
 
+func getRegistryAndNamespacesFromBff(ctx context.Context) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
+	rs := secrets.NewSecretsFromEnv()
+	bff := lekko.NewBFFClient(rs)
+	resp, err := bff.GetRepositoryContents(ctx, connect_go.NewRequest(&bffv1beta1.GetRepositoryContentsRequest{
+		Key: &bffv1beta1.BranchKey{
+			OwnerName: "lekkodev",
+			RepoName:  "internal",
+			Name:      "main",
+		},
+	}))
+	if err != nil {
+		return nil, nil, err
+	}
+	fmt.Printf("%s\n", resp.Msg.Branch.Sha)
+	fmt.Printf("%#v\n", resp.Msg.Branch)
+	existing := make(map[string]map[string]*featurev1beta1.Feature)
+	for _, namespace := range resp.Msg.NamespaceContents.Namespaces {
+		existing[namespace.Name] = make(map[string]*featurev1beta1.Feature)
+		for _, config := range namespace.Configs {
+			if config.StaticFeature.Tree.DefaultNew != nil {
+				config.StaticFeature.Tree.Default = lekkoAnyToAny(config.StaticFeature.Tree.DefaultNew)
+			}
+			for _, c := range config.StaticFeature.Tree.Constraints {
+				c.Rule = ""
+				if c.GetValueNew() != nil {
+					c.Value = lekkoAnyToAny(c.GetValueNew())
+				}
+			}
+			existing[namespace.Name][config.Name] = config.StaticFeature
+		}
+	}
+	registry, err := GetRegistryFromFileDescriptorSet(resp.Msg.FileDescriptorSet)
+	return existing, registry, err
+}
+
+func getRegistryAndNamespacesFromLocal(ctx context.Context) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
+	existing := make(map[string]map[string]*featurev1beta1.Feature)
+	repoPath := "/Users/jonathan/Library/Application Support/Lekko/Config Repositories/lekkodev/internal"
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer: io.Discard,
+	})
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, nil, err
+	}
+	namespaces, err := r.ListNamespaces(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, namespace := range namespaces {
+		existing[namespace.Name] = make(map[string]*featurev1beta1.Feature)
+		ffs, err := r.GetFeatureFiles(ctx, namespace.Name)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, ff := range ffs {
+			fff, err := os.ReadFile(path.Join(repoPath, namespace.Name, ff.CompiledProtoBinFileName))
+			if err != nil {
+				return nil, nil, err
+			}
+			config := &featurev1beta1.Feature{}
+			if err := proto.Unmarshal(fff, config); err != nil {
+				return nil, nil, err
+			}
+			if config.Tree.DefaultNew != nil {
+				config.Tree.Default = lekkoAnyToAny(config.Tree.DefaultNew)
+			}
+			for _, c := range config.Tree.Constraints {
+				c.Rule = ""
+				if c.GetValueNew() != nil {
+					c.Value = lekkoAnyToAny(c.GetValueNew())
+				}
+			}
+			existing[namespace.Name][config.Key] = config
+		}
+	}
+	return existing, registry, nil
+}
+
 /*
  * Questions we need answered:
  * Is repo main = lekko main?
@@ -121,7 +211,6 @@ func diffCmd() *cobra.Command {
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub(), secrets.RequireLekko())
 
 			wd, err := os.Getwd()
 			if err != nil {
@@ -139,37 +228,19 @@ func diffCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			bff := lekko.NewBFFClient(rs)
-			resp, err := bff.GetRepositoryContents(ctx, connect_go.NewRequest(&bffv1beta1.GetRepositoryContentsRequest{
-				Key: &bffv1beta1.BranchKey{
-					OwnerName: "lekkodev",
-					RepoName:  "internal",
-					Name:      "main",
-				},
-			}))
-			if err != nil {
-				return err
-			}
-			registry, err := GetRegistryFromFileDescriptorSet(resp.Msg.FileDescriptorSet)
-			if err != nil {
-				return err
-			}
-			existing := make(map[string]map[string]*featurev1beta1.Feature)
-			for _, namespace := range resp.Msg.NamespaceContents.Namespaces {
-				existing[namespace.Name] = make(map[string]*featurev1beta1.Feature)
-				for _, config := range namespace.Configs {
-					if config.StaticFeature.Tree.DefaultNew != nil {
-						config.StaticFeature.Tree.Default = lekkoAnyToAny(config.StaticFeature.Tree.DefaultNew)
-					}
-					for _, c := range config.StaticFeature.Tree.Constraints {
-						c.Rule = ""
-						if c.GetValueNew() != nil {
-							c.Value = lekkoAnyToAny(c.GetValueNew())
-						}
-					}
-					existing[namespace.Name][config.Name] = config.StaticFeature
+
+			/*
+				existing, registry, err := getRegistryAndNamespacesFromBff(ctx)
+				if err != nil {
+					return err
 				}
+			*/
+			existing, registry, err := getRegistryAndNamespacesFromLocal(ctx)
+			if err != nil {
+				return err
 			}
+
+			var notEqual bool
 			for _, f := range files {
 				relativePath, err := filepath.Rel(wd, f)
 				if err != nil {
@@ -210,11 +281,14 @@ func diffCmd() *cobra.Command {
 							fmt.Print("Equal! - from codeGen\n")
 						} else {
 							fmt.Printf("Not Equal:\n\n%s\n%s\n\n", o, e)
+							notEqual = true
 						}
 					}
 				}
 			}
-
+			if notEqual {
+				return errors.New("Not Equal")
+			}
 			return nil
 		},
 	}
