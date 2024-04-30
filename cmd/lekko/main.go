@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	goflag "flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -89,6 +91,9 @@ func main() {
 	rootCmd.AddCommand(diffCmd())
 
 	logging.InitColors()
+
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+	goflag.Parse()
 
 	handleErr := func(err error) error {
 		fmt.Println(err)
