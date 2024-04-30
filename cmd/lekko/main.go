@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	goflag "flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -44,6 +46,11 @@ import (
 var version = "development"
 
 func main() {
+	err2.SetErrorTracer(os.Stderr)
+	// to support standard go flags defined by 3rd party libraries
+	// for example err2
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+
 	rootCmd := rootCmd()
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(verifyCmd())

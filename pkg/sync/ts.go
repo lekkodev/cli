@@ -30,7 +30,7 @@ func BisyncTS(lekkoPath, repoPath string) error {
 		fmt.Println(outputStr)
 	}
 	if err != nil {
-		return errors.Wrap(err, "Lekko Typescript tools not found, please make sure that you are inside a node project and have up to date Lekko packages.")
+		return errors.Wrap(err, "bisync ts")
 	}
 	return nil
 }
