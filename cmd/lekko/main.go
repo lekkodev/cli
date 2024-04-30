@@ -46,6 +46,10 @@ import (
 var version = "development"
 
 func main() {
+	// to support standard go flags defined by 3rd party libraries
+	// for example err2
+	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
+
 	rootCmd := rootCmd()
 	rootCmd.AddCommand(compileCmd())
 	rootCmd.AddCommand(verifyCmd())
@@ -91,9 +95,6 @@ func main() {
 	rootCmd.AddCommand(diffCmd())
 
 	logging.InitColors()
-
-	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
-	goflag.Parse()
 
 	handleErr := func(err error) error {
 		fmt.Println(err)
