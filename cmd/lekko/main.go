@@ -46,6 +46,7 @@ import (
 var version = "development"
 
 func main() {
+	err2.SetErrorTracer(os.Stderr)
 	// to support standard go flags defined by 3rd party libraries
 	// for example err2
 	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
