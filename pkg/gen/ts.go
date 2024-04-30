@@ -317,11 +317,18 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	if len(parameters) == 0 && len(usedVariables) > 0 {
 		var keys []string
 		var keyAndTypes []string
-		for k, t := range usedVariables {
+		var sortedKeys []string
+		for k := range usedVariables {
+			sortedKeys = append(sortedKeys, k)
+		}
+		sort.Strings(sortedKeys)
+		for _, k := range sortedKeys {
+			t := usedVariables[k]
 			casedK := strcase.ToLowerCamel(k)
 			keys = append(keys, casedK)
 			keyAndTypes = append(keyAndTypes, fmt.Sprintf("%s: %s", casedK, t))
 		}
+
 		parameters = fmt.Sprintf("{%s}: {%s}", strings.Join(keys, ","), strings.Join(keyAndTypes, ","))
 	}
 	data := struct {
