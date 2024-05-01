@@ -19,13 +19,11 @@ import (
 	goflag "flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/bufbuild/connect-go"
 	"github.com/lainio/err2"
-	"github.com/mitchellh/go-homedir"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -34,7 +32,6 @@ import (
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gh"
-	"github.com/lekkodev/cli/pkg/k8s"
 	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/repo"
@@ -67,9 +64,6 @@ func main() {
 	// auth
 	rootCmd.AddCommand(authCmd())
 	// exp
-	k8sCmd.AddCommand(applyCmd())
-	k8sCmd.AddCommand(listCmd())
-	experimentalCmd.AddCommand(k8sCmd)
 	experimentalCmd.AddCommand(parseCmd())
 	experimentalCmd.AddCommand(cleanupCmd)
 	experimentalCmd.AddCommand(formatCmd())
@@ -423,79 +417,6 @@ func (p *provider) Set(v string) error {
 
 func (p *provider) Type() string {
 	return "provider"
-}
-
-var k8sCmd = &cobra.Command{
-	Use:   "k8s",
-	Short: "manage lekko configurations in kubernetes. Uses the current k8s context set in your kubeconfig file.",
-}
-
-func localKubeParams(cmd *cobra.Command, kubeConfig *string) {
-	var defaultKubeconfig string
-	// ref: https://github.com/kubernetes/client-go/blob/master/examples/out-of-cluster-client-configuration/main.go
-	home, err := homedir.Dir()
-	if err == nil {
-		defaultKubeconfig = filepath.Join(home, ".kube", "config")
-	}
-	cmd.Flags().StringVarP(kubeConfig, "kubeconfig", "c", defaultKubeconfig, "absolute path to the kube config file")
-}
-
-func applyCmd() *cobra.Command {
-	var kubeConfig, wd string
-	ret := &cobra.Command{
-		Use:   "apply",
-		Short: "apply local configurations to kubernetes configmaps",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cmd.ParseFlags(args); err != nil {
-				return errors.Wrap(err, "failed to parse flags")
-			}
-			rs := secrets.NewSecretsOrFail(secrets.RequireGithub())
-			r, err := repo.NewLocal(wd, rs)
-			if err != nil {
-				return errors.Wrap(err, "new repo")
-			}
-			ctx := cmd.Context()
-			if err := r.Verify(ctx, &repo.VerifyRequest{}); err != nil {
-				return errors.Wrap(err, "verify")
-			}
-			kube, err := k8s.NewKubernetes(kubeConfig, r)
-			if err != nil {
-				return errors.Wrap(err, "failed to build k8s client")
-			}
-			if err := kube.Apply(ctx, rs.GetUsername()); err != nil {
-				return errors.Wrap(err, "apply")
-			}
-
-			return nil
-		},
-	}
-	localKubeParams(ret, &kubeConfig)
-	ret.Flags().StringVar(&wd, "config-path", ".", "path to configuration repository")
-	return ret
-}
-
-func listCmd() *cobra.Command {
-	var kubeConfig string
-	ret := &cobra.Command{
-		Use:   "list",
-		Short: "list lekko configurations currently in kubernetes",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := cmd.ParseFlags(args); err != nil {
-				return errors.Wrap(err, "failed to parse flags")
-			}
-
-			kube, err := k8s.NewKubernetes(kubeConfig, nil)
-			if err != nil {
-				return errors.Wrap(err, "failed to build k8s client")
-			}
-			if err := kube.List(cmd.Context()); err != nil {
-				return errors.Wrap(err, "list")
-			}
-			return nil
-		},
-	}
-	localKubeParams(ret, &kubeConfig)
-	return ret
 }
 
 var experimentalCmd = &cobra.Command{
