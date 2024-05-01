@@ -354,7 +354,7 @@ func findLekkoFiles(lekkoPath string) ([]string, error) {
 		if d.IsDir() && d.Name() == "proto" {
 			return filepath.SkipDir
 		}
-		if d.Name() == "lekko.go" {
+		if d.Name() == "lekko.go" || d.Name() == "default.go" {
 			files = append(files, p)
 		}
 		return nil
