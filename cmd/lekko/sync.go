@@ -120,8 +120,8 @@ func getRegistryAndNamespacesFromBff(ctx context.Context) (map[string]map[string
 	if err != nil {
 		return nil, nil, err
 	}
-	fmt.Printf("%s\n", resp.Msg.Branch.Sha)
-	fmt.Printf("%#v\n", resp.Msg.Branch)
+	//fmt.Printf("%s\n", resp.Msg.Branch.Sha)
+	//fmt.Printf("%#v\n", resp.Msg.Branch)
 	existing := make(map[string]map[string]*featurev1beta1.Feature)
 	for _, namespace := range resp.Msg.NamespaceContents.Namespaces {
 		existing[namespace.Name] = make(map[string]*featurev1beta1.Feature)
@@ -142,9 +142,8 @@ func getRegistryAndNamespacesFromBff(ctx context.Context) (map[string]map[string
 	return existing, registry, err
 }
 
-func getRegistryAndNamespacesFromLocal(ctx context.Context) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
+func getRegistryAndNamespacesFromLocal(ctx context.Context, repoPath string) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
 	existing := make(map[string]map[string]*featurev1beta1.Feature)
-	repoPath := "/Users/jonathan/Library/Application Support/Lekko/Config Repositories/lekkodev/internal"
 	r, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return nil, nil, err
@@ -194,6 +193,90 @@ func getRegistryAndNamespacesFromLocal(ctx context.Context) (map[string]map[stri
 	return existing, registry, nil
 }
 
+func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, goRoot string) (bool, error) {
+	startingDirectory, err := os.Getwd()
+	defer os.Chdir(startingDirectory)
+	if err != nil {
+		return false, err
+	}
+	err = os.Chdir(goRoot)
+	if err != nil {
+		return false, err
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return false, err
+	}
+	if err != nil {
+		return false, err
+	}
+	b, err := os.ReadFile("go.mod")
+	if err != nil {
+		return false, err
+	}
+	mf, err := modfile.ParseLax("go.mod", b, nil)
+	if err != nil {
+		return false, err
+	}
+	files, err := findLekkoFiles(wd + "/internal/lekko")
+	if err != nil {
+		return false, err
+	}
+	var notEqual bool
+	for _, f := range files {
+		relativePath, err := filepath.Rel(wd, f)
+		if err != nil {
+			return false, err
+		}
+		//fmt.Printf("%s\n\n", mf.Module.Mod.Path)
+		g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath, registry)
+		namespace, err := g.FileLocationToNamespace(ctx)
+		if err != nil {
+			return false, err
+		}
+		//fmt.Printf("%#v\n", namespace)
+		for _, f := range namespace.Features {
+			if f.GetTree().GetDefault() != nil {
+				f.Tree.DefaultNew = anyToLekkoAny(f.Tree.Default)
+			}
+			for _, c := range f.GetTree().GetConstraints() {
+				if c.GetValue() != nil {
+					c.ValueNew = anyToLekkoAny(c.Value)
+				}
+			}
+			existingConfig, ok := existing[namespace.Name][f.Key]
+			if !ok {
+				// fmt.Print("New Config!\n")
+				notEqual = true
+			} else if proto.Equal(f.Tree, existingConfig.Tree) {
+				// fmt.Print("Equal! - from proto.Equal\n")
+			} else {
+				// These might still be equal, because the typescript path combines logical things in ways that the go path does not
+				// Using ts since it has fewer args..
+				gen.TypeRegistry = registry
+				o, err := gen.GenTSForFeature(f, namespace.Name, "")
+				if err != nil {
+					return false, err
+				}
+				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "")
+				if err != nil {
+					return false, err
+				}
+				if o == e {
+					// fmt.Print("Equal! - from codeGen\n")
+				} else {
+					// fmt.Printf("Not Equal:\n\n%s\n%s\n\n", o, e)
+					notEqual = true
+				}
+			}
+		}
+	}
+	if notEqual {
+		return false, nil
+	}
+	return true, nil
+}
+
 /*
  * Questions we need answered:
  * Is repo main = lekko main?
@@ -205,6 +288,7 @@ func getRegistryAndNamespacesFromLocal(ctx context.Context) (map[string]map[stri
  */
 
 func diffCmd() *cobra.Command {
+	var repoPath, basePath, headPath string
 	cmd := &cobra.Command{
 		Use:    "diff",
 		Short:  "diff",
@@ -212,86 +296,40 @@ func diffCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			wd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			b, err := os.ReadFile("go.mod")
-			if err != nil {
-				return err
-			}
-			mf, err := modfile.ParseLax("go.mod", b, nil)
-			if err != nil {
-				return err
-			}
-			files, err := findLekkoFiles(wd + "/internal/lekko")
-			if err != nil {
-				return err
-			}
-
 			/*
 				existing, registry, err := getRegistryAndNamespacesFromBff(ctx)
 				if err != nil {
 					return err
 				}
 			*/
-			existing, registry, err := getRegistryAndNamespacesFromLocal(ctx)
+			existing, registry, err := getRegistryAndNamespacesFromLocal(ctx, repoPath)
 			if err != nil {
 				return err
 			}
-
-			var notEqual bool
-			for _, f := range files {
-				relativePath, err := filepath.Rel(wd, f)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("%s\n\n", mf.Module.Mod.Path)
-				g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath, registry)
-				namespace, err := g.FileLocationToNamespace(ctx)
-				if err != nil {
-					return err
-				}
-				fmt.Printf("%#v\n", namespace)
-				for _, f := range namespace.Features {
-					if f.GetTree().GetDefault() != nil {
-						f.Tree.DefaultNew = anyToLekkoAny(f.Tree.Default)
-					}
-					for _, c := range f.GetTree().GetConstraints() {
-						if c.GetValue() != nil {
-							c.ValueNew = anyToLekkoAny(c.Value)
-						}
-					}
-
-					if proto.Equal(f.Tree, existing[namespace.Name][f.Key].Tree) {
-						fmt.Print("Equal! - from proto.Equal\n")
-					} else {
-						// These might still be equal, because the typescript path combines logical things in ways that the go path does not
-						// Using ts since it has fewer args..
-						gen.TypeRegistry = registry
-						o, err := gen.GenTSForFeature(f, namespace.Name, "")
-						if err != nil {
-							return err
-						}
-						e, err := gen.GenTSForFeature(existing[namespace.Name][f.Key], namespace.Name, "")
-						if err != nil {
-							return err
-						}
-						if o == e {
-							fmt.Print("Equal! - from codeGen\n")
-						} else {
-							fmt.Printf("Not Equal:\n\n%s\n%s\n\n", o, e)
-							notEqual = true
-						}
-					}
-				}
+			isHeadSame, err := isSame(ctx, existing, registry, headPath)
+			if err != nil {
+				return err
 			}
-			if notEqual {
-				return errors.New("Not Equal")
+			isBaseSame, err := isSame(ctx, existing, registry, basePath)
+			if err != nil {
+				return err
+			}
+			if !isHeadSame && !isBaseSame {
+				return errors.New("Create a PR to fix Base first\n")
+			} else if !isHeadSame && isBaseSame {
+				return errors.New("Push Head changes to Lekko before Merge\n")
+			} else if isHeadSame && !isBaseSame {
+				fmt.Print("Merging will make Base = Lekko\n")
+				return nil
+			} else if isHeadSame && isBaseSame {
+				return nil
 			}
 			return nil
 		},
 	}
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	cmd.Flags().StringVarP(&basePath, "base-path", "b", "", "path to head repository")
+	cmd.Flags().StringVarP(&headPath, "head-path", "H", "", "path to base repository")
 	return cmd
 }
 
