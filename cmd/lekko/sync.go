@@ -23,13 +23,9 @@ import (
 	"path"
 	"path/filepath"
 
-	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	connect_go "github.com/bufbuild/connect-go"
 	"github.com/lekkodev/cli/pkg/gen"
-	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star/prototypes"
 
 	"github.com/lekkodev/cli/pkg/sync"
@@ -107,6 +103,7 @@ func lekkoAnyToAny(a *featurev1beta1.Any) *anypb.Any {
 	}
 }
 
+/* Leaving in case we get more API focussed
 func getRegistryAndNamespacesFromBff(ctx context.Context) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
 	rs := secrets.NewSecretsFromEnv()
 	bff := lekko.NewBFFClient(rs)
@@ -141,6 +138,7 @@ func getRegistryAndNamespacesFromBff(ctx context.Context) (map[string]map[string
 	registry, err := GetRegistryFromFileDescriptorSet(resp.Msg.FileDescriptorSet)
 	return existing, registry, err
 }
+*/
 
 func getRegistryAndNamespacesFromLocal(ctx context.Context, repoPath string) (map[string]map[string]*featurev1beta1.Feature, *protoregistry.Types, error) {
 	existing := make(map[string]map[string]*featurev1beta1.Feature)
@@ -195,7 +193,12 @@ func getRegistryAndNamespacesFromLocal(ctx context.Context, repoPath string) (ma
 
 func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, goRoot string) (bool, error) {
 	startingDirectory, err := os.Getwd()
-	defer os.Chdir(startingDirectory)
+	defer func() {
+		err := os.Chdir(startingDirectory)
+		if err != nil {
+			panic(err)
+		}
+	}()
 	if err != nil {
 		return false, err
 	}
