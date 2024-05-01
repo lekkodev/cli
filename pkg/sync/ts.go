@@ -23,7 +23,7 @@ import (
 )
 
 func BisyncTS(lekkoPath, repoPath string) error {
-	tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath, "--repo-path", repoPath)
+	tsSyncCmd := exec.Command("npx", "lekko-repo-sync", "--lekko-dir", lekkoPath)
 	output, err := tsSyncCmd.CombinedOutput()
 	outputStr := strings.TrimSpace(string(output))
 	if len(outputStr) > 0 {
