@@ -83,6 +83,15 @@ func NewSecretsOrFail(opts ...Option) ReadSecrets {
 	return rs
 }
 
+func NewSecretsFromEnv() ReadSecrets {
+	return &secrets{
+		LekkoUsername: os.Getenv("LEKKO_USERNAME"),
+		LekkoToken:    os.Getenv("LEKKO_TOKEN"),
+		LekkoTeam:     os.Getenv("LEKKO_TEAM"),
+		LekkoAPIKey:   os.Getenv("LEKKO_API_PATH"),
+	}
+}
+
 func WithWriteSecrets(f func(WriteSecrets) error, opts ...Option) error {
 	s, err := newSecrets()
 	if err != nil {
