@@ -820,7 +820,7 @@ func (g *goSyncer) identToRule(ident *ast.Ident, contextKeys map[string]string) 
 			Rule: &rulesv1beta3.Rule_Atom{
 				Atom: &rulesv1beta3.Atom{
 					ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS,
-					ContextKey:         ident.Name,
+					ContextKey:         strcase.ToSnake(ident.Name),
 					ComparisonValue:    structpb.NewBoolValue(true),
 				},
 			},
