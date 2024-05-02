@@ -484,8 +484,10 @@ func pullCmd() *cobra.Command {
 			}
 
 			lekkoPath := dot.LekkoPath
-			if len(dot.LockSHA) == 0 {
-				fmt.Println("No Lekko lock information found, syncing from remote...")
+			if len(dot.LockSHA) == 0 || force {
+				if len(dot.LockSHA) == 0 {
+					fmt.Println("No Lekko lock information found, syncing from remote...")
+				}
 				// no lekko lock, sync from remote
 				if !force {
 					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
