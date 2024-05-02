@@ -638,7 +638,6 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 				panic(fmt.Errorf("unsupported composite literal type %T", clTypeNode))
 			}
 		default:
-			field.Kind()
 			// Value is not a composite literal - try handling as a primitive
 			value := g.primitiveToProtoValue(node)
 			if field.Kind() == protoreflect.EnumKind {
@@ -647,6 +646,11 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 				assert.Equal(ok, true, "expected int value")
 				msg.Set(field, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
 				continue
+			}
+			// convert int64 to float64 (double) if this is what proto expects
+			// it's not 100% safe, but should be fine for values < 9007199254740993
+			if intValue, ok := value.(int64); ok && field.Kind() == protoreflect.DoubleKind {
+				value = float64(intValue)
 			}
 			msg.Set(field, protoreflect.ValueOf(value))
 		}
