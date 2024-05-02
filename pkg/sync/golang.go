@@ -172,7 +172,11 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 				for _, param := range x.Type.Params.List {
 					assert.SNotEmpty(param.Names, "must have a parameter name")
 					assert.INotNil(param.Type, "must have a parameter type")
-					contextKeys[param.Names[0].Name] = param.Type.(*ast.Ident).Name
+					typeIdent, ok := param.Type.(*ast.Ident)
+					if !ok {
+						panic("parameter type must be an identifier")
+					}
+					contextKeys[param.Names[0].Name] = typeIdent.Name
 				}
 
 				results := x.Type.Results.List
