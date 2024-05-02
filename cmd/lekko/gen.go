@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path"
 	"path/filepath"
@@ -27,7 +28,6 @@ import (
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"golang.org/x/mod/modfile"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gen"
@@ -81,26 +81,40 @@ func genGoCmd() *cobra.Command {
 					return err
 				}
 			}
+			var namespaces []string
 			if len(ns) == 0 {
-				if err := survey.AskOne(&survey.Input{
-					Message: "Namespace:",
-					Help:    "Lekko namespace to generate code for, determines Go package name",
-				}, &ns); err != nil {
-					return errors.Wrap(err, "namespace prompt")
+				files, err := os.ReadDir(outputPath)
+				if err != nil {
+					log.Fatal(err)
+				}
+				for _, f := range files {
+					if f.IsDir() && f.Name() != "proto" {
+						namespaces = append(namespaces, f.Name())
+					}
+				}
+			} else {
+				namespaces = []string{ns}
+			}
+			for _, n := range namespaces {
+				if !regexp.MustCompile("[a-z]+").MatchString(n) {
+					return errors.New("namespace must be a lowercase alphanumeric string")
+				}
+				generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, n)
+				if err != nil {
+					return errors.Wrap(err, "initialize code generator")
+				}
+				if initMode {
+					err = generator.Init(cmd.Context())
+					if err != nil {
+						return err
+					}
+				}
+				err = generator.Gen(cmd.Context())
+				if err != nil {
+					return err
 				}
 			}
-			// TODO: Change this to a survey validator so it can keep re-asking
-			if !regexp.MustCompile("[a-z]+").MatchString(ns) {
-				return errors.New("namespace must be a lowercase alphanumeric string")
-			}
-			generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, ns)
-			if err != nil {
-				return errors.Wrap(err, "initialize code generator")
-			}
-			if initMode {
-				return generator.Init(cmd.Context())
-			}
-			return generator.Gen(cmd.Context())
+			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
