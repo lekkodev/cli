@@ -158,7 +158,7 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 		case *ast.FuncDecl:
 			// TODO: We should support numbers (e.g. v2) but the strcase pkg has some non-ideal behavior with numbers,
 			// we might want to write our own librar(ies) with cross-language consistency
-			if regexp.MustCompile("^get[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
+			if regexp.MustCompile("^[gG]et[A-Z][A-Za-z]*$").MatchString(x.Name.Name) {
 				var commentLines []string
 				if x.Doc != nil {
 					for _, comment := range x.Doc.List {
