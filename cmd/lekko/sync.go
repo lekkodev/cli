@@ -318,9 +318,11 @@ func diffCmd() *cobra.Command {
 				return err
 			}
 			if !isHeadSame && !isBaseSame {
-				return errors.New("Create a PR to fix Base first\n")
+				fmt.Print("Create a PR to fix Base first\n")
+				os.Exit(1)
 			} else if !isHeadSame && isBaseSame {
-				return errors.New("Push Head changes to Lekko before Merge\n")
+				fmt.Print("Push Head changes to Lekko before Merge\n")
+				os.Exit(2)
 			} else if isHeadSame && !isBaseSame {
 				fmt.Print("Merging will make Base = Lekko\n")
 				return nil
