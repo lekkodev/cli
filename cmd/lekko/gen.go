@@ -17,7 +17,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"path"
@@ -28,6 +27,7 @@ import (
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"golang.org/x/mod/modfile"
 
+	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gen"
@@ -127,22 +127,24 @@ func genGoCmd() *cobra.Command {
 func genTSCmd() *cobra.Command {
 	var ns string
 	var repoPath string
-	var outDir string
+	var lekkoPath string
 	cmd := &cobra.Command{
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return gen.GenTS(cmd.Context(), repoPath, ns, func() (io.Writer, error) {
-				if len(outDir) == 0 {
-					return os.Stdout, nil
-				}
-				return os.Create(filepath.Join(outDir, ns+".ts"))
-			})
+			if len(lekkoPath) == 0 {
+				dot := try.To1(dotlekko.ReadDotLekko())
+				lekkoPath = dot.LekkoPath
+			}
+			if len(repoPath) == 0 {
+				repoPath = try.To1(repo.PrepareGithubRepo())
+			}
+			return gen.GenFormattedTS(cmd.Context(), repoPath, ns, filepath.Join(lekkoPath, ns+".ts"))
 		},
 	}
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to configuration repository")
-	cmd.Flags().StringVarP(&outDir, "output", "o", "", "output directory for generated code")
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	return cmd
 }
 
