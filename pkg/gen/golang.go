@@ -594,73 +594,52 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 	}
 	switch v := rule.GetRule().(type) {
 	case *rulesv1beta3.Rule_Atom:
+		var contextKeyName string
+		if staticContext {
+			contextKeyName = fmt.Sprintf("ctx.%s", strcase.ToCamel(v.Atom.ContextKey))
+		} else {
+			contextKeyName = strcase.ToLowerCamel(v.Atom.ContextKey)
+		}
+
 		switch v.Atom.GetComparisonOperator() {
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS:
-			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s == %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s == %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			if b, ok := v.Atom.ComparisonValue.GetKind().(*structpb.Value_BoolValue); ok {
+				g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, "bool")
+				if b.BoolValue {
+					return contextKeyName
+				} else {
+					return fmt.Sprintf("!%s", contextKeyName)
+				}
 			}
+			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
+			return fmt.Sprintf("%s == %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s != %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s != %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("%s != %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s < %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s < %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("%s < %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s <= %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s <= %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("%s <= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s > %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s > %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("%s > %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			if staticContext {
-				return fmt.Sprintf("ctx.%s >= %s", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("%s >= %s", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("%s >= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			if staticContext {
-				return fmt.Sprintf("strings.Contains(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("strings.Contains(%s,  %s)", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("strings.Contains(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			if staticContext {
-				return fmt.Sprintf("strings.HasPrefix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("strings.HasPrefix(%s,  %s)", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("strings.HasPrefix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			if staticContext {
-				return fmt.Sprintf("strings.HasSuffix(ctx.%s, %s)", strcase.ToCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			} else {
-				return fmt.Sprintf("strings.HasSuffix(%s,  %s)", strcase.ToLowerCamel(v.Atom.ContextKey), string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
-			}
+			return fmt.Sprintf("strings.HasSuffix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			sliceType := "string"
 			switch v.Atom.ComparisonValue.GetListValue().GetValues()[0].GetKind().(type) {
@@ -679,11 +658,7 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 			}
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, sliceType)
 			*usedSlices = true
-			if staticContext {
-				return fmt.Sprintf("slices.Contains([]%s{%s}, ctx.%s)", sliceType, strings.Join(elements, ", "), strcase.ToCamel(v.Atom.ContextKey))
-			} else {
-				return fmt.Sprintf("slices.Contains([]%s{%s}, %s)", sliceType, strings.Join(elements, ", "), strcase.ToLowerCamel(v.Atom.ContextKey))
-			}
+			return fmt.Sprintf("slices.Contains([]%s{%s}, %s)", sliceType, strings.Join(elements, ", "), contextKeyName)
 			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
 		default:
 			panic(fmt.Errorf("unsupported operator %+v", v.Atom.ComparisonOperator))
