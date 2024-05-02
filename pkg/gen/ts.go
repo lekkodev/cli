@@ -460,6 +460,8 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 			result = append(result, translateRuleTS(rule, usedVariables))
 		}
 		return "(" + strings.Join(result, operator) + ")"
+	case *rulesv1beta3.Rule_Not:
+		return "!(" + translateRuleTS(v.Not, usedVariables) + ")"
 	}
 
 	fmt.Printf("Need to learn how to: %+v\n", rule.GetRule())
