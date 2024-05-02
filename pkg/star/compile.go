@@ -15,6 +15,7 @@
 package star
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -111,21 +112,27 @@ func (c *compiler) Persist(ctx context.Context, f *feature.Feature, nv feature.N
 	jsonGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathJSON)
 	protoGenPath := filepath.Join(c.ff.NamespaceName, metadata.GenFolderPathProto)
 	protoBinFile := filepath.Join(protoGenPath, fmt.Sprintf("%s.proto.bin", c.ff.Name))
+	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", c.ff.Name))
+
 	diffExists, err := compareExistingProto(ctx, protoBinFile, fProto, c.cw)
 	if err != nil && !ignoreBackwardsCompatibility { // exit due to backwards incompatibility
 		return false, false, errors.Wrap(err, "comparing with existing proto")
 	}
-	if !diffExists || dryRun {
-		// skipping i/o
-		return false, diffExists, nil
-	}
 
-	// Create the json file
 	jBytes, err := feature.ProtoToJSON(fProto, c.registry)
 	if err != nil {
 		return false, diffExists, errors.Wrap(err, "proto to json")
 	}
-	jsonFile := filepath.Join(jsonGenPath, fmt.Sprintf("%s.json", c.ff.Name))
+	oldJBytes, err := c.cw.GetFileContents(ctx, jsonFile)
+	if err != nil || !bytes.Equal(jBytes, oldJBytes) {
+		diffExists = true
+	}
+
+	if !diffExists || dryRun {
+		return false, diffExists, nil
+	}
+
+	// Create the json file
 	if err := c.cw.MkdirAll(jsonGenPath, 0775); err != nil {
 		return false, diffExists, errors.Wrap(err, "failed to make gen json directory")
 	}
