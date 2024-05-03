@@ -235,6 +235,15 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 			return false, err
 		}
 		//fmt.Printf("%#v\n", namespace)
+		existingNs, ok := existing[namespace.Name]
+		if !ok {
+			// New namespace not in existing
+			return false, nil
+		}
+		if len(namespace.Features) != len(existingNs) {
+			// Mismatched number of configs - perhaps due to addition or removal
+			return false, nil
+		}
 		for _, f := range namespace.Features {
 			if f.GetTree().GetDefault() != nil {
 				f.Tree.DefaultNew = anyToLekkoAny(f.Tree.Default)
@@ -244,7 +253,7 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 					c.ValueNew = anyToLekkoAny(c.Value)
 				}
 			}
-			existingConfig, ok := existing[namespace.Name][f.Key]
+			existingConfig, ok := existingNs[f.Key]
 			if !ok {
 				// fmt.Print("New Config!\n")
 				notEqual = true
