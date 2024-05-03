@@ -210,9 +210,6 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	if err != nil {
 		return false, err
 	}
-	if err != nil {
-		return false, err
-	}
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
 		return false, err
@@ -309,6 +306,7 @@ func diffCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// TODO: There might be some way to only need to have one clone of the repository
 			isHeadSame, err := isSame(ctx, existing, registry, headPath)
 			if err != nil {
 				return err
@@ -318,15 +316,16 @@ func diffCmd() *cobra.Command {
 				return err
 			}
 			if !isHeadSame && !isBaseSame {
-				fmt.Print("Create a PR to fix Base first\n")
+				fmt.Println("Update the base branch to match Lekko")
 				os.Exit(1)
 			} else if !isHeadSame && isBaseSame {
-				fmt.Print("Push Head changes to Lekko before Merge\n")
+				fmt.Println("Sync changes from the current branch to Lekko")
 				os.Exit(2)
 			} else if isHeadSame && !isBaseSame {
-				fmt.Print("Merging will make Base = Lekko\n")
+				fmt.Println("Merging the current branch will update the base branch to match Lekko")
 				return nil
 			} else if isHeadSame && isBaseSame {
+				fmt.Println("The current branch does not contain any changes to Lekko")
 				return nil
 			}
 			return nil
