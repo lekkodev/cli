@@ -20,9 +20,11 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/repo"
@@ -32,6 +34,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -286,6 +289,87 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	return true, nil
 }
 
+func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, root string) (bool, error) {
+	startingDirectory, err := os.Getwd()
+	defer func() {
+		err := os.Chdir(startingDirectory)
+		if err != nil {
+			panic(err)
+		}
+	}()
+	if err != nil {
+		return false, err
+	}
+	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", "src/lekko")
+	cmd.Dir = root
+	nsString, err := cmd.CombinedOutput()
+	if err != nil {
+		fmt.Println("Error running ts-to-proto")
+		return false, err
+	}
+	var namespaces bffv1beta1.NamespaceContents
+	err = protojson.UnmarshalOptions{Resolver: registry}.Unmarshal(nsString, &namespaces)
+	if err != nil {
+		return false, err
+	}
+	var notEqual bool
+	for _, namespace := range namespaces.Namespaces {
+		existingNs, ok := existing[namespace.Name]
+		if !ok {
+			// New namespace not in existing
+			fmt.Println("New namespace not in existing")
+			return false, nil
+		}
+		if len(namespace.Configs) != len(existingNs) {
+			// Mismatched number of configs - perhaps due to addition or removal
+			fmt.Printf("Mismatched number of configs - perhaps due to addition or removal: %d to %d\n", len(namespace.Configs), len(existingNs))
+			return false, nil
+		}
+
+		for _, c := range namespace.Configs {
+			f := c.StaticFeature
+			if f.GetTree().GetDefault() != nil {
+				f.Tree.DefaultNew = anyToLekkoAny(f.Tree.Default)
+			}
+			for _, c := range f.GetTree().GetConstraints() {
+				if c.GetValue() != nil {
+					c.ValueNew = anyToLekkoAny(c.Value)
+				}
+			}
+			existingConfig, ok := existingNs[f.Key]
+			if !ok {
+				fmt.Print("New Config!\n")
+				notEqual = true
+			} else if proto.Equal(f.Tree, existingConfig.Tree) {
+				// fmt.Print("Equal! - from proto.Equal\n")
+			} else {
+				// These might still be equal, because the typescript path combines logical things in ways that the go path does not
+				// Using ts since it has fewer args..
+				gen.TypeRegistry = registry
+				//fmt.Printf("%+v\n\n", f)
+				o, err := gen.GenTSForFeature(f, namespace.Name, "")
+				if err != nil {
+					return false, err
+				}
+				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "")
+				if err != nil {
+					return false, err
+				}
+				if o == e {
+					// fmt.Print("Equal! - from codeGen\n")
+				} else {
+					fmt.Printf("Not Equal:\n\n%s\n%s\n\n", o, e)
+					notEqual = true
+				}
+			}
+		}
+	}
+	if notEqual {
+		return false, nil
+	}
+	return true, nil
+}
+
 /*
  * Questions we need answered:
  * Is repo main = lekko main?
@@ -298,6 +382,7 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 
 func diffCmd() *cobra.Command {
 	var repoPath, basePath, headPath string
+	var ts bool
 	cmd := &cobra.Command{
 		Use:    "diff",
 		Short:  "diff",
@@ -305,6 +390,10 @@ func diffCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
+			sameFunc := isSame
+			if ts {
+				sameFunc = isSameTS
+			}
 			/*
 				existing, registry, err := getRegistryAndNamespacesFromBff(ctx)
 				if err != nil {
@@ -316,11 +405,11 @@ func diffCmd() *cobra.Command {
 				return err
 			}
 			// TODO: There might be some way to only need to have one clone of the repository
-			isHeadSame, err := isSame(ctx, existing, registry, headPath)
+			isHeadSame, err := sameFunc(ctx, existing, registry, headPath)
 			if err != nil {
 				return err
 			}
-			isBaseSame, err := isSame(ctx, existing, registry, basePath)
+			isBaseSame, err := sameFunc(ctx, existing, registry, basePath)
 			if err != nil {
 				return err
 			}
@@ -343,6 +432,7 @@ func diffCmd() *cobra.Command {
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&basePath, "base-path", "b", "", "path to head repository")
 	cmd.Flags().StringVarP(&headPath, "head-path", "H", "", "path to base repository")
+	cmd.Flags().BoolVar(&ts, "ts", false, "typescript mode")
 	return cmd
 }
 
