@@ -18,31 +18,29 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 
-	"golang.org/x/mod/modfile"
+	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/repo"
+	"github.com/lekkodev/cli/pkg/star/prototypes"
 
-	"github.com/lainio/err2"
-	"github.com/lainio/err2/try"
+	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
-	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	"github.com/lekkodev/cli/pkg/dotlekko"
-	"github.com/lekkodev/cli/pkg/gen"
-	"github.com/lekkodev/cli/pkg/native"
-	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/star/prototypes"
-	"github.com/lekkodev/cli/pkg/sync"
+	"golang.org/x/mod/modfile"
 )
 
 func syncCmd() *cobra.Command {
@@ -196,8 +194,7 @@ func getRegistryAndNamespacesFromLocal(ctx context.Context, repoPath string) (ma
 	return existing, registry, nil
 }
 
-func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, goRoot string) (result bool, err error) {
-	defer err2.Handle(&err)
+func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, goRoot string) (bool, error) {
 	startingDirectory, err := os.Getwd()
 	defer func() {
 		err := os.Chdir(startingDirectory)
@@ -224,9 +221,10 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	if err != nil {
 		return false, err
 	}
-	dot := try.To1(dotlekko.ReadDotLekko())
-	nativeLang := try.To1(native.DetectNativeLang())
-	files := try.To1(native.ListNativeConfigFiles(dot.LekkoPath, nativeLang))
+	files, err := findLekkoFiles(wd + "/internal/lekko")
+	if err != nil {
+		return false, err
+	}
 	var notEqual bool
 	for _, f := range files {
 		relativePath, err := filepath.Rel(wd, f)
@@ -291,8 +289,7 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	return true, nil
 }
 
-func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, root string) (result bool, err error) {
-	defer err2.Handle(&err)
+func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta1.Feature, registry *protoregistry.Types, root string) (bool, error) {
 	startingDirectory, err := os.Getwd()
 	defer func() {
 		err := os.Chdir(startingDirectory)
@@ -303,8 +300,7 @@ func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta
 	if err != nil {
 		return false, err
 	}
-	dot := try.To1(dotlekko.ReadDotLekko())
-	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", dot.LekkoPath) // #nosec G204
+	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", "src/lekko")
 	cmd.Dir = root
 	nsString, err := cmd.CombinedOutput()
 	if err != nil {
@@ -450,4 +446,20 @@ func GetRegistryFromFileDescriptorSet(fds *descriptorpb.FileDescriptorSet) (*pro
 		return nil, err
 	}
 	return st.Types, nil
+}
+
+func findLekkoFiles(lekkoPath string) ([]string, error) {
+	files := make([]string, 0)
+	if err := filepath.WalkDir(lekkoPath, func(p string, d fs.DirEntry, err error) error {
+		if d.IsDir() && d.Name() == "proto" {
+			return filepath.SkipDir
+		}
+		if d.Name() == "lekko.go" || d.Name() == "default.go" {
+			files = append(files, p)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return files, nil
 }
