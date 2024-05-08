@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -327,4 +328,24 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 		return errors.Wrap(err, "import repository into Lekko")
 	}
 	return nil
+}
+
+func ListNativeConfigFiles(lekkoPath string, ext string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(lekkoPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && (d.Name() == "gen" || d.Name() == "proto") {
+			return fs.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ext) && !strings.HasSuffix(d.Name(), "_gen"+ext) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
 }

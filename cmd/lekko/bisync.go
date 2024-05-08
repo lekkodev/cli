@@ -19,7 +19,6 @@ import (
 
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
-	"github.com/lekkodev/cli/pkg/native"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/sync"
 	"github.com/pkg/errors"
@@ -36,7 +35,7 @@ func bisyncCmd() *cobra.Command {
 Files at the provided path that contain valid Lekko config functions will first be translated and synced to the config repository on the local filesystem, then translated back to Lekko-canonical form, performing any code generation as necessary.
 This may affect ordering of functions/parameters and formatting.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nativeLang := try.To1(native.DetectNativeLang())
+			nativeLang := try.To1(sync.DetectNativeLang())
 			return bisync(context.Background(), nativeLang, lekkoPath, repoPath)
 		},
 	}
@@ -47,7 +46,7 @@ This may affect ordering of functions/parameters and formatting.`,
 	return cmd
 }
 
-func bisync(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath string) error {
+func bisync(ctx context.Context, nativeLang sync.NativeLang, lekkoPath, repoPath string) error {
 	if len(lekkoPath) == 0 {
 		dot := try.To1(dotlekko.ReadDotLekko())
 		lekkoPath = dot.LekkoPath
@@ -56,9 +55,9 @@ func bisync(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPa
 		repoPath = try.To1(repo.PrepareGithubRepo())
 	}
 	switch nativeLang {
-	case native.GO:
+	case sync.GO:
 		_ = try.To1(sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath))
-	case native.TS:
+	case sync.TS:
 		try.To(sync.BisyncTS(lekkoPath, repoPath))
 	default:
 		return errors.New("unsupported language")
@@ -72,7 +71,7 @@ func bisyncGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "Lekko bisync for Go. Should be run from project root.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return bisync(context.Background(), native.GO, lekkoPath, repoPath)
+			return bisync(context.Background(), sync.GO, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
@@ -86,7 +85,7 @@ func bisyncTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "Lekko bisync for Typescript. Should be run from project root.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return bisync(context.Background(), native.TS, lekkoPath, repoPath)
+			return bisync(context.Background(), sync.TS, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
