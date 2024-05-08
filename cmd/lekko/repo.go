@@ -475,7 +475,7 @@ func pullCmd() *cobra.Command {
 						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
 					}
 				}
-				try.To(gen.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, "", ".", false))
+				try.To(gen.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, nil, ".", false))
 
 				dot.LockSHA = newHead.Hash().String()
 				if err := dot.WriteBack(); err != nil {
@@ -576,7 +576,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) (er
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, baseDir, false)
+	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, []string{ns}, baseDir, false)
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}
@@ -612,7 +612,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) (er
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, ns, remoteDir, false)
+	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, []string{ns}, remoteDir, false)
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}

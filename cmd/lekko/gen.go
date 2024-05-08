@@ -68,7 +68,11 @@ func genNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, rep
 	if len(repoPath) == 0 {
 		repoPath = try.To1(repo.PrepareGithubRepo())
 	}
-	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, ns, ".", initMode)
+	var namespaces []string
+	if len(ns) > 0 {
+		namespaces = append(namespaces, ns)
+	}
+	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, namespaces, ".", initMode)
 }
 
 func genGoCmd() *cobra.Command {

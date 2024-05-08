@@ -109,7 +109,8 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	try.To(gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, "", remoteDir, false))
+	namespaces := try.To1(native.ListNamespaces(lekkoPath, nativeLang))
+	try.To(gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, namespaces, remoteDir, false))
 
 	switch nativeLang {
 	case native.TS:

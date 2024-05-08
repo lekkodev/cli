@@ -27,26 +27,23 @@ import (
 	"github.com/pkg/errors"
 )
 
-func GenNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath, namespace, nativeRepoPath string, initMode bool) (err error) {
+func GenNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath string, namespaces []string, nativeRepoPath string, initMode bool) (err error) {
 	defer err2.Handle(&err)
 
 	absLekkoPath := filepath.Join(nativeRepoPath, lekkoPath)
+	err = os.MkdirAll(absLekkoPath, 0770)
+	if err != nil {
+		return errors.Wrap(err, "create output dir")
+	}
 
-	var namespaces []string
-	if len(namespace) == 0 {
+	if len(namespaces) == 0 {
 		namespaces = try.To1(native.ListNamespaces(absLekkoPath, nativeLang))
-	} else {
-		namespaces = []string{namespace}
 	}
 
 	switch nativeLang {
 	case native.TS:
 		if initMode {
 			return errors.New("init mode not supported for TS")
-		}
-		err := os.MkdirAll(absLekkoPath, 0770)
-		if err != nil {
-			return errors.Wrap(err, "create output dir")
 		}
 		for _, ns := range namespaces {
 			outFilename := filepath.Join(absLekkoPath, ns+nativeLang.Ext())
