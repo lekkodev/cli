@@ -17,20 +17,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	"golang.org/x/mod/modfile"
 
+	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/native"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
@@ -41,85 +39,51 @@ import (
 )
 
 func genCmd() *cobra.Command {
+	var lekkoPath, repoPath, ns string
+	var initMode bool
 	cmd := &cobra.Command{
 		Use:   "gen",
-		Short: "generate library code from configs",
+		Short: "generate Lekko config functions from a local config repository",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			nativeLang := try.To1(native.DetectNativeLang())
+			return genNative(context.Background(), nativeLang, lekkoPath, repoPath, ns, initMode)
+		},
 	}
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
+	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	cmd.AddCommand(genGoCmd())
 	cmd.AddCommand(genTSCmd())
 	cmd.AddCommand(genStarlarkCmd())
 	return cmd
 }
 
+func genNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath, ns string, initMode bool) (err error) {
+	defer err2.Handle(&err)
+	if len(lekkoPath) == 0 {
+		dot := try.To1(dotlekko.ReadDotLekko())
+		lekkoPath = dot.LekkoPath
+	}
+	if len(repoPath) == 0 {
+		repoPath = try.To1(repo.PrepareGithubRepo())
+	}
+	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, ns, ".", initMode)
+}
+
 func genGoCmd() *cobra.Command {
-	var ns string
-	var outputPath string
-	var repoPath string
+	var lekkoPath, repoPath, ns string
 	var initMode bool
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "generate Go library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			b, err := os.ReadFile("go.mod")
-			if err != nil {
-				return errors.Wrap(err, "find go.mod in working directory")
-			}
-			mf, err := modfile.ParseLax("go.mod", b, nil)
-			if err != nil {
-				return err
-			}
-			if len(outputPath) == 0 {
-				dot, err := dotlekko.ReadDotLekko()
-				if err != nil {
-					return err
-				}
-				outputPath = dot.LekkoPath
-			}
-			if len(repoPath) == 0 {
-				repoPath, err = repo.PrepareGithubRepo()
-				if err != nil {
-					return err
-				}
-			}
-			var namespaces []string
-			if len(ns) == 0 {
-				files, err := os.ReadDir(outputPath)
-				if err != nil {
-					log.Fatal(err)
-				}
-				for _, f := range files {
-					if f.IsDir() && f.Name() != "proto" {
-						namespaces = append(namespaces, f.Name())
-					}
-				}
-			} else {
-				namespaces = []string{ns}
-			}
-			for _, n := range namespaces {
-				if !regexp.MustCompile("[a-z]+").MatchString(n) {
-					return errors.New("namespace must be a lowercase alphanumeric string")
-				}
-				generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, outputPath, repoPath, n)
-				if err != nil {
-					return errors.Wrap(err, "initialize code generator")
-				}
-				if initMode {
-					err = generator.Init(cmd.Context())
-					if err != nil {
-						return err
-					}
-				}
-				err = generator.Gen(cmd.Context())
-				if err != nil {
-					return err
-				}
-			}
-			return nil
+			return genNative(cmd.Context(), native.GO, lekkoPath, repoPath, ns, initMode)
 		},
 	}
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
-	cmd.Flags().StringVarP(&outputPath, "output-path", "o", "", "path to write generated directories and Go files under, autodetects if not set")
-	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, autodetects if not set")
 	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	return cmd
 }
@@ -132,19 +96,12 @@ func genTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(lekkoPath) == 0 {
-				dot := try.To1(dotlekko.ReadDotLekko())
-				lekkoPath = dot.LekkoPath
-			}
-			if len(repoPath) == 0 {
-				repoPath = try.To1(repo.PrepareGithubRepo())
-			}
-			return gen.GenFormattedTS(cmd.Context(), repoPath, ns, filepath.Join(lekkoPath, ns+".ts"))
+			return genNative(cmd.Context(), native.TS, lekkoPath, repoPath, ns, false)
 		},
 	}
-	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "path to Lekko native config files, will use autodetect if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	return cmd
 }
 
