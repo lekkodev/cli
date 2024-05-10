@@ -141,8 +141,7 @@ func compileCmd() *cobra.Command {
 		Use:   "compile [namespace[/config]]",
 		Short: "compiles configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
