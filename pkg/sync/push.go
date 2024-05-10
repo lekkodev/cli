@@ -36,7 +36,7 @@ import (
 
 func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) (err error) {
 	defer err2.Handle(&err)
-	nativeLang, err := native.DetectNativeLang()
+	nativeMetadata, nativeLang, err := native.DetectNativeLang("")
 	if err != nil {
 		return err
 	}
@@ -110,8 +110,11 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 	}
 	defer os.RemoveAll(remoteDir)
 	namespaces := try.To1(native.ListNamespaces(lekkoPath, nativeLang))
-	try.To(gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, namespaces, remoteDir, false))
-
+	try.To(gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath:   remoteDir,
+		Namespaces:     namespaces,
+		NativeMetadata: nativeMetadata,
+	}))
 	switch nativeLang {
 	case native.TS:
 		err = BisyncTS(lekkoPath, repoPath)

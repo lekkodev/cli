@@ -45,8 +45,8 @@ func genCmd() *cobra.Command {
 		Use:   "gen",
 		Short: "generate Lekko config functions from a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nativeLang := try.To1(native.DetectNativeLang())
-			return genNative(context.Background(), nativeLang, lekkoPath, repoPath, ns, initMode)
+			meta, nativeLang := try.To2(native.DetectNativeLang(""))
+			return genNative(context.Background(), meta, nativeLang, lekkoPath, repoPath, ns, initMode)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
@@ -59,20 +59,23 @@ func genCmd() *cobra.Command {
 	return cmd
 }
 
-func genNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath, ns string, initMode bool) (err error) {
+func genNative(ctx context.Context, nativeMetadata native.Metadata, nativeLang native.NativeLang, lekkoPath, repoPath, ns string, initMode bool) (err error) {
 	defer err2.Handle(&err)
 	if len(lekkoPath) == 0 {
-		dot := try.To1(dotlekko.ReadDotLekko())
+		dot := try.To1(dotlekko.ReadDotLekko(""))
 		lekkoPath = dot.LekkoPath
 	}
 	if len(repoPath) == 0 {
 		repoPath = try.To1(repo.PrepareGithubRepo())
 	}
-	var namespaces []string
-	if len(ns) > 0 {
-		namespaces = append(namespaces, ns)
+	opts := gen.GenOptions{
+		InitMode:       initMode,
+		NativeMetadata: nativeMetadata,
 	}
-	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, namespaces, ".", initMode)
+	if len(ns) > 0 {
+		opts.Namespaces = []string{ns}
+	}
+	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, opts)
 }
 
 func genGoCmd() *cobra.Command {
@@ -82,7 +85,7 @@ func genGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "generate Go library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return genNative(cmd.Context(), native.GO, lekkoPath, repoPath, ns, initMode)
+			return genNative(cmd.Context(), nil, native.GO, lekkoPath, repoPath, ns, initMode)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
@@ -100,7 +103,7 @@ func genTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "generate typescript library code from configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return genNative(cmd.Context(), native.TS, lekkoPath, repoPath, ns, false)
+			return genNative(cmd.Context(), nil, native.TS, lekkoPath, repoPath, ns, false)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "path to Lekko native config files, will use autodetect if not set")

@@ -105,7 +105,7 @@ func setupCmd() *cobra.Command {
 			}
 			fmt.Println()
 
-			dot, err := dotlekko.ReadDotLekko()
+			dot, err := dotlekko.ReadDotLekko("")
 			if err != nil {
 				fmt.Println("Lekko is not detected in this project.")
 				doInit := false
