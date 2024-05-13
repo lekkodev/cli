@@ -224,8 +224,8 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	if err != nil {
 		return false, err
 	}
-	dot := try.To1(dotlekko.ReadDotLekko())
-	nativeLang := try.To1(native.DetectNativeLang())
+	dot := try.To1(dotlekko.ReadDotLekko(""))
+	_, nativeLang := try.To2(native.DetectNativeLang(""))
 	files := try.To1(native.ListNativeConfigFiles(dot.LekkoPath, nativeLang))
 	var notEqual bool
 	for _, f := range files {
@@ -303,7 +303,7 @@ func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta
 	if err != nil {
 		return false, err
 	}
-	dot := try.To1(dotlekko.ReadDotLekko())
+	dot := try.To1(dotlekko.ReadDotLekko(""))
 	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", dot.LekkoPath) // #nosec G204
 	cmd.Dir = root
 	nsString, err := cmd.CombinedOutput()

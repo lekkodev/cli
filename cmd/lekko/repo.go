@@ -323,7 +323,7 @@ func remoteCmd() *cobra.Command {
 		Use:   "remote",
 		Short: "Show the remote Lekko repo currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dot, err := dotlekko.ReadDotLekko()
+			dot, err := dotlekko.ReadDotLekko("")
 			if err != nil {
 				return err
 			}
@@ -367,7 +367,7 @@ func pushCmd() *cobra.Command {
 		Use:   "push",
 		Short: "Push local changes to remote Lekko repo.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dot, err := dotlekko.ReadDotLekko()
+			dot, err := dotlekko.ReadDotLekko("")
 			if err != nil {
 				return errors.Wrap(err, "read Lekko configuration file")
 			}
@@ -384,7 +384,7 @@ func pathCmd() *cobra.Command {
 		Use:   "path",
 		Short: "Show the local repo path currently in use",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dot := try.To1(dotlekko.ReadDotLekko())
+			dot := try.To1(dotlekko.ReadDotLekko(""))
 			repoPath := try.To1(repo.GetRepoPath(dot))
 			fmt.Println(repoPath)
 			return nil
@@ -433,8 +433,8 @@ func pullCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
 
-			dot := try.To1(dotlekko.ReadDotLekko())
-			nativeLang := try.To1(native.DetectNativeLang())
+			dot := try.To1(dotlekko.ReadDotLekko(""))
+			nativeMetadata, nativeLang := try.To2(native.DetectNativeLang(""))
 
 			repoPath := try.To1(repo.PrepareGithubRepo())
 			gitRepo := try.To1(git.PlainOpen(repoPath))
@@ -475,7 +475,7 @@ func pullCmd() *cobra.Command {
 						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
 					}
 				}
-				try.To(gen.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, nil, ".", false))
+				try.To(gen.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{NativeMetadata: nativeMetadata}))
 
 				dot.LockSHA = newHead.Hash().String()
 				if err := dot.WriteBack(); err != nil {
@@ -505,10 +505,7 @@ func pullCmd() *cobra.Command {
 					return errors.Wrap(err, "go bisync")
 				}
 				for _, f := range files {
-					err = mergeFile(cmd.Context(), f, dot)
-					if err != nil {
-						return errors.Wrapf(err, "merge file %s", f)
-					}
+					try.To(mergeFile(cmd.Context(), f, dot, nativeMetadata))
 				}
 			default:
 				return fmt.Errorf("unsupported language: %s", nativeLang)
@@ -526,7 +523,7 @@ func pullCmd() *cobra.Command {
 	return cmd
 }
 
-func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) (err error) {
+func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nativeMetadata native.Metadata) (err error) {
 	defer err2.Handle(&err)
 	nativeLang, err := native.NativeLangFromExt(filename)
 	if err != nil {
@@ -576,7 +573,11 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) (er
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, []string{ns}, baseDir, false)
+	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath:   baseDir,
+		Namespaces:     []string{ns},
+		NativeMetadata: nativeMetadata,
+	})
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}
@@ -612,7 +613,11 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko) (er
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, []string{ns}, remoteDir, false)
+	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath:   remoteDir,
+		Namespaces:     []string{ns},
+		NativeMetadata: nativeMetadata,
+	})
 	if err != nil {
 		return errors.Wrap(err, "gen native")
 	}
@@ -655,11 +660,11 @@ func mergeFileCmd() *cobra.Command {
 			"Assumes that the repo is up-to-date. Typescript only."),
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dot, err := dotlekko.ReadDotLekko()
+			dot, err := dotlekko.ReadDotLekko("")
 			if err != nil {
 				return errors.Wrap(err, "open Lekko configuration file")
 			}
-			return mergeFile(cmd.Context(), tsFilename, dot)
+			return mergeFile(cmd.Context(), tsFilename, dot, nil)
 		},
 	}
 	cmd.Flags().StringVarP(&tsFilename, "filename", "f", "", "path to ts file to pull changes into")

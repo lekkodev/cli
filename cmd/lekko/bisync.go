@@ -36,7 +36,7 @@ func bisyncCmd() *cobra.Command {
 Files at the provided path that contain valid Lekko config functions will first be translated and synced to the config repository on the local filesystem, then translated back to Lekko-canonical form, performing any code generation as necessary.
 This may affect ordering of functions/parameters and formatting.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			nativeLang := try.To1(native.DetectNativeLang())
+			_, nativeLang := try.To2(native.DetectNativeLang(""))
 			return bisync(context.Background(), nativeLang, lekkoPath, repoPath)
 		},
 	}
@@ -49,7 +49,7 @@ This may affect ordering of functions/parameters and formatting.`,
 
 func bisync(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath string) error {
 	if len(lekkoPath) == 0 {
-		dot := try.To1(dotlekko.ReadDotLekko())
+		dot := try.To1(dotlekko.ReadDotLekko(""))
 		lekkoPath = dot.LekkoPath
 	}
 	if len(repoPath) == 0 {

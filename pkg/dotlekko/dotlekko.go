@@ -54,12 +54,12 @@ func NewDotLekko(lekkoPath string) *DotLekko {
 
 // Looks for .lekko or .lekko.(yaml|yml) in the working directory
 // Returns the parsed configuration object and the path to the file.
-func ReadDotLekko() (*DotLekko, error) {
+func ReadDotLekko(codeRepoPath string) (*DotLekko, error) {
 	var bareMissing, yamlMissing, ymlMissing bool
 	var path string
-	barePath := ".lekko"
-	yamlPath := ".lekko.yaml"
-	ymlPath := ".lekko.yml"
+	barePath := filepath.Join(codeRepoPath, ".lekko")
+	yamlPath := filepath.Join(codeRepoPath, ".lekko.yaml")
+	ymlPath := filepath.Join(codeRepoPath, ".lekko.yml")
 
 	if _, err := os.Stat(barePath); err != nil {
 		bareMissing = true

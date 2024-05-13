@@ -132,7 +132,7 @@ func GetRepoPath(dot *dotlekko.DotLekko) (string, error) {
 }
 
 func PrepareGithubRepo() (string, error) {
-	dot, err := dotlekko.ReadDotLekko()
+	dot, err := dotlekko.ReadDotLekko("")
 	if err != nil || len(dot.Repository) == 0 {
 		return InitIfNotExists("")
 	}

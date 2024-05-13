@@ -23,9 +23,21 @@ import (
 	"regexp"
 	"strings"
 
+	"golang.org/x/mod/modfile"
+
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
 )
+
+type Metadata interface {
+	isMetadata()
+}
+
+type GoMetadata struct {
+	ModulePath string
+}
+
+func (GoMetadata) isMetadata() {}
 
 type NativeLang string
 
@@ -34,14 +46,16 @@ var (
 	TS NativeLang = "ts"
 )
 
-func DetectNativeLang() (NativeLang, error) {
+func DetectNativeLang(codeRepoPath string) (Metadata, NativeLang, error) {
 	// naive check for "known" project types
-	if _, err := os.Stat("go.mod"); err == nil {
-		return GO, nil
-	} else if _, err = os.Stat("package.json"); err == nil {
-		return TS, nil
+	if _, err := os.Stat(filepath.Join(codeRepoPath, "go.mod")); err == nil {
+		b := try.To1(os.ReadFile(filepath.Join(codeRepoPath, "go.mod")))
+		mf := try.To1(modfile.ParseLax("go.mod", b, nil))
+		return GoMetadata{ModulePath: mf.Module.Mod.Path}, GO, nil
+	} else if _, err = os.Stat(filepath.Join(codeRepoPath, "package.json")); err == nil {
+		return nil, TS, nil
 	}
-	return "", errors.New("unknown project type, Lekko currently supports Go and NPM projects")
+	return nil, "", errors.New("unknown project type, Lekko currently supports Go and NPM projects")
 }
 
 func NativeLangFromExt(filename string) (NativeLang, error) {
