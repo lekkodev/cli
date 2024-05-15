@@ -26,14 +26,14 @@ jobs:
           # which is why actions/setup-go can't handle caching properly
           # Also hash by makefiles because some things (like golangcilint version) are defined there
           path: |
-            ~/.cache/core/${{ runner.os }}/x86_64/bin
-            ~/.cache/core/${{ runner.os }}/x86_64/go/pkg/mod
-            ~/.cache/core/${{ runner.os }}/x86_64/gocache
-            ~/.cache/core/${{ runner.os }}/x86_64/include
-            ~/.cache/core/${{ runner.os }}/x86_64/versions
-            ~/.cache/core/${{ runner.os }}/x86_64/golangci-lint
-          key: go-cache-core-${{ hashFiles('go.sum', 'make/**') }}
-          restore-keys: go-cache-core-
+            ~/.cache/cli/${{ runner.os }}/x86_64/bin
+            ~/.cache/cli/${{ runner.os }}/x86_64/go/pkg/mod
+            ~/.cache/cli/${{ runner.os }}/x86_64/gocache
+            ~/.cache/cli/${{ runner.os }}/x86_64/include
+            ~/.cache/cli/${{ runner.os }}/x86_64/versions
+            ~/.cache/cli/${{ runner.os }}/x86_64/golangci-lint
+          key: go-cache-cli-${{ hashFiles('go.sum', 'make/**') }}
+          restore-keys: go-cache-cli-
       - name: ci
         env:
           GITHUB_TOKEN: ${{ secrets.CI_PERSONAL_ACCESS_TOKEN }}
