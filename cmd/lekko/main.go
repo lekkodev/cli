@@ -61,6 +61,7 @@ func main() {
 	rootCmd.AddCommand(namespaceCmd())
 	rootCmd.AddCommand(apikeyCmd())
 	rootCmd.AddCommand(upgradeCmd())
+	rootCmd.AddCommand(confCmd())
 	// auth
 	rootCmd.AddCommand(authCmd())
 	// exp
