@@ -432,6 +432,7 @@ func pullCmd() *cobra.Command {
 		Short: "Pull remote changes and merge them with local changes.",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
+			ctx := cmd.Context()
 
 			dot := try.To1(dotlekko.ReadDotLekko(""))
 			nativeMetadata, nativeLang := try.To2(native.DetectNativeLang(""))
@@ -475,7 +476,7 @@ func pullCmd() *cobra.Command {
 						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
 					}
 				}
-				try.To(gen.GenNative(cmd.Context(), nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{NativeMetadata: nativeMetadata}))
+				try.To(gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{NativeMetadata: nativeMetadata}))
 
 				dot.LockSHA = newHead.Hash().String()
 				if err := dot.WriteBack(); err != nil {
@@ -500,12 +501,15 @@ func pullCmd() *cobra.Command {
 					return errors.Wrap(err, "ts pull")
 				}
 			case native.GO:
-				files, err := sync.BisyncGo(cmd.Context(), lekkoPath, lekkoPath, repoPath)
+				files, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
 				if err != nil {
 					return errors.Wrap(err, "go bisync")
 				}
 				for _, f := range files {
-					try.To(mergeFile(cmd.Context(), f, dot, nativeMetadata))
+					try.To(mergeFile(ctx, f, dot, nativeMetadata))
+				}
+				if _, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath); err != nil {
+					return errors.Wrap(err, "post-merge go bisync")
 				}
 			default:
 				return fmt.Errorf("unsupported language: %s", nativeLang)
