@@ -505,11 +505,14 @@ func pullCmd() *cobra.Command {
 				if err != nil {
 					return errors.Wrap(err, "go bisync")
 				}
+				hasConflicts := false
 				for _, f := range files {
-					try.To(mergeFile(ctx, f, dot, nativeMetadata))
+					hasConflicts = hasConflicts && try.To1(mergeFile(ctx, f, dot, nativeMetadata))
 				}
-				if _, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath); err != nil {
-					return errors.Wrap(err, "post-merge go bisync")
+				if !hasConflicts {
+					if _, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath); err != nil {
+						return errors.Wrap(err, "post-merge go bisync")
+					}
 				}
 			default:
 				return fmt.Errorf("unsupported language: %s", nativeLang)
@@ -527,41 +530,41 @@ func pullCmd() *cobra.Command {
 	return cmd
 }
 
-func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nativeMetadata native.Metadata) (err error) {
+func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nativeMetadata native.Metadata) (hasConflicts bool, err error) {
 	defer err2.Handle(&err)
 	nativeLang, err := native.NativeLangFromExt(filename)
 	if err != nil {
-		return err
+		return false, err
 	}
 	ns := try.To1(nativeLang.GetNamespace(filename))
 
 	fileBytes, err := os.ReadFile(filename)
 	if err != nil {
-		return errors.Wrap(err, "read file")
+		return false, errors.Wrap(err, "read file")
 	}
 	if bytes.Contains(fileBytes, []byte("<<<<<<<")) {
-		return fmt.Errorf("%s has unresolved merge conflicts", filename)
+		return false, fmt.Errorf("%s has unresolved merge conflicts", filename)
 	}
 
 	if len(dot.LockSHA) == 0 {
-		return errors.New("no Lekko lock information found")
+		return false, errors.New("no Lekko lock information found")
 	}
 
 	repoPath, err := repo.PrepareGithubRepo()
 	if err != nil {
-		return err
+		return false, err
 	}
 	gitRepo, err := git.PlainOpen(repoPath)
 	if err != nil {
-		return errors.Wrap(err, "open git repo")
+		return false, errors.Wrap(err, "open git repo")
 	}
 	err = repo.ResetAndClean(gitRepo)
 	if err != nil {
-		return err
+		return false, err
 	}
 	worktree, err := gitRepo.Worktree()
 	if err != nil {
-		return errors.Wrap(err, "get worktree")
+		return false, errors.Wrap(err, "get worktree")
 	}
 
 	// base
@@ -569,12 +572,12 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		Hash: plumbing.NewHash(dot.LockSHA),
 	})
 	if err != nil {
-		return errors.Wrap(err, fmt.Sprintf("checkout %s", dot.LockSHA))
+		return false, errors.Wrap(err, fmt.Sprintf("checkout %s", dot.LockSHA))
 	}
 
 	baseDir, err := os.MkdirTemp("", "lekko-merge-base-")
 	if err != nil {
-		return errors.Wrap(err, "create temp dir")
+		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
 	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
@@ -583,7 +586,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		NativeMetadata: nativeMetadata,
 	})
 	if err != nil {
-		return errors.Wrap(err, "gen native")
+		return false, errors.Wrap(err, "gen native")
 	}
 
 	getCommitInfo := func() (string, error) {
@@ -602,7 +605,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 
 	baseCommitInfo, err := getCommitInfo()
 	if err != nil {
-		return errors.Wrap(err, "get commit info")
+		return false, errors.Wrap(err, "get commit info")
 	}
 
 	// remote
@@ -610,11 +613,11 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		Branch: plumbing.NewBranchReferenceName("main"),
 	})
 	if err != nil {
-		return errors.Wrap(err, "checkout main")
+		return false, errors.Wrap(err, "checkout main")
 	}
 	remoteDir, err := os.MkdirTemp("", "lekko-merge-remote-")
 	if err != nil {
-		return errors.Wrap(err, "create temp dir")
+		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
 	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
@@ -623,12 +626,12 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		NativeMetadata: nativeMetadata,
 	})
 	if err != nil {
-		return errors.Wrap(err, "gen native")
+		return false, errors.Wrap(err, "gen native")
 	}
 
 	remoteCommitInfo, err := getCommitInfo()
 	if err != nil {
-		return errors.Wrap(err, "get commit info")
+		return false, errors.Wrap(err, "get commit info")
 	}
 
 	baseFilename := filepath.Join(baseDir, filename)
@@ -648,12 +651,13 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		// positive error code is fine, it signals number of conflicts
 		if ok && exitErr.ExitCode() > 0 {
 			fmt.Printf("CONFLICT (content): Merge conflict in %s\n", filename)
+			return true, nil
 		} else {
-			return errors.Wrap(err, "git merge-file")
+			return false, errors.Wrap(err, "git merge-file")
 		}
 	}
 
-	return nil
+	return false, nil
 }
 
 func mergeFileCmd() *cobra.Command {
@@ -668,7 +672,8 @@ func mergeFileCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "open Lekko configuration file")
 			}
-			return mergeFile(cmd.Context(), tsFilename, dot, nil)
+			_, err = mergeFile(cmd.Context(), tsFilename, dot, nil)
+			return err
 		},
 	}
 	cmd.Flags().StringVarP(&tsFilename, "filename", "f", "", "path to ts file to pull changes into")
