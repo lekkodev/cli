@@ -362,7 +362,7 @@ func remoteCmd() *cobra.Command {
 
 func pushCmd() *cobra.Command {
 	var commitMessage string
-	var forceLock bool
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "push",
 		Short: "Push local changes to remote Lekko repo.",
@@ -371,11 +371,11 @@ func pushCmd() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "read Lekko configuration file")
 			}
-			return sync.Push(cmd.Context(), commitMessage, forceLock, dot)
+			return sync.Push(cmd.Context(), commitMessage, force, dot)
 		},
 	}
 	cmd.Flags().StringVarP(&commitMessage, "commit-message", "m", "", "commit message")
-	cmd.Flags().BoolVarP(&forceLock, "force", "f", false, "whether to force push, ignoring base commit information from lekko.lock")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "force push, ignoring change detection and .lekko lock SHA")
 	return cmd
 }
 

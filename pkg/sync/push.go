@@ -34,7 +34,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlekko.DotLekko) (err error) {
+func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.DotLekko) (err error) {
 	defer err2.Handle(&err)
 	nativeMetadata, nativeLang, err := native.DetectNativeLang("")
 	if err != nil {
@@ -92,7 +92,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 		}
 	}
 
-	if !forceLock {
+	if !force {
 		// no lock and there is a potential conflict
 		if len(dot.LockSHA) == 0 && updatesExistingNamespace {
 			return errors.New("No Lekko lock information found, please run with --force flag to push anyway")
@@ -147,7 +147,7 @@ func Push(ctx context.Context, commitMessage string, forceLock bool, dot *dotlek
 			}
 		}
 	}
-	if !hasChanges {
+	if !hasChanges && !force {
 		fmt.Println("Already up to date.")
 		return nil
 	}
