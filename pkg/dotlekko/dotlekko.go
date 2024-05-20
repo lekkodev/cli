@@ -44,13 +44,16 @@ type DotLekko struct {
 	path      string
 }
 
-func NewDotLekko(lekkoPath string) *DotLekko {
+func NewDotLekko(lekkoPath string, repository string) *DotLekko {
 	return &DotLekko{
-		Version:   "v1",
-		LekkoPath: lekkoPath,
-		path:      ".lekko",
+		Version:    "v1",
+		Repository: repository,
+		LekkoPath:  lekkoPath,
+		path:       ".lekko",
 	}
 }
+
+var ErrNotFound = errors.New("missing Lekko configuration file: .lekko or .lekko.(yaml|yml) not found")
 
 // Looks for .lekko or .lekko.(yaml|yml) in the working directory
 // Returns the parsed configuration object and the path to the file.
@@ -71,7 +74,7 @@ func ReadDotLekko(codeRepoPath string) (*DotLekko, error) {
 		ymlMissing = true
 	}
 	if bareMissing && yamlMissing && ymlMissing {
-		return nil, errors.New("missing Lekko configuration file: .lekko or .lekko.(yaml|yml) not found")
+		return nil, ErrNotFound
 	}
 	if !bareMissing {
 		path = barePath

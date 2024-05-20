@@ -25,9 +25,8 @@ import (
 
 func confCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "conf",
-		Short:  "parse a .lekko-like configuration file in the working directory",
-		Hidden: true,
+		Use:   "conf",
+		Short: "parse a .lekko-like configuration file in the working directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// By default, read dotlekko and output as JSON
 			wd, err := os.Getwd()

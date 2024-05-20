@@ -155,7 +155,7 @@ func setupCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt lekko path")
 				}
 
-				dot = dotlekko.NewDotLekko(lekkoPath)
+				dot = dotlekko.NewDotLekko(lekkoPath, "")
 			}
 
 			rs = secrets.NewSecretsOrFail(secrets.RequireLekkoToken(), secrets.RequireGithub())

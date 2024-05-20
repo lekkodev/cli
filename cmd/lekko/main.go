@@ -78,6 +78,7 @@ func main() {
 	addGroup(
 		rootCmd,
 		coreCommands,
+		initCmd(),
 		genCmd(),
 		syncCmd(),
 		bisyncCmd(),
