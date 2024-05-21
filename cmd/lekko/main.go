@@ -42,6 +42,31 @@ import (
 // Updated at build time using ldflags
 var version = "development"
 
+var coreCommands = &cobra.Group{
+	ID:    "core",
+	Title: "CORE COMMANDS",
+}
+var extraCommands = &cobra.Group{
+	ID:    "extra",
+	Title: "EXTRA COMMANDS",
+}
+var managementCommands = &cobra.Group{
+	ID:    "management",
+	Title: "MANAGEMENT COMMANDS",
+}
+var internalCommands = &cobra.Group{
+	ID:    "internal",
+	Title: "INTERNAL COMMANDS",
+}
+
+func addGroup(parent *cobra.Command, group *cobra.Group, cmds ...*cobra.Command) {
+	parent.AddGroup(group)
+	for _, cmd := range cmds {
+		cmd.GroupID = group.ID
+		parent.AddCommand(cmd)
+	}
+}
+
 func main() {
 	err2.SetErrorTracer(os.Stderr)
 	// to support standard go flags defined by 3rd party libraries
@@ -49,46 +74,52 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(goflag.CommandLine)
 
 	rootCmd := rootCmd()
-	rootCmd.AddCommand(compileCmd())
-	rootCmd.AddCommand(verifyCmd())
-	rootCmd.AddCommand(commitCmd())
-	rootCmd.AddCommand(reviewCmd())
-	rootCmd.AddCommand(mergeCmd)
-	rootCmd.AddCommand(restoreCmd())
-	rootCmd.AddCommand(teamCmd())
-	rootCmd.AddCommand(repoCmd())
-	rootCmd.AddCommand(featureCmd())
-	rootCmd.AddCommand(namespaceCmd())
-	rootCmd.AddCommand(apikeyCmd())
-	rootCmd.AddCommand(upgradeCmd())
-	rootCmd.AddCommand(confCmd())
-	// auth
-	rootCmd.AddCommand(authCmd())
-	// exp
-	experimentalCmd.AddCommand(parseCmd())
-	experimentalCmd.AddCommand(cleanupCmd)
-	experimentalCmd.AddCommand(formatCmd())
-	// code generation
-	rootCmd.AddCommand(genCmd())
-	rootCmd.AddCommand(syncCmd())
-	rootCmd.AddCommand(bisyncCmd())
-	// also leaving these in experimental for backwards compatibility just in case
-	experimentalCmd.AddCommand(genCmd())
-	experimentalCmd.AddCommand(syncCmd())
-	experimentalCmd.AddCommand(bisyncCmd())
-	rootCmd.AddCommand(experimentalCmd)
 
-	// setup
-	rootCmd.AddCommand(setupCmd())
+	addGroup(
+		rootCmd,
+		coreCommands,
+		genCmd(),
+		syncCmd(),
+		bisyncCmd(),
+		pushCmd(),
+		pullCmd(),
+	)
 
-	// short for `lekko repo push`
-	rootCmd.AddCommand(pushCmd())
-	// short for `lekko repo pull`
-	rootCmd.AddCommand(pullCmd())
-	// short for `lekko repo merge-file`
-	rootCmd.AddCommand(mergeFileCmd())
+	addGroup(
+		rootCmd,
+		managementCommands,
+		authCmd(),
+		setupCmd(),
+		teamCmd(),
+		repoCmd(),
+		featureCmd(),
+		namespaceCmd(),
+		apikeyCmd(),
+		upgradeCmd(),
+	)
 
-	rootCmd.AddCommand(diffCmd())
+	addGroup(
+		rootCmd,
+		extraCommands,
+		// config repo commands
+		compileCmd(),
+		verifyCmd(),
+		commitCmd(),
+		reviewCmd(),
+		mergeCmd,
+		restoreCmd(),
+		parseCmd(),
+		cleanupCmd,
+		formatCmd(),
+	)
+
+	addGroup(
+		rootCmd,
+		internalCommands,
+		mergeFileCmd(),
+		diffCmd(),
+		confCmd(),
+	)
 
 	logging.InitColors()
 
@@ -106,7 +137,7 @@ func main() {
 func rootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:           "lekko",
-		Short:         "lekko - dynamic configuration helper",
+		Short:         "Lekko is a dynamic configuration management tool",
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -417,11 +448,6 @@ func (p *provider) Set(v string) error {
 
 func (p *provider) Type() string {
 	return "provider"
-}
-
-var experimentalCmd = &cobra.Command{
-	Use:   "exp",
-	Short: "experimental commands",
 }
 
 func commitCmd() *cobra.Command {
