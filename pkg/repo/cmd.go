@@ -27,6 +27,7 @@ import (
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/gitcli"
@@ -173,7 +174,23 @@ func PrepareGithubRepo() (string, error) {
 				if len(remote.Config().URLs) == 0 || remote.Config().URLs[0] != githubRepoURL {
 					return "", errors.Errorf("repo already exists at %s but with different origin: %s", repoPath, remote.Config().URLs[0])
 				}
-				// TODO: checkout main and pull?
+				if err := ResetAndClean(gitRepo); err != nil {
+					return "", err
+				}
+
+				worktree, err := gitRepo.Worktree()
+				if err != nil {
+					return "", errors.Wrap(err, "get worktree")
+				}
+				err = worktree.Checkout(&git.CheckoutOptions{
+					Branch: plumbing.NewBranchReferenceName("main"),
+				})
+				if err != nil {
+					return "", errors.Wrap(err, "checkout main")
+				}
+				if err := gitcli.Pull(repoPath); err != nil {
+					return "", errors.Wrap(err, "pull")
+				}
 			}
 		}
 		if err != nil {
