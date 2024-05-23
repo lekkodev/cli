@@ -272,7 +272,9 @@ message ListTeamMembershipsResponse {
   repeated Membership memberships = 1;
 }
 
-message ListUserMembershipsRequest {}
+message ListUserMembershipsRequest {
+  bool check_domain_based_memberships = 1;
+}
 
 message ListUserMembershipsResponse {
   repeated Membership memberships = 1;
