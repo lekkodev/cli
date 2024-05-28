@@ -217,6 +217,7 @@ message UpdateAPIKeyScopesResponse {}
 
 message CreateTeamRequest {
   string name = 1;
+  string domain_name = 2;
 }
 
 message CreateTeamResponse {
