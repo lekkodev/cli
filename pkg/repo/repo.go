@@ -269,6 +269,9 @@ func (r *repository) storeDefaultBranchName(ap AuthProvider) error {
 	}
 	// The local filesystem does not have enough info to deduce the
 	// default branch name. Query remote, and save the result
+	if ap == nil || credentialsExist(ap) != nil {
+		return errors.New("missing git credentials, run lekko auth login")
+	}
 	remote, err := r.repo.Remote(RemoteName)
 	if err != nil {
 		if err == git.ErrRemoteNotFound {

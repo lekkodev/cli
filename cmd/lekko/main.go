@@ -154,8 +154,7 @@ func formatCmd() *cobra.Command {
 		Use:   "format",
 		Short: "format star files",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}
@@ -225,8 +224,7 @@ func verifyCmd() *cobra.Command {
 		Use:   "verify [namespace[/config]]",
 		Short: "verifies configs based on individual definitions",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rs := secrets.NewSecretsOrFail()
-			r, err := repo.NewLocal(wd, rs)
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -264,7 +262,7 @@ func parseCmd() *cobra.Command {
 		Use:   "parse",
 		Short: "parse a feature file using static analysis, and rewrite the starlark",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return errors.Wrap(err, "new repo")
 			}

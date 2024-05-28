@@ -36,7 +36,6 @@ import (
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/metadata"
 	"github.com/lekkodev/cli/pkg/repo"
-	"github.com/lekkodev/cli/pkg/secrets"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
@@ -68,7 +67,7 @@ func featureList() *cobra.Command {
 		Use:   "list",
 		Short: "list all configs",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -109,7 +108,7 @@ func featureAdd() *cobra.Command {
 		Use:   "add",
 		Short: "add config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -211,7 +210,7 @@ func featureRemove() *cobra.Command {
 		Use:   "remove",
 		Short: "remove config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -249,7 +248,7 @@ func featureEval() *cobra.Command {
 		Use:   "eval",
 		Short: "evaluate config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -338,7 +337,7 @@ func configGroup() *cobra.Command {
 		Use:   "group",
 		Short: "group multiple configs into 1 config",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -723,7 +722,7 @@ var nsList = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+		r, err := repo.NewLocal(wd, nil)
 		if err != nil {
 			return err
 		}
@@ -747,7 +746,7 @@ func nsAdd() *cobra.Command {
 		Use:   "add",
 		Short: "add namespace",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
@@ -776,7 +775,7 @@ func nsRemove() *cobra.Command {
 		Use:   "remove",
 		Short: "remove namespace",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := repo.NewLocal(wd, secrets.NewSecretsOrFail())
+			r, err := repo.NewLocal(wd, nil)
 			if err != nil {
 				return err
 			}
