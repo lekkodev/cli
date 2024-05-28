@@ -482,8 +482,26 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 		case protoreflect.EnumKind:
 			fallthrough
 		case protoreflect.StringKind:
+			if f.IsList() {
+				var results []string
+				list := val.List()
+				for i := 0; i < list.Len(); i++ {
+					item := list.Get(i)
+					results = append(results, fmt.Sprintf("%q", item.String()))
+				}
+				return "[" + strings.Join(results, ", ") + "]"
+			}
 			return fmt.Sprintf("%q", val.String())
 		case protoreflect.BoolKind:
+			if f.IsList() {
+				var results []string
+				list := val.List()
+				for i := 0; i < list.Len(); i++ {
+					item := list.Get(i)
+					results = append(results, item.String())
+				}
+				return "[" + strings.Join(results, ", ") + "]"
+			}
 			return val.String()
 		case protoreflect.BytesKind:
 			panic("Don't know how to take bytes, try nibbles")
@@ -498,6 +516,15 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 		case protoreflect.Uint64Kind:
 			fallthrough
 		case protoreflect.Uint32Kind:
+			if f.IsList() {
+				var results []string
+				list := val.List()
+				for i := 0; i < list.Len(); i++ {
+					item := list.Get(i)
+					results = append(results, item.String())
+				}
+				return "[" + strings.Join(results, ", ") + "]"
+			}
 			return val.String()
 		case protoreflect.MessageKind:
 			if f.IsMap() {
