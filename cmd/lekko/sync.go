@@ -451,3 +451,62 @@ func GetRegistryFromFileDescriptorSet(fds *descriptorpb.FileDescriptorSet) (*pro
 	}
 	return st.Types, nil
 }
+
+/*
+ *  Convert config from one language to another.  This can also be useful for converting to the same language to normalize the syntax.
+ *
+ *  This handles proto change through tbd
+ */
+func convertLangCmd() *cobra.Command {
+	var inputLang, outputLang string
+	cmd := &cobra.Command{
+		Use:    "diff",
+		Short:  "diff",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			//ctx := cmd.Context()
+			// TODO validate input (is this not built in??)
+
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&inputLang, "input-language", "i", "ts", "go, ts, starlark, proto, proto-json")
+	cmd.Flags().StringVarP(&outputLang, "output-language", "o", "ts", "go, ts, starlark, proto, proto-json")
+	return cmd
+}
+
+func tsStringToProto(code string) (*featurev1beta1.Feature, error) {
+	cmd := exec.Command("npx", "ts-to-proto") // #nosec G204
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	go func() {
+		defer stdin.Close()
+		io.WriteString(stdin, "values written to stdin are passed to cmd's standard input")
+	}()
+	// TODO new ts command that reads from stdin
+	fString, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, err
+	}
+	var f featurev1beta1.Feature
+	err = protojson.UnmarshalOptions{ /*Resolver: registry*/ }.Unmarshal(fString, &f)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func goStringToProto(code string) (*featurev1beta1.Feature, error) {
+	return nil, nil
+}
+
+func protoToTs(f *featurev1beta1.Feature) (string, error) {
+	code, err := gen.GenTSForFeature(f, "", "")
+	return code, err
+}
+
+func protoToGo(feature *featurev1beta1.Feature) (string, error) {
+	return "", nil
+}
