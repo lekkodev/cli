@@ -130,9 +130,10 @@ func roleToProto(role MemberRole) bffv1beta1.MembershipRole {
 	}
 }
 
-func (t *Team) Create(ctx context.Context, name string, wts WriteTeamStore) error {
+func (t *Team) Create(ctx context.Context, name, domainName string, wts WriteTeamStore) error {
 	if _, err := t.lekkoBFFClient.CreateTeam(ctx, connect_go.NewRequest(&bffv1beta1.CreateTeamRequest{
-		Name: name,
+		Name:       name,
+		DomainName: domainName,
 	})); err != nil {
 		return errors.Wrap(err, "create team")
 	}

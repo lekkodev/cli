@@ -299,7 +299,8 @@ func setupCmd() *cobra.Command {
 						ws.SetLekkoTeam(githubOrgName)
 						return nil
 					}
-					return t.Create(cmd.Context(), githubOrgName, ws)
+					// TODO: extract domain name from the email
+					return t.Create(cmd.Context(), githubOrgName, "", ws)
 				}, secrets.RequireLekkoToken()); err != nil {
 					return err
 				}

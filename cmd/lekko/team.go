@@ -136,8 +136,16 @@ func createCmd() *cobra.Command {
 					return errors.Wrap(err, "prompt")
 				}
 			}
+			// TODO: extract domain name from the email
+			var domainName string
+			if err := survey.AskOne(&survey.Input{
+				Message: "Domain Name:",
+			}, &domainName); err != nil {
+				return errors.Wrap(err, "prompt")
+			}
+
 			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
-				return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, ws)
+				return team.NewTeam(lekko.NewBFFClient(ws)).Create(cmd.Context(), name, domainName, ws)
 			}, secrets.RequireLekkoToken()); err != nil {
 				return err
 			}
