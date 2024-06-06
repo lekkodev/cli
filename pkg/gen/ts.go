@@ -216,6 +216,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 
 	protoImports := make(map[string]struct{})
 	for _, ff := range ffs {
+		ourParameters := parameters
 		fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
 		if err != nil {
 			return err
@@ -244,7 +245,23 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 				}
 			}
 		}
-		codeString, err := GenTSForFeature(f, ns, parameters)
+		// Check if there is a per-config signature proto
+		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName("lekko.default." + strcase.ToCamel(f.Key) + ".Signature"))
+		if err == nil {
+			d := sigType.Descriptor()
+			var varNames []string
+			var fields []string
+			for i := 0; i < d.Fields().Len(); i++ {
+				f := d.Fields().Get(i)
+				t := fieldDescriptorToTS(f)
+				fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
+				varNames = append(varNames, strcase.ToLowerCamel(f.TextName()))
+			}
+
+			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, ", "))
+		}
+
+		codeString, err := GenTSForFeature(f, ns, ourParameters)
 		if err != nil {
 			return err
 		}

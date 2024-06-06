@@ -475,6 +475,7 @@ func convertLangCmd() *cobra.Command {
 	return cmd
 }
 
+/*
 func tsStringToProto(code string) (*featurev1beta1.Feature, error) {
 	cmd := exec.Command("npx", "ts-to-proto") // #nosec G204
 	stdin, err := cmd.StdinPipe()
@@ -491,7 +492,7 @@ func tsStringToProto(code string) (*featurev1beta1.Feature, error) {
 		return nil, err
 	}
 	var f featurev1beta1.Feature
-	err = protojson.UnmarshalOptions{ /*Resolver: registry*/ }.Unmarshal(fString, &f)
+	err = protojson.UnmarshalOptions{  }.Unmarshal(fString, &f)
 	if err != nil {
 		return nil, err
 	}
@@ -510,3 +511,4 @@ func protoToTs(f *featurev1beta1.Feature) (string, error) {
 func protoToGo(feature *featurev1beta1.Feature) (string, error) {
 	return "", nil
 }
+*/
