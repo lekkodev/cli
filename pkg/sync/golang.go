@@ -46,8 +46,10 @@ import (
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -114,22 +116,10 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
-func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
-	namespace := Namespace{}
-	src, err := os.ReadFile(g.filePath)
-	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
-	}
-	if bytes.Contains(src, []byte("<<<<<<<")) {
-		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
-	}
-	fset := token.NewFileSet()
-	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
+func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace, error) {
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
+	namespace := Namespace{}
 	ast.Inspect(pf, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.File:
@@ -165,19 +155,29 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 						commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
 					}
 				}
-				privateName := x.Name.Name
+				privateName := x.Name.Name // TODO - not sure how we use this, but does it work right with letting people just declare GetFoo and letting them be happy?
 				configName := strcase.ToKebab(privateName[3:])
 
 				contextKeys := make(map[string]string)
-				for _, param := range x.Type.Params.List {
-					assert.SNotEmpty(param.Names, "must have a parameter name")
-					assert.INotNil(param.Type, "must have a parameter type")
-					typeIdent, ok := param.Type.(*ast.Ident)
-					if !ok {
-						panic("parameter type must be an identifier")
-					}
-					contextKeys[param.Names[0].Name] = typeIdent.Name
+				as := FindArgStruct(x, pf)
+				if as != nil {
+					fmt.Printf("%+v\n", as)
+					d := StructToDescriptor(as)
+					fmt.Printf("%+v\n", d)
+					contextKeys = StructToMap(as)
 				}
+
+				/*
+					for _, param := range x.Type.Params.List {
+						assert.SNotEmpty(param.Names, "must have a parameter name")
+						assert.INotNil(param.Type, "must have a parameter type")
+						typeIdent, ok := param.Type.(*ast.Ident)
+						if !ok {
+							panic("parameter type must be an identifier")
+						}
+						contextKeys[param.Names[0].Name] = typeIdent.Name
+					}
+				*/
 
 				results := x.Type.Results.List
 				if results == nil {
@@ -229,6 +229,24 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 	})
 	// TODO static context
 	return &namespace, nil
+}
+
+// TODO option to pass in src
+func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
+	src, err := os.ReadFile(g.filePath)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
+	}
+	if bytes.Contains(src, []byte("<<<<<<<")) {
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+	}
+	fset := token.NewFileSet()
+	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.AstToNamespace(ctx, pf)
 }
 
 // Translates Go code to Protobuf/Starlark and writes changes to local config repository
@@ -860,3 +878,118 @@ func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.Featu
 	}
 	return []*featurev1beta1.Constraint{constraint}
 }
+
+func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
+	descriptor := &descriptorpb.DescriptorProto{}
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		panic("not a struct!")
+	}
+	descriptor.Name = proto.String(typeSpec.Name.Name)
+	for i, field := range structType.Fields.List {
+		for _, fieldName := range field.Names {
+			fieldDescriptor := &descriptorpb.FieldDescriptorProto{
+				Name:   proto.String(fieldName.Name),
+				Number: proto.Int32(int32(i + 1)),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			}
+			switch fieldType := field.Type.(type) {
+			case *ast.Ident:
+				switch fieldType.Name {
+				case "int":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()
+				case "string":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+				case "float64":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+				case "bool":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+				default:
+					panic("unknown type in struct")
+				}
+			default:
+				panic("not a struct I understand")
+			}
+			descriptor.Field = append(descriptor.Field, fieldDescriptor)
+		}
+	}
+	return descriptor
+}
+
+func StructToMap(typeSpec *ast.TypeSpec) map[string]string {
+	ret := make(map[string]string)
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		panic("not a struct!")
+	}
+	for _, field := range structType.Fields.List {
+		for _, fieldName := range field.Names {
+			switch fieldType := field.Type.(type) {
+			case *ast.Ident:
+				ret[fieldName.Name] = fieldType.Name
+			default:
+				panic("not a struct I understand")
+			}
+		}
+	}
+	return ret
+}
+
+func FindArgStruct(f *ast.FuncDecl, file *ast.File) *ast.TypeSpec {
+	if f.Type.Params.NumFields() != 1 {
+		return nil
+	}
+
+	param := f.Type.Params.List[0]
+	starExpr, ok := param.Type.(*ast.StarExpr)
+	if !ok {
+		return nil
+	}
+
+	ident, ok := starExpr.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if typeSpec.Name.Name == ident.Name {
+				return typeSpec
+			}
+		}
+	}
+	return nil
+}
+
+/*
+func getCodeRepoName(configRepo string) string {
+	if configRepo == "lekkodev/simple-app-configs" {
+		return "lekkodev/simple-vite-app"
+	} else if configRepo == "lekkodev/internal" {
+		return "lekkodev/webapp"
+	}
+	return ""
+}
+type GetCodeRepoNameArgs struct {
+	ConfigRepo string
+}
+func GetCodeRepoName(args *GetCodeRepoNameArgs) string {
+	if args.ConfigRepo == "lekkodev/simple-app-configs" {
+		return "lekkodev/simple-vite-app"
+	} else if args.ConfigRepo == "lekkodev/internal" {
+		return "lekkodev/webapp"
+	}
+	return ""
+}
+
+func GetFoo(args *descriptorpb.DescriptorProto) string
+
+*/
