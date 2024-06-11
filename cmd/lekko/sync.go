@@ -456,24 +456,82 @@ func GetRegistryFromFileDescriptorSet(fds *descriptorpb.FileDescriptorSet) (*pro
 /*
  *  Convert config from one language to another.  This can also be useful for converting to the same language to normalize the syntax.
  *
- *  This handles proto change through tbd
+ *  This handles proto change through go fly a kite
  */
 func convertLangCmd() *cobra.Command {
-	var inputLang, outputLang string
+	var inputLang, outputLang, inputFile string
 	cmd := &cobra.Command{
 		Use:    "convert",
 		Short:  "convert",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			//ctx := cmd.Context()
+			ctx := cmd.Context()
 			// TODO validate input (is this not built in??)
-			blame()
+			f, err := os.ReadFile(inputFile)
+			if err != nil {
+				panic(err)
+			}
+			//fileContents := string(f)
+			//fmt.Println(fileContents)
+			// assuming go for everything for now.. my brain..
+
+			// parse the bitch
+			//registry := &protoregistry.Types{}
+			/*
+				registry, err := prototypes.RegisterDynamicTypes(nil)
+				if err != nil {
+					panic(err)
+				}
+				syncer := sync.NewGoSyncerLite("", "", registry.Types)
+				namespace, err := syncer.SourceToNamespace(ctx, f)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("%+v\n", namespace)
+				// code gen based off that namespace object
+				g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
+				g.TypeRegistry = registry.Types
+				if err != nil {
+					panic(err)
+				}
+				publicFile, _, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
+				if err != nil {
+					panic(err)
+				}
+			*/
+			publicFile := goToGo(ctx, f)
+			fmt.Println(publicFile)
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&inputLang, "input-language", "i", "ts", "go, ts, starlark, proto, proto-json")
+	cmd.Flags().StringVarP(&inputFile, "input-file", "I", "/dev/stdin", "input file")
 	cmd.Flags().StringVarP(&outputLang, "output-language", "o", "ts", "go, ts, starlark, proto, proto-json")
 	return cmd
+}
+
+func goToGo(ctx context.Context, f []byte) string {
+	registry, err := prototypes.RegisterDynamicTypes(nil)
+	if err != nil {
+		panic(err)
+	}
+	syncer := sync.NewGoSyncerLite("", "", registry.Types)
+	namespace, err := syncer.SourceToNamespace(ctx, f)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("%+v\n", namespace)
+	// code gen based off that namespace object
+	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
+	g.TypeRegistry = registry.Types
+	if err != nil {
+		panic(err)
+	}
+	publicFile, _, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
+	if err != nil {
+		panic(err)
+	}
+	return publicFile
 }
 
 func writeProtoFiles(fds *descriptorpb.FileDescriptorSet) map[string]string {
@@ -655,133 +713,4 @@ func trimPackage(typeName string) string {
 		return typeName[1:]
 	}
 	return typeName
-}
-
-func blame() {
-	/*
-		var fds descriptorpb.FileDescriptorSet
-
-		fdProto := &descriptorpb.FileDescriptorProto{
-			Name:    proto.String("example.proto"),
-			Package: proto.String("example"),
-			MessageType: []*descriptorpb.DescriptorProto{
-				{
-					Name: proto.String("ExampleMessage"),
-					Field: []*descriptorpb.FieldDescriptorProto{
-						{
-							Name:   proto.String("example_field"),
-							Number: proto.Int32(1),
-							Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-						},
-						{
-							Name:   proto.String("example_repeated_field"),
-							Number: proto.Int32(2),
-							Type:   descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
-							Label:  descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum(),
-						},
-						{
-							Name:     proto.String("example_map_field"),
-							Number:   proto.Int32(3),
-							Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-							TypeName: proto.String(".example.ExampleMessage.ExampleMapFieldEntry"),
-						},
-					},
-					NestedType: []*descriptorpb.DescriptorProto{
-						{
-							Name: proto.String("ExampleSubMessage"),
-							Field: []*descriptorpb.FieldDescriptorProto{
-								{
-									Name:   proto.String("sub_field"),
-									Number: proto.Int32(1),
-									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-								},
-							},
-						},
-						{
-							Name: proto.String("ExampleMapFieldEntry"),
-							Field: []*descriptorpb.FieldDescriptorProto{
-								{
-									Name:   proto.String("key"),
-									Number: proto.Int32(1),
-									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-								},
-								{
-									Name:   proto.String("value"),
-									Number: proto.Int32(2),
-									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-								},
-							},
-							Options: &descriptorpb.MessageOptions{
-								MapEntry: proto.Bool(true),
-							},
-						},
-					},
-				},
-			},
-		}
-		fds.File = append(fds.File, fdProto)
-	*/
-	settingsByNameField := &descriptorpb.FieldDescriptorProto{
-		Name:     proto.String("settings_by_name"),
-		Number:   proto.Int32(1),
-		Label:    descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum(),
-		Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-		TypeName: proto.String(".example.Foo.SettingsByNameEntry"),
-	}
-
-	settingsByNameEntry := &descriptorpb.DescriptorProto{
-		Name: proto.String("SettingsByNameEntry"),
-		Field: []*descriptorpb.FieldDescriptorProto{
-			{
-				Name:   proto.String("key"),
-				Number: proto.Int32(1),
-				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-				Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
-			},
-			{
-				Name:     proto.String("value"),
-				Number:   proto.Int32(2),
-				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
-				Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
-				TypeName: proto.String(".example.FooSettings"),
-			},
-		},
-		Options: &descriptorpb.MessageOptions{
-			MapEntry: proto.Bool(true),
-		},
-	}
-
-	fooMessage := &descriptorpb.DescriptorProto{
-		Name: proto.String("Foo"),
-		Field: []*descriptorpb.FieldDescriptorProto{
-			settingsByNameField,
-		},
-		NestedType: []*descriptorpb.DescriptorProto{
-			settingsByNameEntry,
-		},
-	}
-
-	fooSettingsMessage := &descriptorpb.DescriptorProto{
-		Name: proto.String("FooSettings"),
-	}
-
-	fileDescriptor := &descriptorpb.FileDescriptorProto{
-		Name:    proto.String("foo.proto"),
-		Package: proto.String("example"),
-		Syntax:  proto.String("proto3"),
-		MessageType: []*descriptorpb.DescriptorProto{
-			fooMessage,
-			fooSettingsMessage,
-		},
-	}
-
-	fds := &descriptorpb.FileDescriptorSet{
-		File: []*descriptorpb.FileDescriptorProto{
-			fileDescriptor,
-		},
-	}
-
-	if err := writeProtoFiles(fds); err != nil {
-		fmt.Printf("Error writing proto files: %v\n", err)
-	}
 }

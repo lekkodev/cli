@@ -56,7 +56,7 @@ type goGenerator struct {
 	lekkoPath    string // Location relative to project root where Lekko files are stored, e.g. internal/lekko.
 	repoPath     string
 	namespace    string
-	typeRegistry *protoregistry.Types
+	TypeRegistry *protoregistry.Types
 }
 
 func NewGoGenerator(moduleRoot, outputPath, lekkoPath, repoPath, namespace string) (*goGenerator, error) {
@@ -246,7 +246,7 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 	}
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
 	// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
-	g.typeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	g.TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
 	nsMD, ok := nsMDs[g.namespace]
 	if !ok {
 		return fmt.Errorf("%s is not a namespace in the config repository", g.namespace)
@@ -553,7 +553,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			// so is not part of the compiled object - need to statically parse
 			// This also means that this only works for statically parseable
 			// configs
-			sf, err := r.Parse(ctx, ns, f.Key, g.typeRegistry) // TODO - wtf is this about? - just enums right?
+			sf, err := r.Parse(ctx, ns, f.Key, g.TypeRegistry) // TODO - wtf is this about? - just enums right?
 			if err != nil {
 				return nil, errors.Wrap(err, "static parsing")
 			}
@@ -904,7 +904,10 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 }
 
 func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) string {
-	msg := try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: g.typeRegistry}))
+	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
+	if err != nil {
+		panic(errors.Wrapf(err, "%s", val.TypeUrl))
+	}
 	if protoType == nil {
 		// TODO we may need more special casing here for primitive types.
 		// This feels like horrific syntax, but I needed this because
@@ -955,7 +958,7 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 // TODO: This can definitely be cached, and doesn't need values, just descriptors
 func (g *goGenerator) getProtoImportFromValue(parent protoreflect.Message, val protoreflect.Message) *ProtoImport {
 	// Try finding in type registry
-	_, err := g.typeRegistry.FindMessageByName((val.Descriptor().FullName()))
+	_, err := g.TypeRegistry.FindMessageByName((val.Descriptor().FullName()))
 	if errors.Is(err, protoregistry.NotFound) {
 		// If there's no parent, this can't be a nested message, which is a problem
 		assert.NotEqual(parent, nil, "missing in type registry with no parent")

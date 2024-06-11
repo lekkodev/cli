@@ -114,6 +114,7 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 type Namespace struct {
 	Name     string
 	Features []*featurev1beta1.Feature
+	// should we have a pointer to the descriptor?  Does it think that those are immutable?
 }
 
 func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace, error) {
@@ -237,6 +238,19 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 	if err != nil {
 		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
 	}
+	if bytes.Contains(src, []byte("<<<<<<<")) {
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+	}
+	fset := token.NewFileSet()
+	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.AstToNamespace(ctx, pf)
+}
+
+func (g *goSyncer) SourceToNamespace(ctx context.Context, src []byte) (*Namespace, error) {
 	if bytes.Contains(src, []byte("<<<<<<<")) {
 		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
 	}
