@@ -131,6 +131,8 @@ func getExample() bool {
 	return nil
 }
 
+// This is an attempt to pull out a simpler component that is more re-usable - the other one should probably be removed/changed, but that depends on
+// how far this change goes
 func (g *goGenerator) GenNamespaceFiles(ctx context.Context, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (string, string, error) {
 	// For each namespace, we want to generate under lekko/:
 	// lekko/
@@ -203,7 +205,7 @@ import (
 		AddStringsImport   bool
 		AddSlicesImport    bool
 	}{
-		[]string{},
+		[]string{}, // TODO - not awesome, but ideally this would go away.. but not sure if I'll get to that in this PR :(
 		g.namespace,
 		publicFuncStrings,
 		privateFuncStrings,
@@ -623,7 +625,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	usedVariables := make(map[string]string)
 	if staticCtxType != nil {
 		data.NaturalLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
-		data.ArgumentString = fmt.Sprintf("ctx *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type) // TODO change to args
+		data.ArgumentString = fmt.Sprintf("ctx *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type) // TODO change to args // this is the ONLY place we use this! awesome!
 		data.CallString = "ctx"
 	} else {
 		data.CtxStuff = "ctx := context.Background()\n"

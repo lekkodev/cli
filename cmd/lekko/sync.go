@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/mod/modfile"
 
@@ -460,13 +461,13 @@ func GetRegistryFromFileDescriptorSet(fds *descriptorpb.FileDescriptorSet) (*pro
 func convertLangCmd() *cobra.Command {
 	var inputLang, outputLang string
 	cmd := &cobra.Command{
-		Use:    "diff",
-		Short:  "diff",
+		Use:    "convert",
+		Short:  "convert",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			//ctx := cmd.Context()
 			// TODO validate input (is this not built in??)
-
+			blame()
 			return nil
 		},
 	}
@@ -475,40 +476,324 @@ func convertLangCmd() *cobra.Command {
 	return cmd
 }
 
-/*
-func tsStringToProto(code string) (*featurev1beta1.Feature, error) {
-	cmd := exec.Command("npx", "ts-to-proto") // #nosec G204
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
+func writeProtoFiles(fds *descriptorpb.FileDescriptorSet) map[string]string {
+	ret := make(map[string]string)
+	for _, fdProto := range fds.File {
+		protoContent := reconstructProto(fdProto)
+		ret[fdProto.GetName()] = protoContent
 	}
-	go func() {
-		defer stdin.Close()
-		io.WriteString(stdin, "values written to stdin are passed to cmd's standard input")
-	}()
-	// TODO new ts command that reads from stdin
-	fString, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, err
-	}
-	var f featurev1beta1.Feature
-	err = protojson.UnmarshalOptions{  }.Unmarshal(fString, &f)
-	if err != nil {
-		return nil, err
-	}
-	return &f, nil
+	return ret
 }
 
-func goStringToProto(code string) (*featurev1beta1.Feature, error) {
-	return nil, nil
+func reconstructProto(fdProto *descriptorpb.FileDescriptorProto) string {
+	var sb strings.Builder
+
+	sb.WriteString("syntax = \"proto3\";\n\n")
+
+	if pkg := fdProto.GetPackage(); pkg != "" {
+		sb.WriteString(fmt.Sprintf("package %s;\n\n", pkg))
+	}
+
+	for _, dep := range fdProto.Dependency {
+		sb.WriteString(fmt.Sprintf("import \"%s\";\n", dep))
+	}
+	sb.WriteString("\n")
+
+	for _, msg := range fdProto.MessageType {
+		reconstructMessage(&sb, msg, 0)
+	}
+
+	for _, enum := range fdProto.EnumType {
+		reconstructEnum(&sb, enum, 0)
+	}
+
+	for _, svc := range fdProto.Service {
+		reconstructService(&sb, svc, 0)
+	}
+
+	return sb.String()
 }
 
-func protoToTs(f *featurev1beta1.Feature) (string, error) {
-	code, err := gen.GenTSForFeature(f, "", "")
-	return code, err
+func reconstructMessage(sb *strings.Builder, msg *descriptorpb.DescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%smessage %s {\n", indent, msg.GetName()))
+
+	// Identify map entry types to avoid nesting them
+	mapEntries := make(map[string]bool)
+	for _, field := range msg.Field {
+		if isMapEntry(field, msg) {
+			keyType, valueType := getMapTypes(field, msg)
+			sb.WriteString(fmt.Sprintf("%s  map<%s, %s> %s = %d;\n", indent, keyType, valueType, field.GetName(), field.GetNumber()))
+			mapEntries[getMapEntryName(field)] = true
+		} else {
+			fieldType := getFieldType(field)
+			fieldLabel := getFieldLabel(field)
+			sb.WriteString(fmt.Sprintf("%s  %s %s %s = %d;\n", indent, fieldLabel, fieldType, field.GetName(), field.GetNumber()))
+		}
+	}
+
+	// Include nested types, excluding map entries
+	for _, nestedMsg := range msg.NestedType {
+		if !mapEntries[nestedMsg.GetName()] {
+			reconstructMessage(sb, nestedMsg, indentLevel+1)
+		}
+	}
+
+	for _, enum := range msg.EnumType {
+		reconstructEnum(sb, enum, indentLevel+1)
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
 }
 
-func protoToGo(feature *featurev1beta1.Feature) (string, error) {
-	return "", nil
+func reconstructEnum(sb *strings.Builder, enum *descriptorpb.EnumDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%senum %s {\n", indent, enum.GetName()))
+
+	for _, value := range enum.Value {
+		sb.WriteString(fmt.Sprintf("%s  %s = %d;\n", indent, value.GetName(), value.GetNumber()))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
 }
-*/
+
+func reconstructService(sb *strings.Builder, svc *descriptorpb.ServiceDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%sservice %s {\n", indent, svc.GetName()))
+
+	for _, method := range svc.Method {
+		sb.WriteString(fmt.Sprintf("%s  rpc %s (%s) returns (%s);\n", indent, method.GetName(), trimPackage(method.GetInputType()), trimPackage(method.GetOutputType())))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+// getFieldType returns the string representation of the field type.
+func getFieldType(field *descriptorpb.FieldDescriptorProto) string {
+	switch *field.Type {
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
+		return "double"
+	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
+		return "float"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+		return "int64"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+		return "uint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+		return "int32"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
+		return "fixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
+		return "fixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		return "bool"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		return "string"
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		return "bytes"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+		return "uint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
+		return "sfixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
+		return "sfixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+		return "sint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT64:
+		return "sint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
+		return "group"
+	default:
+		return "unknown"
+	}
+}
+
+// getFieldLabel returns the label of the field (repeated, etc.) if applicable.
+func getFieldLabel(field *descriptorpb.FieldDescriptorProto) string {
+	if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+		return "repeated"
+	}
+	return ""
+}
+
+// isMapEntry checks if the given field is a map entry.
+func isMapEntry(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) bool {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) && nested.GetOptions().GetMapEntry() {
+			return true
+		}
+	}
+	return false
+}
+
+// getMapEntryName returns the name of the map entry type for the given field.
+func getMapEntryName(field *descriptorpb.FieldDescriptorProto) string {
+	parts := strings.Split(field.GetTypeName(), ".")
+	return parts[len(parts)-1]
+}
+
+// getMapTypes returns the key and value types for a map field.
+func getMapTypes(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) (string, string) {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) {
+			var keyType, valueType string
+			for _, nestedField := range nested.Field {
+				if nestedField.GetName() == "key" {
+					keyType = getFieldType(nestedField)
+				} else if nestedField.GetName() == "value" {
+					valueType = getFieldType(nestedField)
+				}
+			}
+			return keyType, valueType
+		}
+	}
+	return "unknown", "unknown"
+}
+
+// trimPackage removes the leading dot from a type name if present.
+func trimPackage(typeName string) string {
+	if len(typeName) > 0 && typeName[0] == '.' {
+		return typeName[1:]
+	}
+	return typeName
+}
+
+func blame() {
+	/*
+		var fds descriptorpb.FileDescriptorSet
+
+		fdProto := &descriptorpb.FileDescriptorProto{
+			Name:    proto.String("example.proto"),
+			Package: proto.String("example"),
+			MessageType: []*descriptorpb.DescriptorProto{
+				{
+					Name: proto.String("ExampleMessage"),
+					Field: []*descriptorpb.FieldDescriptorProto{
+						{
+							Name:   proto.String("example_field"),
+							Number: proto.Int32(1),
+							Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+						},
+						{
+							Name:   proto.String("example_repeated_field"),
+							Number: proto.Int32(2),
+							Type:   descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum(),
+							Label:  descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum(),
+						},
+						{
+							Name:     proto.String("example_map_field"),
+							Number:   proto.Int32(3),
+							Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+							TypeName: proto.String(".example.ExampleMessage.ExampleMapFieldEntry"),
+						},
+					},
+					NestedType: []*descriptorpb.DescriptorProto{
+						{
+							Name: proto.String("ExampleSubMessage"),
+							Field: []*descriptorpb.FieldDescriptorProto{
+								{
+									Name:   proto.String("sub_field"),
+									Number: proto.Int32(1),
+									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+								},
+							},
+						},
+						{
+							Name: proto.String("ExampleMapFieldEntry"),
+							Field: []*descriptorpb.FieldDescriptorProto{
+								{
+									Name:   proto.String("key"),
+									Number: proto.Int32(1),
+									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+								},
+								{
+									Name:   proto.String("value"),
+									Number: proto.Int32(2),
+									Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+								},
+							},
+							Options: &descriptorpb.MessageOptions{
+								MapEntry: proto.Bool(true),
+							},
+						},
+					},
+				},
+			},
+		}
+		fds.File = append(fds.File, fdProto)
+	*/
+	// Define the field for settings_by_name (map<string, FooSettings>)
+	settingsByNameField := &descriptorpb.FieldDescriptorProto{
+		Name:     proto.String("settings_by_name"),
+		Number:   proto.Int32(1),
+		Label:    descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum(),
+		Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+		TypeName: proto.String(".example.Foo.SettingsByNameEntry"),
+	}
+
+	// Define the entry for the map field (SettingsByNameEntry)
+	settingsByNameEntry := &descriptorpb.DescriptorProto{
+		Name: proto.String("SettingsByNameEntry"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			{
+				Name:   proto.String("key"),
+				Number: proto.Int32(1),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Type:   descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum(),
+			},
+			{
+				Name:     proto.String("value"),
+				Number:   proto.Int32(2),
+				Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+				TypeName: proto.String(".example.FooSettings"),
+			},
+		},
+		Options: &descriptorpb.MessageOptions{
+			MapEntry: proto.Bool(true),
+		},
+	}
+
+	// Define the message (Foo)
+	fooMessage := &descriptorpb.DescriptorProto{
+		Name: proto.String("Foo"),
+		Field: []*descriptorpb.FieldDescriptorProto{
+			settingsByNameField,
+		},
+		NestedType: []*descriptorpb.DescriptorProto{
+			settingsByNameEntry,
+		},
+	}
+
+	// Define the FooSettings message
+	fooSettingsMessage := &descriptorpb.DescriptorProto{
+		Name: proto.String("FooSettings"),
+		// Add fields for FooSettings here if necessary
+	}
+
+	// Define the file descriptor
+	fileDescriptor := &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("foo.proto"),
+		Package: proto.String("example"),
+		Syntax:  proto.String("proto3"),
+		MessageType: []*descriptorpb.DescriptorProto{
+			fooMessage,
+			fooSettingsMessage,
+		},
+	}
+
+	// Create the FileDescriptorSet
+	fds := &descriptorpb.FileDescriptorSet{
+		File: []*descriptorpb.FileDescriptorProto{
+			fileDescriptor,
+		},
+	}
+
+	if err := writeProtoFiles(fds); err != nil {
+		fmt.Printf("Error writing proto files: %v\n", err)
+	}
+}
