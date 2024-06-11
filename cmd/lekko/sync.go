@@ -612,7 +612,6 @@ func getFieldType(field *descriptorpb.FieldDescriptorProto) string {
 	}
 }
 
-// getFieldLabel returns the label of the field (repeated, etc.) if applicable.
 func getFieldLabel(field *descriptorpb.FieldDescriptorProto) string {
 	if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
 		return "repeated"
@@ -620,7 +619,6 @@ func getFieldLabel(field *descriptorpb.FieldDescriptorProto) string {
 	return ""
 }
 
-// isMapEntry checks if the given field is a map entry.
 func isMapEntry(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) bool {
 	for _, nested := range msg.NestedType {
 		if nested.GetName() == getMapEntryName(field) && nested.GetOptions().GetMapEntry() {
@@ -630,13 +628,11 @@ func isMapEntry(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.Desc
 	return false
 }
 
-// getMapEntryName returns the name of the map entry type for the given field.
 func getMapEntryName(field *descriptorpb.FieldDescriptorProto) string {
 	parts := strings.Split(field.GetTypeName(), ".")
 	return parts[len(parts)-1]
 }
 
-// getMapTypes returns the key and value types for a map field.
 func getMapTypes(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) (string, string) {
 	for _, nested := range msg.NestedType {
 		if nested.GetName() == getMapEntryName(field) {
@@ -654,7 +650,6 @@ func getMapTypes(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.Des
 	return "unknown", "unknown"
 }
 
-// trimPackage removes the leading dot from a type name if present.
 func trimPackage(typeName string) string {
 	if len(typeName) > 0 && typeName[0] == '.' {
 		return typeName[1:]
@@ -726,7 +721,6 @@ func blame() {
 		}
 		fds.File = append(fds.File, fdProto)
 	*/
-	// Define the field for settings_by_name (map<string, FooSettings>)
 	settingsByNameField := &descriptorpb.FieldDescriptorProto{
 		Name:     proto.String("settings_by_name"),
 		Number:   proto.Int32(1),
@@ -735,7 +729,6 @@ func blame() {
 		TypeName: proto.String(".example.Foo.SettingsByNameEntry"),
 	}
 
-	// Define the entry for the map field (SettingsByNameEntry)
 	settingsByNameEntry := &descriptorpb.DescriptorProto{
 		Name: proto.String("SettingsByNameEntry"),
 		Field: []*descriptorpb.FieldDescriptorProto{
@@ -758,7 +751,6 @@ func blame() {
 		},
 	}
 
-	// Define the message (Foo)
 	fooMessage := &descriptorpb.DescriptorProto{
 		Name: proto.String("Foo"),
 		Field: []*descriptorpb.FieldDescriptorProto{
@@ -769,13 +761,10 @@ func blame() {
 		},
 	}
 
-	// Define the FooSettings message
 	fooSettingsMessage := &descriptorpb.DescriptorProto{
 		Name: proto.String("FooSettings"),
-		// Add fields for FooSettings here if necessary
 	}
 
-	// Define the file descriptor
 	fileDescriptor := &descriptorpb.FileDescriptorProto{
 		Name:    proto.String("foo.proto"),
 		Package: proto.String("example"),
@@ -786,7 +775,6 @@ func blame() {
 		},
 	}
 
-	// Create the FileDescriptorSet
 	fds := &descriptorpb.FileDescriptorSet{
 		File: []*descriptorpb.FileDescriptorProto{
 			fileDescriptor,
