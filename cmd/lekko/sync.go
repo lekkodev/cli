@@ -471,36 +471,8 @@ func convertLangCmd() *cobra.Command {
 			if err != nil {
 				panic(err)
 			}
-			//fileContents := string(f)
-			//fmt.Println(fileContents)
-			// assuming go for everything for now.. my brain..
-
-			// parse the bitch
-			//registry := &protoregistry.Types{}
-			/*
-				registry, err := prototypes.RegisterDynamicTypes(nil)
-				if err != nil {
-					panic(err)
-				}
-				syncer := sync.NewGoSyncerLite("", "", registry.Types)
-				namespace, err := syncer.SourceToNamespace(ctx, f)
-				if err != nil {
-					panic(err)
-				}
-				fmt.Printf("%+v\n", namespace)
-				// code gen based off that namespace object
-				g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
-				g.TypeRegistry = registry.Types
-				if err != nil {
-					panic(err)
-				}
-				publicFile, _, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
-				if err != nil {
-					panic(err)
-				}
-			*/
-			publicFile := goToGo(ctx, f)
-			fmt.Println(publicFile)
+			privateFile := goToGo(ctx, f)
+			fmt.Println(privateFile)
 			return nil
 		},
 	}
@@ -520,18 +492,19 @@ func goToGo(ctx context.Context, f []byte) string {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Printf("%+v\n", namespace)
+	//fmt.Printf("%+v\n", namespace)
+	fmt.Printf("%+v\n", registry.Types)
 	// code gen based off that namespace object
 	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
 	g.TypeRegistry = registry.Types
 	if err != nil {
 		panic(err)
 	}
-	publicFile, _, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
+	_, privateFile, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
 	if err != nil {
 		panic(err)
 	}
-	return publicFile
+	return privateFile
 }
 
 func writeProtoFiles(fds *descriptorpb.FileDescriptorSet) map[string]string {

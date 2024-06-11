@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -81,4 +82,27 @@ func Test_writeProtoFiles(t *testing.T) {
 			os.Chdir(home)
 		})
 	}
+}
+
+func Test_goToGo(t *testing.T) {
+	t.Run("simple", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/simple.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			t.Errorf("goToGo() = %v, want %v", got, string(f))
+		}
+	})
+	t.Run("withcontext", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/withcontext.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			t.Errorf("goToGo() = %v, want %v", got, string(f))
+		}
+	})
 }

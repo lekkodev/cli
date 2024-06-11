@@ -164,6 +164,8 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				if as != nil {
 					fmt.Printf("%+v\n", as)
 					d := StructToDescriptor(as)
+					//g.typeRegistry.RegisterMessage()
+					// HOW THE FUCK DO I ADD IT IN
 					fmt.Printf("%+v\n", d)
 					contextKeys = StructToMap(as)
 				}
