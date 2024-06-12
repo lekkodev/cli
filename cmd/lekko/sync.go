@@ -32,6 +32,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -88,7 +90,11 @@ func syncGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return syncer.Sync(ctx, r)
+			err = syncer.Sync(ctx, r)
+			if err != nil {
+				return err
+			}
+			return WriteToRepo(ctx, r, syncer.TypeRegistry)
 		},
 	}
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
@@ -600,7 +606,6 @@ func reconstructService(sb *strings.Builder, svc *descriptorpb.ServiceDescriptor
 	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
 }
 
-// getFieldType returns the string representation of the field type.
 func getFieldType(field *descriptorpb.FieldDescriptorProto) string {
 	switch *field.Type {
 	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
@@ -687,4 +692,42 @@ func trimPackage(typeName string) string {
 		return typeName[1:]
 	}
 	return typeName
+}
+
+func TypesToFileDescriptorSet(types *protoregistry.Types) *descriptorpb.FileDescriptorSet {
+	fdSet := &descriptorpb.FileDescriptorSet{}
+	files := &protoregistry.Files{}
+
+	types.RangeMessages(func(mt protoreflect.MessageType) bool {
+		file := mt.Descriptor().ParentFile()
+		_ = files.RegisterFile(file)
+		return true
+	})
+
+	files.RangeFiles(func(fileDesc protoreflect.FileDescriptor) bool {
+		fdProto := protodesc.ToFileDescriptorProto(fileDesc)
+		fdSet.File = append(fdSet.File, fdProto)
+		return true
+	})
+
+	return fdSet
+}
+
+func WriteToRepo(ctx context.Context, r repo.ConfigurationRepository, types *protoregistry.Types) error {
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	fds := TypesToFileDescriptorSet(types)
+	files := writeProtoFiles(fds)
+	for fn, contents := range files {
+		if strings.HasSuffix(fn, "/config/v1beta1/lekko.proto") {
+			path := filepath.Join(rootMD.ProtoDirectory, fn)
+			err = r.WriteFile(path, []byte(contents), 0600)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return nil
 }

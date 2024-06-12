@@ -118,8 +118,10 @@ type Namespace struct {
 }
 
 func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace string) error {
+	// TODO - calling this multiple times probably doesn't work.. need to build up all of them and do it all at once
 	fileDescriptorProto := &descriptorpb.FileDescriptorProto{
-		Name:        proto.String(fmt.Sprintf("%s.proto", namespace)),
+		Name:        proto.String(fmt.Sprintf("%s/config/v1beta1/lekko.proto", namespace)),
+		Package:     proto.String(fmt.Sprintf("%s.config.v1beta1", namespace)),
 		MessageType: []*descriptorpb.DescriptorProto{d},
 	}
 	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, nil)
@@ -130,7 +132,7 @@ func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace
 		messageDescriptor := fileDescriptor.Messages().Get(i)
 		dynamicMessage := dynamicpb.NewMessage(messageDescriptor)
 
-		err := g.typeRegistry.RegisterMessage(dynamicMessage.Type())
+		err := g.TypeRegistry.RegisterMessage(dynamicMessage.Type())
 		if err != nil {
 			return err
 		}
@@ -183,17 +185,13 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				contextKeys := make(map[string]string)
 				as := FindArgStruct(x, pf)
 				if as != nil {
-					fmt.Printf("%+v\n", as)
 					d := StructToDescriptor(as)
 					err := g.RegisterDescriptor(d, namespace.Name)
 					if err != nil {
-						panic(err)
+						fmt.Println(err)
 					}
-					fmt.Printf("ADDING TYPE: %+v\n", d)
 					contextKeys = StructToMap(as)
-				}
-
-				/*
+				} else {
 					for _, param := range x.Type.Params.List {
 						assert.SNotEmpty(param.Names, "must have a parameter name")
 						assert.INotNil(param.Type, "must have a parameter type")
@@ -203,7 +201,7 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 						}
 						contextKeys[param.Names[0].Name] = typeIdent.Name
 					}
-				*/
+				}
 
 				results := x.Type.Results.List
 				if results == nil {
@@ -257,7 +255,6 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 	return &namespace, nil
 }
 
-// TODO option to pass in src
 func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
 	src, err := os.ReadFile(g.filePath)
 	if err != nil {
@@ -294,7 +291,7 @@ type goSyncer struct {
 	lekkoPath  string
 	filePath   string // Path to Go source file to sync
 
-	typeRegistry  *protoregistry.Types
+	TypeRegistry  *protoregistry.Types
 	protoPackages map[string]string // Map of local package names to protobuf packages (e.g. configv1beta1 -> default.config.v1beta1)
 }
 
@@ -332,7 +329,7 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
-		typeRegistry:  registry,
+		TypeRegistry:  registry,
 	}, nil
 }
 
@@ -342,7 +339,7 @@ func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
-		typeRegistry:  registry,
+		TypeRegistry:  registry,
 	}
 }
 
@@ -389,6 +386,7 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 			return errors.Wrap(err, "add namespace")
 		}
 	}
+	// TODO - is this where we write the structs to the proto files?
 	for _, configProto := range namespace.Features {
 		// create a new starlark file from a template (based on the config type)
 		var starBytes []byte
@@ -544,7 +542,7 @@ func exprToNameParts(expr ast.Expr) []string {
 func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.MessageType {
 	innerIdent, ok := x.Type.(*ast.SelectorExpr).X.(*ast.Ident)
 	if ok && innerIdent.Name == "durationpb" {
-		mt, err := g.typeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
 		if err == nil {
 			return mt
 		}
@@ -555,13 +553,13 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 	protoPackage, ok := g.protoPackages[parts[0]]
 	assert.Equal(ok, true, fmt.Sprintf("unknown package %v", parts[0]))
 	fullName := protoreflect.FullName(protoPackage).Append(protoreflect.Name(parts[1]))
-	mt, err := g.typeRegistry.FindMessageByName(fullName)
+	mt, err := g.TypeRegistry.FindMessageByName(fullName)
 	if errors.Is(err, protoregistry.NotFound) {
 		// Check if nested type (e.g. Outer_Inner) (only works 2 levels for now)
 		if strings.Contains(parts[1], "_") {
 			names := strings.Split(parts[1], "_")
 			assert.Equal(len(names), 2, fmt.Sprintf("only singly nested messages are supported: %v", parts[1]))
-			if outerDescriptor, err := g.typeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
+			if outerDescriptor, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
 				if innerDescriptor := outerDescriptor.Descriptor().Messages().ByName(protoreflect.Name(names[1])); innerDescriptor != nil {
 					return dynamicpb.NewMessageType(innerDescriptor)
 				}
@@ -935,7 +933,7 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 	for i, field := range structType.Fields.List {
 		for _, fieldName := range field.Names {
 			fieldDescriptor := &descriptorpb.FieldDescriptorProto{
-				Name:   proto.String(fieldName.Name),
+				Name:   proto.String(strcase.ToSnake(fieldName.Name)),
 				Number: proto.Int32(int32(i + 1)),
 				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
 			}
@@ -1014,28 +1012,3 @@ func FindArgStruct(f *ast.FuncDecl, file *ast.File) *ast.TypeSpec {
 	}
 	return nil
 }
-
-/*
-func getCodeRepoName(configRepo string) string {
-	if configRepo == "lekkodev/simple-app-configs" {
-		return "lekkodev/simple-vite-app"
-	} else if configRepo == "lekkodev/internal" {
-		return "lekkodev/webapp"
-	}
-	return ""
-}
-type GetCodeRepoNameArgs struct {
-	ConfigRepo string
-}
-func GetCodeRepoName(args *GetCodeRepoNameArgs) string {
-	if args.ConfigRepo == "lekkodev/simple-app-configs" {
-		return "lekkodev/simple-vite-app"
-	} else if args.ConfigRepo == "lekkodev/internal" {
-		return "lekkodev/webapp"
-	}
-	return ""
-}
-
-func GetFoo(args *descriptorpb.DescriptorProto) string
-
-*/

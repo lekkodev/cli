@@ -184,10 +184,9 @@ import (
 	addSlicesImport := false
 	for _, f := range features {
 		var ctxType *ProtoImport
-		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(strcase.ToCamel(f.Key) + "Args"))
+		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
 		if err == nil {
-			fmt.Printf("%#v\n", mt)
-			// need to print it out..
 			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
 			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
 		} else {
@@ -291,10 +290,9 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 			return err
 		}
 		var ctxType *ProtoImport
-		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(strcase.ToCamel(f.Key) + "Args"))
+		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
 		if err == nil {
-			fmt.Printf("%#v\n", mt)
-			// need to print it out..
 			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
 			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
 		} else {
@@ -472,7 +470,7 @@ func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 		public: `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
-  	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
+  	result, err := c.{{$.GetFunction}}(args, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	  	return result
   	}
@@ -648,7 +646,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	if staticCtxType != nil {
 		data.NaturalLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		if staticCtxType.PackageAlias != "" {
-			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type) // TODO change to args // this is the ONLY place we use this! awesome!
+			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type)
 		} else {
 			data.ArgumentString = fmt.Sprintf("args *%s", staticCtxType.Type)
 		}
@@ -1143,7 +1141,7 @@ func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
 	fields := d.Fields()
 	for i := 0; i < fields.Len(); i++ {
 		field := fields.Get(i)
-		fieldName := field.Name()
+		fieldName := strcase.ToCamel(string(field.Name()))
 		var goType string
 		switch field.Kind() {
 		case protoreflect.BoolKind:

@@ -111,7 +111,7 @@ func Test_goToGo(t *testing.T) {
 			panic(err)
 		}
 		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = %v, want %v", got, string(f))
+			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
 		}
 	})
 }
