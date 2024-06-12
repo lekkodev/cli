@@ -290,13 +290,17 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 		if err := proto.Unmarshal(fff, f); err != nil {
 			return err
 		}
+		var ctxType *ProtoImport
 		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(strcase.ToCamel(f.Key) + "Args"))
-		if err != nil {
-			return err
+		if err == nil {
+			fmt.Printf("%#v\n", mt)
+			// need to print it out..
+			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
+			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
+		} else {
+			ctxType = staticCtxType
 		}
-		fmt.Printf("%+v\n", mt)
-		// TODO TODO TODO
-		generated, err := g.genGoForFeature(ctx, r, f, g.namespace, staticCtxType)
+		generated, err := g.genGoForFeature(ctx, r, f, g.namespace, ctxType)
 		if err != nil {
 			return errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
 		}
