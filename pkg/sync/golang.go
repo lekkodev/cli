@@ -47,6 +47,7 @@ import (
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -114,7 +115,27 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 type Namespace struct {
 	Name     string
 	Features []*featurev1beta1.Feature
-	// should we have a pointer to the descriptor?  Does it think that those are immutable?
+}
+
+func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace string) error {
+	fileDescriptorProto := &descriptorpb.FileDescriptorProto{
+		Name:        proto.String(fmt.Sprintf("%s.proto", namespace)),
+		MessageType: []*descriptorpb.DescriptorProto{d},
+	}
+	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, nil)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < fileDescriptor.Messages().Len(); i++ {
+		messageDescriptor := fileDescriptor.Messages().Get(i)
+		dynamicMessage := dynamicpb.NewMessage(messageDescriptor)
+
+		err := g.typeRegistry.RegisterMessage(dynamicMessage.Type())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace, error) {
@@ -164,9 +185,11 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				if as != nil {
 					fmt.Printf("%+v\n", as)
 					d := StructToDescriptor(as)
-					//g.typeRegistry.RegisterMessage()
-					// HOW THE FUCK DO I ADD IT IN
-					fmt.Printf("%+v\n", d)
+					err := g.RegisterDescriptor(d, namespace.Name)
+					if err != nil {
+						panic(err)
+					}
+					fmt.Printf("ADDING TYPE: %+v\n", d)
 					contextKeys = StructToMap(as)
 				}
 
@@ -448,10 +471,17 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 	return nil
 }
 
+// TODO - is this only used for context keys, or other things?
 func (g *goSyncer) exprToValue(expr ast.Expr) string {
-	ident, ok := expr.(*ast.Ident)
-	assert.Equal(ok, true, "value expr is not an identifier")
-	return strcase.ToSnake(ident.Name)
+	//fmt.Printf("%+v\n", expr)
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return strcase.ToSnake(v.Name)
+	case *ast.SelectorExpr:
+		return strcase.ToSnake(v.Sel.Name)
+	default:
+		panic("Invalid syntax")
+	}
 }
 
 // TODO -- We know the return type..

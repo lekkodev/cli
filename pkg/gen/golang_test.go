@@ -77,7 +77,7 @@ func TestDescriptorToStructDeclaration(t *testing.T) {
 				d: md,
 			},
 			want: `type Moo struct {
-	foo string,
+	foo string;
 }
 `,
 		},

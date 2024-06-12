@@ -183,7 +183,18 @@ import (
 	addStringsImport := false
 	addSlicesImport := false
 	for _, f := range features {
-		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, staticCtxType)
+		var ctxType *ProtoImport
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(strcase.ToCamel(f.Key) + "Args"))
+		if err == nil {
+			fmt.Printf("%#v\n", mt)
+			// need to print it out..
+			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
+			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
+		} else {
+			ctxType = staticCtxType
+		}
+
+		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
 		if err != nil {
 			return "", "", errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
 		}
@@ -231,6 +242,7 @@ func getContents(templateBody string, fileName string, data any) (string, error)
 	if err := templ.Execute(&contents, data); err != nil {
 		return "", errors.Wrap(err, fmt.Sprintf("%s template", fileName))
 	}
+
 	// Final canonical Go format
 	formatted, err := format.Source(contents.Bytes())
 	if err != nil {
@@ -278,6 +290,12 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 		if err := proto.Unmarshal(fff, f); err != nil {
 			return err
 		}
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(strcase.ToCamel(f.Key) + "Args"))
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%+v\n", mt)
+		// TODO TODO TODO
 		generated, err := g.genGoForFeature(ctx, r, f, g.namespace, staticCtxType)
 		if err != nil {
 			return errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
@@ -625,8 +643,12 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	usedVariables := make(map[string]string)
 	if staticCtxType != nil {
 		data.NaturalLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
-		data.ArgumentString = fmt.Sprintf("ctx *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type) // TODO change to args // this is the ONLY place we use this! awesome!
-		data.CallString = "ctx"
+		if staticCtxType.PackageAlias != "" {
+			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type) // TODO change to args // this is the ONLY place we use this! awesome!
+		} else {
+			data.ArgumentString = fmt.Sprintf("args *%s", staticCtxType.Type)
+		}
+		data.CallString = "args"
 	} else {
 		data.CtxStuff = "ctx := context.Background()\n"
 		data.NaturalLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
@@ -708,7 +730,7 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 	case *rulesv1beta3.Rule_Atom:
 		var contextKeyName string
 		if staticContext {
-			contextKeyName = fmt.Sprintf("ctx.%s", strcase.ToCamel(v.Atom.ContextKey))
+			contextKeyName = fmt.Sprintf("args.%s", strcase.ToCamel(v.Atom.ContextKey))
 		} else {
 			contextKeyName = strcase.ToLowerCamel(v.Atom.ContextKey)
 		}
@@ -1145,7 +1167,7 @@ func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
 		default:
 			goType = "interface{}"
 		}
-		result += fmt.Sprintf("\t%s %s,\n", fieldName, goType)
+		result += fmt.Sprintf("\t%s %s;\n", fieldName, goType)
 	}
 	result += "}\n"
 	return result

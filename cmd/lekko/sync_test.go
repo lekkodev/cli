@@ -57,16 +57,22 @@ func Test_writeProtoFiles(t *testing.T) {
 			panic(err)
 		}
 		t.Run(tt.fileName, func(t *testing.T) {
-			os.Chdir("./testdata")
+			err = os.Chdir("./testdata")
+			if err != nil {
+				panic(err)
+			}
 			fds, err := GenerateDescriptorSet(tt.fileName)
 			if err != nil {
 				panic(err)
 			}
 			fmt.Printf("%+v\n", fds)
 			files := writeProtoFiles(fds)
-			os.Chdir("./out")
+			err = os.Chdir("./out")
+			if err != nil {
+				panic(err)
+			}
 			for fn, contents := range files {
-				err := os.WriteFile(fn, []byte(contents), 0644)
+				err := os.WriteFile(fn, []byte(contents), 0600)
 				if err != nil {
 					panic(err)
 				}
@@ -79,7 +85,10 @@ func Test_writeProtoFiles(t *testing.T) {
 					t.Errorf("writeProtoFiles() got = %v, want %v", fds2, fds)
 				}
 			}
-			os.Chdir(home)
+			err = os.Chdir(home)
+			if err != nil {
+				panic(err)
+			}
 		})
 	}
 }

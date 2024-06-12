@@ -493,7 +493,8 @@ func goToGo(ctx context.Context, f []byte) string {
 		panic(err)
 	}
 	//fmt.Printf("%+v\n", namespace)
-	fmt.Printf("%+v\n", registry.Types)
+	//fmt.Printf("%+v\n", registry.Types)
+	//fmt.Print("ON TO GENERATION\n")
 	// code gen based off that namespace object
 	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
 	g.TypeRegistry = registry.Types
