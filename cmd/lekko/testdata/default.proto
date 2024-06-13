@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package default.config.v1beta1;
+
+import "google/protobuf/duration.proto";
+
+message MiddlewareConfig {
+    // Procedures that don't require a team name in the auth
+    // context.
+    map<string, bool> team_exempt_procedures = 1;
+    // Procedures that require an oauth token (e.g. github)
+    //  in the auth context.
+    map<string, bool> require_oauth_procedures = 2;
+}
+
+// Configuration around Lekko's OAuth 2.0 Device authorization flow.
+message OAuthDeviceConfig {
+    string verification_uri = 1;
+    int64 polling_interval_seconds = 2;
+}
+
+// Config around how rollouts are set up in the backend.
+message RolloutConfig {
+    // How long a rollout can hold a lock on a particular repository
+    google.protobuf.Duration lock_ttl = 1;
+    // The number of background workers performing rollouts concurrently
+    int64 num_rollout_workers = 2;
+    // The duration after which a single rollout times out.
+    google.protobuf.Duration rollout_timeout = 3;
+
+    message BackgroundLoop {
+        google.protobuf.Duration delay = 1;
+        google.protobuf.Duration jitter = 2;
+    }
+
+    BackgroundLoop background = 4;
+
+    // The size of the rollout channel buffer. Updating
+    // this value requires a restart.
+    int64 chan_buffer_size = 5;
+}
+
+// ErrorFilter contains information about how to log errors in middleware.
+message ErrorFilter {
+  LogLevel log_level = 1;
+}
+
+// LogLevel used to denote how a message should be logged
+// via configuration.
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  LOG_LEVEL_ERROR = 1;
+  LOG_LEVEL_WARNING = 2;
+  LOG_LEVEL_INFO = 3;
+  LOG_LEVEL_DEBUG = 4;
+}
+
+// Settings for Memcached client
+message MemcachedConfig {
+    // How many idle connections to keep open to Memcached without closing them.
+    // Should be increased for heavy concurrent load to prevent timeouts.
+    int64 max_idle_conns = 1;
+    // Maximum timeout before aborting Memcached calls
+    int64 timeout_ms = 2;
+}
+
+message DBConfig {
+    // How many idle connections to keep open to the DB without closing them.
+    // Essentially determines the size of the connection pool of reusable
+    // connections.
+    int64 max_idle_conns = 1;
+    // How many maximum open connections to have to the DB at once.
+    // Should be tuned if too many connections cause CPU/memory overload.
+    // If not set, should be interpreted as unlimited.
+    int64 max_open_conns = 2;
+}
+
+// Settings for the Lekko registration flow
+message RegistrationConfig {
+    // Base URL for sign-up process. Query params will be appended to this value.
+    string registration_base_url = 1;
+    // How long a generated registration token is valid for
+    int64 token_expiration_minutes = 2;
+    // The template must be valid HTML and follow Go's text/template library rules.
+    // The template should only take one variable, `RegistrationURL`.
+    string email_template = 3;
+    string email_subject = 4;
+}
+
+message RolloutContentsConfig {
+    bool compare = 1;
+    bool use_git_contents = 2;
+}

@@ -1,0 +1,8 @@
+syntax = "proto3";
+package lekko.default;
+
+message Simple {
+  string name  = 1;
+  repeated string domains = 2;
+  bool external = 3;
+}

@@ -46,8 +46,11 @@ import (
 	"github.com/lekkodev/cli/pkg/star"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -114,22 +117,33 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
-func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
-	namespace := Namespace{}
-	src, err := os.ReadFile(g.filePath)
+func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace string) error {
+	// TODO - calling this multiple times probably doesn't work.. need to build up all of them and do it all at once
+	fileDescriptorProto := &descriptorpb.FileDescriptorProto{
+		Name:        proto.String(fmt.Sprintf("%s/config/v1beta1/lekko.proto", namespace)),
+		Package:     proto.String(fmt.Sprintf("%s.config.v1beta1", namespace)),
+		MessageType: []*descriptorpb.DescriptorProto{d},
+	}
+	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
+		return err
 	}
-	if bytes.Contains(src, []byte("<<<<<<<")) {
-		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+	for i := 0; i < fileDescriptor.Messages().Len(); i++ {
+		messageDescriptor := fileDescriptor.Messages().Get(i)
+		dynamicMessage := dynamicpb.NewMessage(messageDescriptor)
+
+		err := g.TypeRegistry.RegisterMessage(dynamicMessage.Type())
+		if err != nil {
+			return err
+		}
 	}
-	fset := token.NewFileSet()
-	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
+	return nil
+}
+
+func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace, error) {
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
+	namespace := Namespace{}
 	ast.Inspect(pf, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.File:
@@ -165,18 +179,28 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 						commentLines = append(commentLines, strings.TrimLeft(comment.Text, "/ "))
 					}
 				}
-				privateName := x.Name.Name
+				privateName := x.Name.Name // TODO - not sure how we use this, but does it work right with letting people just declare GetFoo and letting them be happy?
 				configName := strcase.ToKebab(privateName[3:])
 
 				contextKeys := make(map[string]string)
-				for _, param := range x.Type.Params.List {
-					assert.SNotEmpty(param.Names, "must have a parameter name")
-					assert.INotNil(param.Type, "must have a parameter type")
-					typeIdent, ok := param.Type.(*ast.Ident)
-					if !ok {
-						panic("parameter type must be an identifier")
+				as := FindArgStruct(x, pf)
+				if as != nil {
+					d := StructToDescriptor(as)
+					err := g.RegisterDescriptor(d, namespace.Name)
+					if err != nil {
+						fmt.Println(err)
 					}
-					contextKeys[param.Names[0].Name] = typeIdent.Name
+					contextKeys = StructToMap(as)
+				} else {
+					for _, param := range x.Type.Params.List {
+						assert.SNotEmpty(param.Names, "must have a parameter name")
+						assert.INotNil(param.Type, "must have a parameter type")
+						typeIdent, ok := param.Type.(*ast.Ident)
+						if !ok {
+							panic("parameter type must be an identifier")
+						}
+						contextKeys[param.Names[0].Name] = typeIdent.Name
+					}
 				}
 
 				results := x.Type.Results.List
@@ -231,13 +255,43 @@ func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, err
 	return &namespace, nil
 }
 
+func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
+	src, err := os.ReadFile(g.filePath)
+	if err != nil {
+		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
+	}
+	if bytes.Contains(src, []byte("<<<<<<<")) {
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+	}
+	fset := token.NewFileSet()
+	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.AstToNamespace(ctx, pf)
+}
+
+func (g *goSyncer) SourceToNamespace(ctx context.Context, src []byte) (*Namespace, error) {
+	if bytes.Contains(src, []byte("<<<<<<<")) {
+		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
+	}
+	fset := token.NewFileSet()
+	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
+	if err != nil {
+		return nil, err
+	}
+
+	return g.AstToNamespace(ctx, pf)
+}
+
 // Translates Go code to Protobuf/Starlark and writes changes to local config repository
 type goSyncer struct {
 	moduleRoot string
 	lekkoPath  string
 	filePath   string // Path to Go source file to sync
 
-	typeRegistry  *protoregistry.Types
+	TypeRegistry  *protoregistry.Types
 	protoPackages map[string]string // Map of local package names to protobuf packages (e.g. configv1beta1 -> default.config.v1beta1)
 }
 
@@ -275,7 +329,7 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
-		typeRegistry:  registry,
+		TypeRegistry:  registry,
 	}, nil
 }
 
@@ -285,7 +339,7 @@ func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
-		typeRegistry:  registry,
+		TypeRegistry:  registry,
 	}
 }
 
@@ -332,6 +386,7 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 			return errors.Wrap(err, "add namespace")
 		}
 	}
+	// TODO - is this where we write the structs to the proto files?
 	for _, configProto := range namespace.Features {
 		// create a new starlark file from a template (based on the config type)
 		var starBytes []byte
@@ -414,10 +469,17 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 	return nil
 }
 
+// TODO - is this only used for context keys, or other things?
 func (g *goSyncer) exprToValue(expr ast.Expr) string {
-	ident, ok := expr.(*ast.Ident)
-	assert.Equal(ok, true, "value expr is not an identifier")
-	return strcase.ToSnake(ident.Name)
+	//fmt.Printf("%+v\n", expr)
+	switch v := expr.(type) {
+	case *ast.Ident:
+		return strcase.ToSnake(v.Name)
+	case *ast.SelectorExpr:
+		return strcase.ToSnake(v.Sel.Name)
+	default:
+		panic("Invalid syntax")
+	}
 }
 
 // TODO -- We know the return type..
@@ -480,7 +542,7 @@ func exprToNameParts(expr ast.Expr) []string {
 func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.MessageType {
 	innerIdent, ok := x.Type.(*ast.SelectorExpr).X.(*ast.Ident)
 	if ok && innerIdent.Name == "durationpb" {
-		mt, err := g.typeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
 		if err == nil {
 			return mt
 		}
@@ -491,13 +553,13 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 	protoPackage, ok := g.protoPackages[parts[0]]
 	assert.Equal(ok, true, fmt.Sprintf("unknown package %v", parts[0]))
 	fullName := protoreflect.FullName(protoPackage).Append(protoreflect.Name(parts[1]))
-	mt, err := g.typeRegistry.FindMessageByName(fullName)
+	mt, err := g.TypeRegistry.FindMessageByName(fullName)
 	if errors.Is(err, protoregistry.NotFound) {
 		// Check if nested type (e.g. Outer_Inner) (only works 2 levels for now)
 		if strings.Contains(parts[1], "_") {
 			names := strings.Split(parts[1], "_")
 			assert.Equal(len(names), 2, fmt.Sprintf("only singly nested messages are supported: %v", parts[1]))
-			if outerDescriptor, err := g.typeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
+			if outerDescriptor, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
 				if innerDescriptor := outerDescriptor.Descriptor().Messages().ByName(protoreflect.Name(names[1])); innerDescriptor != nil {
 					return dynamicpb.NewMessageType(innerDescriptor)
 				}
@@ -859,4 +921,94 @@ func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.Featu
 		return append([]*featurev1beta1.Constraint{constraint}, g.ifToConstraints(elseIfStmt, want, contextKeys)...)
 	}
 	return []*featurev1beta1.Constraint{constraint}
+}
+
+func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
+	descriptor := &descriptorpb.DescriptorProto{}
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		panic("not a struct!")
+	}
+	descriptor.Name = proto.String(typeSpec.Name.Name)
+	for i, field := range structType.Fields.List {
+		for _, fieldName := range field.Names {
+			fieldDescriptor := &descriptorpb.FieldDescriptorProto{
+				Name:   proto.String(strcase.ToSnake(fieldName.Name)),
+				Number: proto.Int32(int32(i + 1)),
+				Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+			}
+			switch fieldType := field.Type.(type) {
+			case *ast.Ident:
+				switch fieldType.Name {
+				case "int":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()
+				case "string":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+				case "float64":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+				case "bool":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+				default:
+					panic("unknown type in struct")
+				}
+			default:
+				panic("not a struct I understand")
+			}
+			descriptor.Field = append(descriptor.Field, fieldDescriptor)
+		}
+	}
+	return descriptor
+}
+
+func StructToMap(typeSpec *ast.TypeSpec) map[string]string {
+	ret := make(map[string]string)
+	structType, ok := typeSpec.Type.(*ast.StructType)
+	if !ok {
+		panic("not a struct!")
+	}
+	for _, field := range structType.Fields.List {
+		for _, fieldName := range field.Names {
+			switch fieldType := field.Type.(type) {
+			case *ast.Ident:
+				ret[fieldName.Name] = fieldType.Name
+			default:
+				panic("not a struct I understand")
+			}
+		}
+	}
+	return ret
+}
+
+func FindArgStruct(f *ast.FuncDecl, file *ast.File) *ast.TypeSpec {
+	if f.Type.Params.NumFields() != 1 {
+		return nil
+	}
+
+	param := f.Type.Params.List[0]
+	starExpr, ok := param.Type.(*ast.StarExpr)
+	if !ok {
+		return nil
+	}
+
+	ident, ok := starExpr.X.(*ast.Ident)
+	if !ok {
+		return nil
+	}
+
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok {
+			continue
+		}
+		for _, spec := range genDecl.Specs {
+			typeSpec, ok := spec.(*ast.TypeSpec)
+			if !ok {
+				continue
+			}
+			if typeSpec.Name.Name == ident.Name {
+				return typeSpec
+			}
+		}
+	}
+	return nil
 }

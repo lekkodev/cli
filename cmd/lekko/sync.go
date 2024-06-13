@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/mod/modfile"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protodesc"
+	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -87,7 +90,11 @@ func syncGoCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return syncer.Sync(ctx, r)
+			err = syncer.Sync(ctx, r)
+			if err != nil {
+				return err
+			}
+			return WriteToRepo(ctx, r, syncer.TypeRegistry)
 		},
 	}
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
@@ -450,4 +457,277 @@ func GetRegistryFromFileDescriptorSet(fds *descriptorpb.FileDescriptorSet) (*pro
 		return nil, err
 	}
 	return st.Types, nil
+}
+
+/*
+ *  Convert config from one language to another.  This can also be useful for converting to the same language to normalize the syntax.
+ *
+ *  This handles proto change through go fly a kite
+ */
+func convertLangCmd() *cobra.Command {
+	var inputLang, outputLang, inputFile string
+	cmd := &cobra.Command{
+		Use:    "convert",
+		Short:  "convert",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			// TODO validate input (is this not built in??)
+			f, err := os.ReadFile(inputFile)
+			if err != nil {
+				panic(err)
+			}
+			privateFile := goToGo(ctx, f)
+			fmt.Println(privateFile)
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&inputLang, "input-language", "i", "ts", "go, ts, starlark, proto, proto-json")
+	cmd.Flags().StringVarP(&inputFile, "input-file", "I", "/dev/stdin", "input file")
+	cmd.Flags().StringVarP(&outputLang, "output-language", "o", "ts", "go, ts, starlark, proto, proto-json")
+	return cmd
+}
+
+func goToGo(ctx context.Context, f []byte) string {
+	registry, err := prototypes.RegisterDynamicTypes(nil)
+	if err != nil {
+		panic(err)
+	}
+	syncer := sync.NewGoSyncerLite("", "", registry.Types)
+	namespace, err := syncer.SourceToNamespace(ctx, f)
+	if err != nil {
+		panic(err)
+	}
+	//fmt.Printf("%+v\n", namespace)
+	//fmt.Printf("%+v\n", registry.Types)
+	//fmt.Print("ON TO GENERATION\n")
+	// code gen based off that namespace object
+	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
+	g.TypeRegistry = registry.Types
+	if err != nil {
+		panic(err)
+	}
+	_, privateFile, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
+	if err != nil {
+		panic(err)
+	}
+	return privateFile
+}
+
+func writeProtoFiles(fds *descriptorpb.FileDescriptorSet) map[string]string {
+	ret := make(map[string]string)
+	for _, fdProto := range fds.File {
+		protoContent := reconstructProto(fdProto)
+		ret[fdProto.GetName()] = protoContent
+	}
+	return ret
+}
+
+func reconstructProto(fdProto *descriptorpb.FileDescriptorProto) string {
+	var sb strings.Builder
+
+	sb.WriteString("syntax = \"proto3\";\n\n")
+
+	if pkg := fdProto.GetPackage(); pkg != "" {
+		sb.WriteString(fmt.Sprintf("package %s;\n\n", pkg))
+	}
+
+	for _, dep := range fdProto.Dependency {
+		sb.WriteString(fmt.Sprintf("import \"%s\";\n", dep))
+	}
+	sb.WriteString("\n")
+
+	for _, msg := range fdProto.MessageType {
+		reconstructMessage(&sb, msg, 0)
+	}
+
+	for _, enum := range fdProto.EnumType {
+		reconstructEnum(&sb, enum, 0)
+	}
+
+	for _, svc := range fdProto.Service {
+		reconstructService(&sb, svc, 0)
+	}
+
+	return sb.String()
+}
+
+func reconstructMessage(sb *strings.Builder, msg *descriptorpb.DescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%smessage %s {\n", indent, msg.GetName()))
+
+	// Identify map entry types to avoid nesting them
+	mapEntries := make(map[string]bool)
+	for _, field := range msg.Field {
+		if isMapEntry(field, msg) {
+			keyType, valueType := getMapTypes(field, msg)
+			sb.WriteString(fmt.Sprintf("%s  map<%s, %s> %s = %d;\n", indent, keyType, valueType, field.GetName(), field.GetNumber()))
+			mapEntries[getMapEntryName(field)] = true
+		} else {
+			fieldType := getFieldType(field)
+			fieldLabel := getFieldLabel(field)
+			sb.WriteString(fmt.Sprintf("%s  %s %s %s = %d;\n", indent, fieldLabel, fieldType, field.GetName(), field.GetNumber()))
+		}
+	}
+
+	// Include nested types, excluding map entries
+	for _, nestedMsg := range msg.NestedType {
+		if !mapEntries[nestedMsg.GetName()] {
+			reconstructMessage(sb, nestedMsg, indentLevel+1)
+		}
+	}
+
+	for _, enum := range msg.EnumType {
+		reconstructEnum(sb, enum, indentLevel+1)
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func reconstructEnum(sb *strings.Builder, enum *descriptorpb.EnumDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%senum %s {\n", indent, enum.GetName()))
+
+	for _, value := range enum.Value {
+		sb.WriteString(fmt.Sprintf("%s  %s = %d;\n", indent, value.GetName(), value.GetNumber()))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func reconstructService(sb *strings.Builder, svc *descriptorpb.ServiceDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%sservice %s {\n", indent, svc.GetName()))
+
+	for _, method := range svc.Method {
+		sb.WriteString(fmt.Sprintf("%s  rpc %s (%s) returns (%s);\n", indent, method.GetName(), trimPackage(method.GetInputType()), trimPackage(method.GetOutputType())))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func getFieldType(field *descriptorpb.FieldDescriptorProto) string {
+	switch *field.Type {
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
+		return "double"
+	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
+		return "float"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+		return "int64"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+		return "uint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+		return "int32"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
+		return "fixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
+		return "fixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		return "bool"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		return "string"
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		return "bytes"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+		return "uint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
+		return "sfixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
+		return "sfixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+		return "sint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT64:
+		return "sint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
+		return "group"
+	default:
+		return "unknown"
+	}
+}
+
+func getFieldLabel(field *descriptorpb.FieldDescriptorProto) string {
+	if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+		return "repeated"
+	}
+	return ""
+}
+
+func isMapEntry(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) bool {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) && nested.GetOptions().GetMapEntry() {
+			return true
+		}
+	}
+	return false
+}
+
+func getMapEntryName(field *descriptorpb.FieldDescriptorProto) string {
+	parts := strings.Split(field.GetTypeName(), ".")
+	return parts[len(parts)-1]
+}
+
+func getMapTypes(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) (string, string) {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) {
+			var keyType, valueType string
+			for _, nestedField := range nested.Field {
+				if nestedField.GetName() == "key" {
+					keyType = getFieldType(nestedField)
+				} else if nestedField.GetName() == "value" {
+					valueType = getFieldType(nestedField)
+				}
+			}
+			return keyType, valueType
+		}
+	}
+	return "unknown", "unknown"
+}
+
+func trimPackage(typeName string) string {
+	if len(typeName) > 0 && typeName[0] == '.' {
+		return typeName[1:]
+	}
+	return typeName
+}
+
+func TypesToFileDescriptorSet(types *protoregistry.Types) *descriptorpb.FileDescriptorSet {
+	fdSet := &descriptorpb.FileDescriptorSet{}
+	files := &protoregistry.Files{}
+
+	types.RangeMessages(func(mt protoreflect.MessageType) bool {
+		file := mt.Descriptor().ParentFile()
+		_ = files.RegisterFile(file)
+		return true
+	})
+
+	files.RangeFiles(func(fileDesc protoreflect.FileDescriptor) bool {
+		fdProto := protodesc.ToFileDescriptorProto(fileDesc)
+		fdSet.File = append(fdSet.File, fdProto)
+		return true
+	})
+
+	return fdSet
+}
+
+func WriteToRepo(ctx context.Context, r repo.ConfigurationRepository, types *protoregistry.Types) error {
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	fds := TypesToFileDescriptorSet(types)
+	files := writeProtoFiles(fds)
+	for fn, contents := range files {
+		if strings.HasSuffix(fn, "/config/v1beta1/lekko.proto") {
+			path := filepath.Join(rootMD.ProtoDirectory, fn)
+			err = r.WriteFile(path, []byte(contents), 0600)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+	return nil
 }

@@ -120,6 +120,7 @@ func main() {
 		mergeFileCmd(),
 		diffCmd(),
 		confCmd(),
+		convertLangCmd(),
 	)
 
 	logging.InitColors()
