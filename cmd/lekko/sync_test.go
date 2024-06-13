@@ -15,17 +15,19 @@
 package main
 
 import (
-	"bytes"
+	//"bytes"
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
+
+	//"os/exec"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/descriptorpb"
+	//"google.golang.org/protobuf/types/descriptorpb"
 )
 
+/* Disabling so that I don't need to worry about protoc on gh right now
 func GenerateDescriptorSet(protoFilePath string) (*descriptorpb.FileDescriptorSet, error) {
 	var out bytes.Buffer
 	cmd := exec.Command("protoc", "--descriptor_set_out=/dev/stdout", protoFilePath)
@@ -43,6 +45,7 @@ func GenerateDescriptorSet(protoFilePath string) (*descriptorpb.FileDescriptorSe
 
 	return fdSet, nil
 }
+*/
 
 func Test_writeProtoFiles(t *testing.T) {
 	tests := []struct {
@@ -107,6 +110,17 @@ func Test_goToGo(t *testing.T) {
 	t.Run("withcontext", func(t *testing.T) {
 		ctx := context.Background()
 		f, err := os.ReadFile("./testdata/withcontext.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
+		}
+	})
+
+	t.Run("one_two", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/twostructs.go")
 		if err != nil {
 			panic(err)
 		}
