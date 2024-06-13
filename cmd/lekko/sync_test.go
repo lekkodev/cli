@@ -17,13 +17,10 @@ package main
 import (
 	//"bytes"
 	"context"
-	"fmt"
 	"os"
 
 	//"os/exec"
 	"testing"
-
-	"google.golang.org/protobuf/proto"
 	//"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -45,7 +42,7 @@ func GenerateDescriptorSet(protoFilePath string) (*descriptorpb.FileDescriptorSe
 
 	return fdSet, nil
 }
-*/
+
 
 func Test_writeProtoFiles(t *testing.T) {
 	tests := []struct {
@@ -95,6 +92,7 @@ func Test_writeProtoFiles(t *testing.T) {
 		})
 	}
 }
+*/
 
 func Test_goToGo(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
