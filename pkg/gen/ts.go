@@ -49,7 +49,7 @@ import (
 
 var TypeRegistry *protoregistry.Types
 
-func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
+func FieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	var t string
 	switch f.Kind() {
 	case protoreflect.StringKind:
@@ -74,7 +74,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		t = "string"
 	case protoreflect.MessageKind:
 		if f.IsMap() {
-			t = fmt.Sprintf("Record<%s, %s>", fieldDescriptorToTS(f.MapKey()), fieldDescriptorToTS(f.MapValue()))
+			t = fmt.Sprintf("Record<%s, %s>", FieldDescriptorToTS(f.MapKey()), FieldDescriptorToTS(f.MapValue()))
 		} else if strings.HasPrefix(string(f.Message().FullName()), "google") {
 			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
@@ -82,7 +82,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), FieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -104,7 +104,7 @@ func GetTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	var fields []string
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
-		t := fieldDescriptorToTS(f)
+		t := FieldDescriptorToTS(f)
 		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 	}
 
@@ -253,12 +253,12 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			var fields []string
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t := fieldDescriptorToTS(f)
+				t := FieldDescriptorToTS(f)
 				fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 				varNames = append(varNames, strcase.ToLowerCamel(f.TextName()))
 			}
 
-			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, ", "))
+			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, " "))
 		}
 
 		codeString, err := GenTSForFeature(f, ns, ourParameters)

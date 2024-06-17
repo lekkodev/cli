@@ -26,6 +26,7 @@ import (
 
 	"golang.org/x/mod/modfile"
 
+	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
 	"github.com/pkg/errors"
@@ -771,7 +772,7 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if !strings.HasSuffix(string(messageDescriptor.Name()), "Args") {
+		if !strings.HasSuffix(string(messageDescriptor.Name()), "ArgsXX") {
 			face, err := gen.GetTSInterface(messageDescriptor)
 			if err != nil {
 				panic(err)
@@ -798,7 +799,23 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 				}
 			}
 
-			fs, err := gen.GenTSForFeature(f, namespace.Name, "")
+			var ourParameters string
+			sigType, err := gen.TypeRegistry.FindMessageByName(protoreflect.FullName(namespace.Name + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
+			if err == nil {
+				d := sigType.Descriptor()
+				var varNames []string
+				var fields []string
+				for i := 0; i < d.Fields().Len(); i++ {
+					f := d.Fields().Get(i)
+					t := gen.FieldDescriptorToTS(f)
+					fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
+					varNames = append(varNames, strcase.ToLowerCamel(f.TextName()))
+				}
+
+				ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, " "))
+			}
+
+			fs, err := gen.GenTSForFeature(f, namespace.Name, ourParameters)
 			featureStrings = append(featureStrings, fs)
 			if err != nil {
 				return "", err
