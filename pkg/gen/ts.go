@@ -96,7 +96,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	return t
 }
 
-func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
+func GetTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	const templateBody = `export interface {{$.Name}} {
 {{range  $.Fields}}    {{ . }}
 {{end}}}`
@@ -184,7 +184,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			log.Fatal("error finding the message in the registry", err)
 		}
 		parameters = getTSParameters(ptype.Descriptor())
-		face, err := getTSInterface(ptype.Descriptor())
+		face, err := GetTSInterface(ptype.Descriptor())
 		if err != nil {
 			return err
 		}
@@ -237,7 +237,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 					if err != nil {
 						return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
 					}
-					face, err := getTSInterface(ptype.Descriptor())
+					face, err := GetTSInterface(ptype.Descriptor())
 					if err != nil {
 						return err
 					}
@@ -246,7 +246,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			}
 		}
 		// Check if there is a per-config signature proto
-		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName("lekko.default." + strcase.ToCamel(f.Key) + ".Signature"))
+		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName(ns + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
 		if err == nil {
 			d := sigType.Descriptor()
 			var varNames []string

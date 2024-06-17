@@ -36,6 +36,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
@@ -313,7 +314,7 @@ func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta
 	dot := try.To1(dotlekko.ReadDotLekko(""))
 	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", dot.LekkoPath) // #nosec G204
 	cmd.Dir = root
-	nsString, err := cmd.CombinedOutput()
+	nsString, err := cmd.CombinedOutput() // TODO this is broken with the changes that add types
 	if err != nil {
 		fmt.Println("Error running ts-to-proto")
 		return false, err
@@ -477,8 +478,21 @@ func convertLangCmd() *cobra.Command {
 			if err != nil {
 				panic(err)
 			}
-			privateFile := goToGo(ctx, f)
-			fmt.Println(privateFile)
+
+			if inputLang == "proto-json" && outputLang == "ts" {
+				lines := strings.Split(string(f), "\n")
+				if len(lines) < 2 {
+					panic("need to be fed two lines")
+				}
+				out, err := ProtoJSONToTS([]byte(lines[0]), []byte(lines[1]))
+				if err != nil {
+					panic(err)
+				}
+				fmt.Println(out)
+			} else {
+				privateFile := goToGo(ctx, f)
+				fmt.Println(privateFile)
+			}
 			return nil
 		},
 	}
@@ -730,4 +744,66 @@ func WriteToRepo(ctx context.Context, r repo.ConfigurationRepository, types *pro
 		}
 	}
 	return nil
+}
+
+func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
+	registry, err := prototypes.RegisterDynamicTypes(nil)
+	if err != nil {
+		panic(err)
+	}
+	var fileDescriptorProto descriptorpb.FileDescriptorProto
+	err = protojson.UnmarshalOptions{Resolver: registry.Types}.Unmarshal(fdString, &fileDescriptorProto)
+	if err != nil {
+		return "", err
+	}
+	// This is partly duplicated from pkg/sync/golang:RegisterDescriptor
+	fileDescriptor, err := protodesc.NewFile(&fileDescriptorProto, nil)
+	if err != nil {
+		return "", err
+	}
+	var interfaceStrings []string
+
+	for i := 0; i < fileDescriptor.Messages().Len(); i++ {
+		messageDescriptor := fileDescriptor.Messages().Get(i)
+		dynamicMessage := dynamicpb.NewMessage(messageDescriptor)
+
+		err := registry.Types.RegisterMessage(dynamicMessage.Type())
+		if err != nil {
+			return "", err
+		}
+		if !strings.HasSuffix(string(messageDescriptor.Name()), "Args") {
+			face, err := gen.GetTSInterface(messageDescriptor)
+			if err != nil {
+				panic(err)
+			}
+			interfaceStrings = append(interfaceStrings, face+"\n")
+		}
+	}
+	var namespaces bffv1beta1.NamespaceContents
+	err = protojson.UnmarshalOptions{Resolver: registry.Types}.Unmarshal(nsString, &namespaces)
+	if err != nil {
+		return "", err
+	}
+	gen.TypeRegistry = registry.Types
+	var featureStrings []string
+	for _, namespace := range namespaces.Namespaces {
+		for _, c := range namespace.Configs {
+			f := c.StaticFeature
+			if f.GetTree().GetDefault() != nil {
+				f.Tree.DefaultNew = anyToLekkoAny(f.Tree.Default)
+			}
+			for _, c := range f.GetTree().GetConstraints() {
+				if c.GetValue() != nil {
+					c.ValueNew = anyToLekkoAny(c.Value)
+				}
+			}
+
+			fs, err := gen.GenTSForFeature(f, namespace.Name, "")
+			featureStrings = append(featureStrings, fs)
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	return strings.Join(append(interfaceStrings, featureStrings...), "\n"), nil
 }
