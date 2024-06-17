@@ -315,7 +315,7 @@ func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta
 	dot := try.To1(dotlekko.ReadDotLekko(""))
 	cmd := exec.Command("npx", "ts-to-proto", "--lekko-dir", dot.LekkoPath) // #nosec G204
 	cmd.Dir = root
-	nsString, err := cmd.CombinedOutput() // TODO this is broken with the changes that add types
+	nsString, err := cmd.CombinedOutput() // The output format of ts-to-proto changed, but no one is using this right now..
 	if err != nil {
 		fmt.Println("Error running ts-to-proto")
 		return false, err
