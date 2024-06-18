@@ -49,7 +49,7 @@ import (
 
 var TypeRegistry *protoregistry.Types
 
-func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
+func FieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	var t string
 	switch f.Kind() {
 	case protoreflect.StringKind:
@@ -74,7 +74,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 		t = "string"
 	case protoreflect.MessageKind:
 		if f.IsMap() {
-			t = fmt.Sprintf("Record<%s, %s>", fieldDescriptorToTS(f.MapKey()), fieldDescriptorToTS(f.MapValue()))
+			t = fmt.Sprintf("Record<%s, %s>", FieldDescriptorToTS(f.MapKey()), FieldDescriptorToTS(f.MapValue()))
 		} else if strings.HasPrefix(string(f.Message().FullName()), "google") {
 			t = fmt.Sprintf("protobuf.%s", f.Message().Name())
 		} else {
@@ -82,7 +82,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 			t = "{\n"
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), fieldDescriptorToTS(f))
+				t += fmt.Sprintf("\t%s?: %s;\n", strcase.ToLowerCamel(f.TextName()), FieldDescriptorToTS(f))
 			}
 			t += "}"
 		}
@@ -96,7 +96,7 @@ func fieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	return t
 }
 
-func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
+func GetTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	const templateBody = `export interface {{$.Name}} {
 {{range  $.Fields}}    {{ . }}
 {{end}}}`
@@ -104,7 +104,7 @@ func getTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	var fields []string
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
-		t := fieldDescriptorToTS(f)
+		t := FieldDescriptorToTS(f)
 		fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 	}
 
@@ -184,7 +184,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			log.Fatal("error finding the message in the registry", err)
 		}
 		parameters = getTSParameters(ptype.Descriptor())
-		face, err := getTSInterface(ptype.Descriptor())
+		face, err := GetTSInterface(ptype.Descriptor())
 		if err != nil {
 			return err
 		}
@@ -237,7 +237,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 					if err != nil {
 						return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
 					}
-					face, err := getTSInterface(ptype.Descriptor())
+					face, err := GetTSInterface(ptype.Descriptor())
 					if err != nil {
 						return err
 					}
@@ -246,19 +246,19 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			}
 		}
 		// Check if there is a per-config signature proto
-		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName("lekko.default." + strcase.ToCamel(f.Key) + ".Signature"))
+		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName(ns + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
 		if err == nil {
 			d := sigType.Descriptor()
 			var varNames []string
 			var fields []string
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
-				t := fieldDescriptorToTS(f)
+				t := FieldDescriptorToTS(f)
 				fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
 				varNames = append(varNames, strcase.ToLowerCamel(f.TextName()))
 			}
 
-			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, ", "))
+			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, " "))
 		}
 
 		codeString, err := GenTSForFeature(f, ns, ourParameters)

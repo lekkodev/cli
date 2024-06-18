@@ -127,3 +127,16 @@ func Test_goToGo(t *testing.T) {
 		}
 	})
 }
+
+/*
+Here to just run the code, but I really don't want to have an unrelated node thing as a dep for the test
+func Test_ProtoJsonToTs(t *testing.T) {
+	t.Run("simple", func(t *testing.T) {
+		nsStr := `{"namespaces":[{"name":"default","configs":[{"static_feature":{"key":"banner-config","description":"","tree":{"default":{"@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"constraints":[{"value":{"cta":{"external":true,"text":"Learn more","url":"https://www.lekko.com/"},"text":"This is a development only example of a banner on the login page","@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"ruleAstNew":{"logicalExpression":{"rules":[{"atom":{"contextKey":"pathname","comparisonValue":"/login","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}},{"atom":{"contextKey":"env","comparisonValue":"development","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}}],"logicalOperator":"LOGICAL_OPERATOR_AND"}}},{"value":{"cta":{"external":true,"text":"Learn more","url":"https://www.lekko.com/"},"text":"A test banner for a particular repo main page","@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"ruleAstNew":{"atom":{"contextKey":"pathname","comparisonValue":"/teams/lekko-staging/repositories/lekkodev/plugins/branches/main","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}}}]},"type":"FEATURE_TYPE_PROTO"}}]}]}`
+		fdStr := `{"name":"lekko.proto","package":"default.config.v1beta1","dependency":[],"messageType":[{"name":"BannerConfig","field":[{"name":"text","number":1,"type":"TYPE_STRING","typeName":""},{"name":"cta","number":2,"type":"TYPE_MESSAGE","typeName":"default.config.v1beta1.BannerConfig.Cta"},{"name":"permanent","number":3,"type":"TYPE_BOOL","typeName":""}],"nestedType":[{"name":"Cta","field":[{"name":"text","number":1,"type":"TYPE_STRING","typeName":""},{"name":"url","number":2,"type":"TYPE_STRING","typeName":""},{"name":"external","number":3,"type":"TYPE_BOOL","typeName":""}],"nestedType":[],"enumType":[],"extensionRange":[],"extension":[],"oneofDecl":[],"reservedRange":[],"reservedName":[]}],"enumType":[],"extensionRange":[],"extension":[],"oneofDecl":[],"reservedRange":[],"reservedName":[]},{"name":"RemoteTemplates","field":[{"name":"templates","number":1,"label":"LABEL_REPEATED","type":"TYPE_MESSAGE","typeName":"default.config.v1beta1.RemoteTemplates.Templates"}],"nestedType":[{"name":"Templates","field":[{"name":"code","number":1,"type":"TYPE_STRING","typeName":""},{"name":"feature_type","number":2,"type":"TYPE_STRING","typeName":""},{"name":"name","number":3,"type":"TYPE_STRING","typeName":""}],"nestedType":[],"enumType":[],"extensionRange":[],"extension":[],"oneofDecl":[],"reservedRange":[],"reservedName":[]}],"enumType":[],"extensionRange":[],"extension":[],"oneofDecl":[],"reservedRange":[],"reservedName":[]},{"name":"BannerConfigArgs","field":[{"name":"env","number":1,"type":"TYPE_STRING","typeName":""},{"name":"pathname","number":2,"type":"TYPE_STRING","typeName":""}],"nestedType":[],"enumType":[],"extensionRange":[],"extension":[],"oneofDecl":[],"reservedRange":[],"reservedName":[]}],"enumType":[],"service":[],"extension":[],"publicDependency":[],"weakDependency":[],"syntax":"proto3"}`
+		out, err := ProtoJSONToTS([]byte(nsStr), []byte(fdStr))
+		fmt.Println(err)
+		fmt.Println(out)
+	})
+}
+*/
