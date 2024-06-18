@@ -482,9 +482,6 @@ func convertLangCmd() *cobra.Command {
 
 			if inputLang == "proto-json" && outputLang == "ts" {
 				lines := strings.Split(string(f), "\n")
-				if len(lines) < 2 {
-					panic("need to be fed two lines")
-				}
 				out, err := ProtoJSONToTS([]byte(lines[0]), []byte(lines[1]))
 				if err != nil {
 					panic(err)
@@ -772,7 +769,7 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if !strings.HasSuffix(string(messageDescriptor.Name()), "ArgsXX") {
+		if !strings.HasSuffix(string(messageDescriptor.Name()), "Args") {
 			face, err := gen.GetTSInterface(messageDescriptor)
 			if err != nil {
 				panic(err)

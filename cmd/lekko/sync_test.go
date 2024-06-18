@@ -17,7 +17,6 @@ package main
 import (
 	//"bytes"
 	"context"
-	"fmt"
 	"os"
 
 	//"os/exec"
@@ -129,6 +128,8 @@ func Test_goToGo(t *testing.T) {
 	})
 }
 
+/*
+Here to just run the code, but I really don't want to have an unrelated node thing as a dep for the test
 func Test_ProtoJsonToTs(t *testing.T) {
 	t.Run("simple", func(t *testing.T) {
 		nsStr := `{"namespaces":[{"name":"default","configs":[{"static_feature":{"key":"banner-config","description":"","tree":{"default":{"@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"constraints":[{"value":{"cta":{"external":true,"text":"Learn more","url":"https://www.lekko.com/"},"text":"This is a development only example of a banner on the login page","@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"ruleAstNew":{"logicalExpression":{"rules":[{"atom":{"contextKey":"pathname","comparisonValue":"/login","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}},{"atom":{"contextKey":"env","comparisonValue":"development","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}}],"logicalOperator":"LOGICAL_OPERATOR_AND"}}},{"value":{"cta":{"external":true,"text":"Learn more","url":"https://www.lekko.com/"},"text":"A test banner for a particular repo main page","@type":"type.googleapis.com/default.config.v1beta1.BannerConfig"},"ruleAstNew":{"atom":{"contextKey":"pathname","comparisonValue":"/teams/lekko-staging/repositories/lekkodev/plugins/branches/main","comparisonOperator":"COMPARISON_OPERATOR_EQUALS"}}}]},"type":"FEATURE_TYPE_PROTO"}}]}]}`
@@ -138,3 +139,4 @@ func Test_ProtoJsonToTs(t *testing.T) {
 		fmt.Println(out)
 	})
 }
+*/
