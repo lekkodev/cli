@@ -132,8 +132,9 @@ func initCmd() *cobra.Command {
 					repoName = fmt.Sprintf("%s/lekko-configs", owner)
 				}
 				try.To(survey.AskOne(&survey.Input{
-					Message: "Config repository name, for example `my-org/lekko-configs`:",
+					Message: "Lekko repository name, for example `my-org/lekko-configs`:",
 					Default: repoName,
+					Help:    "If you set up your team on app.lekko.com, you can find your Lekko repository by logging in.",
 				}, &repoName))
 			}
 
@@ -141,21 +142,34 @@ func initCmd() *cobra.Command {
 			try.To(dot.WriteBack())
 
 			// Add GitHub workflow file
-			if err := os.MkdirAll(".github/workflows", os.ModePerm); err != nil {
-				return errors.Wrap(err, "failed to mkdir .github/workflows")
-			}
-			workflowTemplate := getGitHubWorkflowTemplateBase()
-			if suffix, err := getGitHubWorkflowTemplateSuffix(pf); err != nil {
+			var addWorkflow bool
+			if err := survey.AskOne(&survey.Confirm{
+				Message: "Add GitHub workflow file at .github/workflows/lekko.yaml?",
+				Default: true,
+				Help:    "This workflow will use the Lekko Push Action, which enables the automatic mirrorring feature.",
+			}, &addWorkflow); err != nil {
 				return err
-			} else {
-				workflowTemplate += suffix
 			}
-			if err := os.WriteFile(".github/workflows/lekko.yaml", []byte(workflowTemplate), 0600); err != nil {
-				return errors.Wrap(err, "failed to write Lekko workflow file")
+			if addWorkflow {
+				if err := os.MkdirAll(".github/workflows", os.ModePerm); err != nil {
+					return errors.Wrap(err, "failed to mkdir .github/workflows")
+				}
+				workflowTemplate := getGitHubWorkflowTemplateBase()
+				if suffix, err := getGitHubWorkflowTemplateSuffix(pf); err != nil {
+					return err
+				} else {
+					workflowTemplate += suffix
+				}
+				if err := os.WriteFile(".github/workflows/lekko.yaml", []byte(workflowTemplate), 0600); err != nil {
+					return errors.Wrap(err, "failed to write Lekko workflow file")
+				}
+				// TODO: Consider moving instructions to end?
+				fmt.Println("Successfully added .github/workflows/lekko.yaml, please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.")
 			}
 
 			// TODO: Install deps depending on project type
 			// TODO: Determine package manager (npm/yarn/pnpm/etc.) for ts projects
+			fmt.Println("Installing dependencies...")
 			switch pf {
 			case pfGo:
 				{
@@ -164,6 +178,7 @@ func initCmd() *cobra.Command {
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run go get")
 					}
+					fmt.Println("Successfully installed Lekko Go SDK.")
 				}
 			}
 
@@ -171,6 +186,7 @@ func initCmd() *cobra.Command {
 			try.To(runGen(cmd.Context(), lekkoPath, "default"))
 
 			// Post-gen steps
+			fmt.Println("Running post-codegen steps...")
 			switch pf {
 			case pfGo:
 				{
@@ -183,6 +199,7 @@ func initCmd() *cobra.Command {
 				}
 			}
 
+			fmt.Println("Complete! Your project is now set up to use Lekko.")
 			return nil
 		},
 	}
