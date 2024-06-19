@@ -28,6 +28,7 @@ import (
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/native"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
@@ -60,6 +61,7 @@ func initCmd() *cobra.Command {
 		Short: "initialize Lekko in your project",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
+			successCheck := logging.Green("\u2713")
 			// TODO:
 			// + create .lekko file
 			// + generate from `default` namespace
@@ -184,7 +186,7 @@ func initCmd() *cobra.Command {
 					return errors.Wrap(err, "failed to write Lekko workflow file")
 				}
 				// TODO: Consider moving instructions to end?
-				fmt.Println("Successfully added .github/workflows/lekko.yaml, please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.")
+				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml, please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
 			}
 
 			// TODO: Install deps depending on project type
@@ -199,7 +201,7 @@ func initCmd() *cobra.Command {
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run go get")
 					}
-					fmt.Println("Successfully installed Lekko Go SDK.")
+					fmt.Printf("%s Successfully installed Lekko Go SDK.\n", successCheck)
 				}
 			case pfVite:
 				// NOTE: Vite doesn't necessarily mean React but we assume for now
@@ -227,14 +229,14 @@ func initCmd() *cobra.Command {
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install deps command")
 					}
-					fmt.Println("Successfully installed @lekko/react-sdk.")
+					fmt.Printf("%s Successfully installed @lekko/react-sdk.\n", successCheck)
 					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install dev deps command")
 					}
-					fmt.Println("Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.")
+					fmt.Printf("%s Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.\n", successCheck)
 				}
 			case pfNext:
 				{
@@ -261,14 +263,14 @@ func initCmd() *cobra.Command {
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install deps command")
 					}
-					fmt.Println("Successfully installed @lekko/next-sdk. See the docs to configure the SDK.")
+					fmt.Printf("%s Successfully installed @lekko/next-sdk. See the docs to configure the SDK.\n", successCheck)
 					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install dev deps command")
 					}
-					fmt.Println("Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.")
+					fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.\n", successCheck)
 				}
 			}
 
@@ -289,7 +291,7 @@ func initCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Println("Complete! Your project is now set up to use Lekko.")
+			fmt.Printf("%s Complete! Your project is now set up to use Lekko.\n", successCheck)
 			return nil
 		},
 	}
