@@ -41,7 +41,16 @@ const (
 	pfGo
 	pfNode
 	pfReact
+	pfVite
 	pfNext
+)
+
+type packageManager string
+
+const (
+	pmUnknown packageManager = ""
+	pmNPM     packageManager = "npm"
+	pmYarn    packageManager = "yarn"
 )
 
 func initCmd() *cobra.Command {
@@ -54,8 +63,8 @@ func initCmd() *cobra.Command {
 			// TODO:
 			// + create .lekko file
 			// + generate from `default` namespace
-			// - install lekko deps (depending on project type)
-			// - setup github actions
+			// + install lekko deps (depending on project type)
+			// + setup github actions
 			// - install linter
 			_, err = dotlekko.ReadDotLekko("")
 			if err == nil {
@@ -67,6 +76,7 @@ func initCmd() *cobra.Command {
 			// naive check for "known" project types
 			// TODO: Consolidate into DetectNativeLang
 			pf := pfUnknown
+			pm := pmUnknown
 			if _, err = os.Stat("go.mod"); err == nil {
 				pf = pfGo
 			} else if _, err = os.Stat("package.json"); err == nil {
@@ -79,8 +89,18 @@ func initCmd() *cobra.Command {
 				if strings.Contains(pjString, "react-dom") {
 					pf = pfReact
 				}
+				// Vite config file could be js, cjs, mjs, etc.
+				if matches, err := filepath.Glob("vite.config.*"); matches != nil && err == nil {
+					pf = pfVite
+				}
+				// Next config file could be js, cjs, mjs, etc.
 				if matches, err := filepath.Glob("next.config.*"); matches != nil && err == nil {
 					pf = pfNext
+				}
+
+				pm = pmNPM
+				if _, err := os.Stat("yarn.lock"); err == nil {
+					pm = pmYarn
 				}
 			}
 			if pf == pfUnknown {
@@ -155,7 +175,7 @@ func initCmd() *cobra.Command {
 					return errors.Wrap(err, "failed to mkdir .github/workflows")
 				}
 				workflowTemplate := getGitHubWorkflowTemplateBase()
-				if suffix, err := getGitHubWorkflowTemplateSuffix(pf); err != nil {
+				if suffix, err := getGitHubWorkflowTemplateSuffix(pf, pm); err != nil {
 					return err
 				} else {
 					workflowTemplate += suffix
@@ -175,10 +195,80 @@ func initCmd() *cobra.Command {
 				{
 					goGetCmd := exec.Command("go", "get", "github.com/lekkodev/go-sdk@latest")
 					if out, err := goGetCmd.CombinedOutput(); err != nil {
+						fmt.Println(goGetCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run go get")
 					}
 					fmt.Println("Successfully installed Lekko Go SDK.")
+				}
+			case pfVite:
+				// NOTE: Vite doesn't necessarily mean React but we assume for now
+				{
+					var installArgs, installDevArgs []string
+					switch pm {
+					case pmNPM:
+						{
+							installArgs = []string{"install", "@lekko/react-sdk"}
+							installDevArgs = []string{"install", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+						}
+					case pmYarn:
+						{
+							installArgs = []string{"add", "@lekko/react-sdk"}
+							installDevArgs = []string{"add", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+						}
+					default:
+						{
+							return errors.Errorf("unsupported package manager %s", pm)
+						}
+					}
+					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
+					if out, err := installCmd.CombinedOutput(); err != nil {
+						fmt.Println(installCmd.String())
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run install deps command")
+					}
+					fmt.Println("Successfully installed @lekko/react-sdk.")
+					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
+					if out, err := installCmd.CombinedOutput(); err != nil {
+						fmt.Println(installCmd.String())
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run install dev deps command")
+					}
+					fmt.Println("Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.")
+				}
+			case pfNext:
+				{
+					var installArgs, installDevArgs []string
+					switch pm {
+					case pmNPM:
+						{
+							installArgs = []string{"install", "@lekko/next-sdk"}
+							installDevArgs = []string{"install", "-D", "@lekko/eslint-plugin"}
+						}
+					case pmYarn:
+						{
+							installArgs = []string{"add", "@lekko/next-sdk"}
+							installDevArgs = []string{"add", "-D", "@lekko/eslint-plugin"}
+						}
+					default:
+						{
+							return errors.Errorf("unsupported package manager %s", pm)
+						}
+					}
+					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
+					if out, err := installCmd.CombinedOutput(); err != nil {
+						fmt.Println(installCmd.String())
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run install deps command")
+					}
+					fmt.Println("Successfully installed @lekko/next-sdk. See the docs to configure the SDK.")
+					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
+					if out, err := installCmd.CombinedOutput(); err != nil {
+						fmt.Println(installCmd.String())
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run install dev deps command")
+					}
+					fmt.Println("Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.")
 				}
 			}
 
@@ -238,7 +328,7 @@ jobs:
 `
 }
 
-func getGitHubWorkflowTemplateSuffix(pf projectFramework) (string, error) {
+func getGitHubWorkflowTemplateSuffix(pf projectFramework, pm packageManager) (string, error) {
 	// NOTE: Make sure to keep the indentation matched with base
 	var ret string
 	switch pf {
@@ -248,6 +338,34 @@ func getGitHubWorkflowTemplateSuffix(pf projectFramework) (string, error) {
         with:
           go-version-file: go.mod
 `
+		}
+	case pfNode:
+		fallthrough
+	case pfReact:
+		fallthrough
+	case pfVite:
+		fallthrough
+	case pfNext:
+		{
+			ret = `      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/Hydrogen
+`
+			switch pm {
+			case pmNPM:
+				{
+					ret += `      - run: npm install
+`
+				}
+			case pmYarn:
+				{
+					ret += `          cache: yarn
+      - run: yarn install
+`
+				}
+			default:
+				return "", errors.New("unsupported package manager for GitHub workflow setup")
+			}
 		}
 	// TODO: For TS projects need to detect package manager
 	default:
