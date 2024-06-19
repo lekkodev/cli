@@ -21,8 +21,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/AlecAivazis/survey/v2"
+	"github.com/briandowns/spinner"
 	"github.com/go-git/go-git/v5"
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
@@ -62,6 +64,7 @@ func initCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
 			successCheck := logging.Green("\u2713")
+			spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 			// TODO:
 			// + create .lekko file
 			// + generate from `default` namespace
@@ -191,17 +194,21 @@ func initCmd() *cobra.Command {
 
 			// TODO: Install deps depending on project type
 			// TODO: Determine package manager (npm/yarn/pnpm/etc.) for ts projects
-			fmt.Println("Installing dependencies...")
+			spin.Suffix = " Installing dependencies..."
+			spin.Start()
 			switch pf {
 			case pfGo:
 				{
 					goGetCmd := exec.Command("go", "get", "github.com/lekkodev/go-sdk@latest")
 					if out, err := goGetCmd.CombinedOutput(); err != nil {
+						spin.Stop()
 						fmt.Println(goGetCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run go get")
 					}
+					spin.Stop()
 					fmt.Printf("%s Successfully installed Lekko Go SDK.\n", successCheck)
+					spin.Start()
 				}
 			case pfVite:
 				// NOTE: Vite doesn't necessarily mean React but we assume for now
@@ -225,18 +232,24 @@ func initCmd() *cobra.Command {
 					}
 					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
+						spin.Stop()
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install deps command")
 					}
+					spin.Stop()
 					fmt.Printf("%s Successfully installed @lekko/react-sdk.\n", successCheck)
+					spin.Start()
 					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
+						spin.Stop()
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install dev deps command")
 					}
+					spin.Stop()
 					fmt.Printf("%s Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.\n", successCheck)
+					spin.Start()
 				}
 			case pfNext:
 				{
@@ -259,37 +272,52 @@ func initCmd() *cobra.Command {
 					}
 					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
+						spin.Stop()
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install deps command")
 					}
+					spin.Stop()
 					fmt.Printf("%s Successfully installed @lekko/next-sdk. See the docs to configure the SDK.\n", successCheck)
+					spin.Start()
 					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
 					if out, err := installCmd.CombinedOutput(); err != nil {
+						spin.Stop()
 						fmt.Println(installCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run install dev deps command")
 					}
+					spin.Stop()
 					fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.\n", successCheck)
+					spin.Start()
 				}
 			}
+			spin.Stop()
 
+			// Codegen
+			spin.Suffix = " Running codegen..."
+			spin.Start()
 			// TODO: make sure that `default` namespace exists
 			try.To(runGen(cmd.Context(), lekkoPath, "default"))
+			spin.Stop()
 
 			// Post-gen steps
-			fmt.Println("Running post-codegen steps...")
+			spin.Suffix = " Running post-codegen steps..."
+			spin.Start()
 			switch pf {
 			case pfGo:
 				{
 					// For Go we want to run `go mod tidy` - this handles transitive deps
 					goTidyCmd := exec.Command("go", "mod", "tidy")
 					if out, err := goTidyCmd.CombinedOutput(); err != nil {
+						spin.Stop()
+						fmt.Println(goTidyCmd.String())
 						fmt.Println(string(out))
 						return errors.Wrap(err, "failed to run go mod tidy")
 					}
 				}
 			}
+			spin.Stop()
 
 			fmt.Printf("%s Complete! Your project is now set up to use Lekko.\n", successCheck)
 			return nil
