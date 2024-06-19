@@ -16,9 +16,9 @@ package gitcli
 
 import "os/exec"
 
-func Clone(url, path string) error {
+func Clone(url, path string) ([]byte, error) {
 	cmd := exec.Command("git", "clone", url, path)
-	return cmd.Run()
+	return cmd.CombinedOutput()
 }
 
 func Pull(path string) error {

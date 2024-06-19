@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
@@ -30,6 +32,16 @@ import (
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+)
+
+type projectFramework int
+
+const (
+	pfUnknown projectFramework = iota
+	pfGo
+	pfNode
+	pfReact
+	pfNext
 )
 
 func initCmd() *cobra.Command {
@@ -53,23 +65,34 @@ func initCmd() *cobra.Command {
 			// TODO: print some info
 
 			// naive check for "known" project types
-			isGo := false
-			isNode := false
+			// TODO: Consolidate into DetectNativeLang
+			pf := pfUnknown
 			if _, err = os.Stat("go.mod"); err == nil {
-				isGo = true
+				pf = pfGo
 			} else if _, err = os.Stat("package.json"); err == nil {
-				isNode = true
+				pf = pfNode
+				pjBytes, err := os.ReadFile("package.json")
+				if err != nil {
+					return errors.Wrap(err, "failed to open package.json")
+				}
+				pjString := string(pjBytes)
+				if strings.Contains(pjString, "react-dom") {
+					pf = pfReact
+				}
+				if matches, err := filepath.Glob("next.config.*"); matches != nil && err == nil {
+					pf = pfNext
+				}
 			}
-			if !isGo && !isNode {
+			if pf == pfUnknown {
 				return errors.New("Unknown project type, Lekko currently supports Go and NPM projects.")
 			}
 
 			if lekkoPath == "" {
 				lekkoPath = "lekko"
-				if fi, err := os.Stat("src"); err == nil && fi.IsDir() && isNode {
+				if fi, err := os.Stat("src"); err == nil && fi.IsDir() {
 					lekkoPath = "src/lekko"
 				}
-				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && isGo {
+				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && pf == pfGo {
 					lekkoPath = "internal/lekko"
 				}
 				try.To(survey.AskOne(&survey.Input{
@@ -116,8 +139,49 @@ func initCmd() *cobra.Command {
 
 			dot := dotlekko.NewDotLekko(lekkoPath, repoName)
 			try.To(dot.WriteBack())
+
+			// Add GitHub workflow file
+			if err := os.MkdirAll(".github/workflows", os.ModePerm); err != nil {
+				return errors.Wrap(err, "failed to mkdir .github/workflows")
+			}
+			workflowTemplate := getGitHubWorkflowTemplateBase()
+			if suffix, err := getGitHubWorkflowTemplateSuffix(pf); err != nil {
+				return err
+			} else {
+				workflowTemplate += suffix
+			}
+			if err := os.WriteFile(".github/workflows/lekko.yaml", []byte(workflowTemplate), 0600); err != nil {
+				return errors.Wrap(err, "failed to write Lekko workflow file")
+			}
+
+			// TODO: Install deps depending on project type
+			// TODO: Determine package manager (npm/yarn/pnpm/etc.) for ts projects
+			switch pf {
+			case pfGo:
+				{
+					goGetCmd := exec.Command("go", "get", "github.com/lekkodev/go-sdk@latest")
+					if out, err := goGetCmd.CombinedOutput(); err != nil {
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run go get")
+					}
+				}
+			}
+
 			// TODO: make sure that `default` namespace exists
 			try.To(runGen(cmd.Context(), lekkoPath, "default"))
+
+			// Post-gen steps
+			switch pf {
+			case pfGo:
+				{
+					// For Go we want to run `go mod tidy` - this handles transitive deps
+					goTidyCmd := exec.Command("go", "mod", "tidy")
+					if out, err := goTidyCmd.CombinedOutput(); err != nil {
+						fmt.Println(string(out))
+						return errors.Wrap(err, "failed to run go mod tidy")
+					}
+				}
+			}
 
 			return nil
 		},
@@ -135,4 +199,48 @@ func runGen(ctx context.Context, lekkoPath, ns string) (err error) {
 		NativeMetadata: meta,
 		Namespaces:     []string{ns},
 	})
+}
+
+func getGitHubWorkflowTemplateBase() string {
+	// TODO: determine default branch name (might not be main)
+	return `name: lekko
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+`
+}
+
+func getGitHubWorkflowTemplateSuffix(pf projectFramework) (string, error) {
+	// NOTE: Make sure to keep the indentation matched with base
+	var ret string
+	switch pf {
+	case pfGo:
+		{
+			ret = `      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+`
+		}
+	// TODO: For TS projects need to detect package manager
+	default:
+		{
+			return "", errors.New("unsupported framework for GitHub workflow setup")
+		}
+	}
+	ret += `      - uses: lekkodev/push-action@v1
+        with:
+          api_key: ${{ secrets.LEKKO_API_KEY }}
+`
+	return ret, nil
 }
