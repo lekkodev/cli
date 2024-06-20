@@ -161,9 +161,10 @@ func PrepareGithubRepo() (string, error) {
 	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
 
 	if shouldClone {
-		err := gitcli.Clone(githubRepoURL, repoPath)
+		cloneOut, err := gitcli.Clone(githubRepoURL, repoPath)
 		if err != nil {
-			return "", err
+			fmt.Println(string(cloneOut))
+			return "", errors.Wrapf(err, "git clone %s to %s", githubRepoURL, repoPath)
 		}
 	} else {
 		gitRepo, err := git.PlainOpen(repoPath)
