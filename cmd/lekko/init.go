@@ -44,21 +44,34 @@ func initCmd() *cobra.Command {
 			defer err2.Handle(&err)
 			successCheck := logging.Green("\u2713")
 			spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-			// TODO:
-			// + create .lekko file
-			// + generate from `default` namespace
-			// + install lekko deps (depending on project type)
-			// + setup github actions
-			// - install linter
-			_, err = dotlekko.ReadDotLekko("")
-			if err == nil {
-				fmt.Println("Lekko is already initialized in this project.")
-				return nil
-			}
 
 			nlProject, err := native.DetectNativeLang("")
 			if err != nil {
 				return errors.Wrap(err, "detect project information")
+			}
+			// Output detected information
+			fmt.Println("Detected the following project information:")
+			fmt.Printf("- Language: %s\n", logging.Bold(nlProject.Language))
+			if nlProject.PackageManager != native.PmUnknown {
+				fmt.Printf("- Package manager: %s\n", logging.Bold(nlProject.PackageManager))
+			}
+			if len(nlProject.Frameworks) > 0 {
+				fmt.Printf("- Frameworks: ")
+				for i, fw := range nlProject.Frameworks {
+					fmt.Printf("%s", logging.Bold(fw))
+					if i < len(nlProject.Frameworks)-1 {
+						fmt.Printf(", ")
+					}
+				}
+				fmt.Printf("\n")
+			}
+			fmt.Println("")
+			// TODO: Ask for confirmation and if no, allow manual override
+
+			_, err = dotlekko.ReadDotLekko("")
+			if err == nil {
+				fmt.Println("Lekko is already initialized in this project.")
+				return nil
 			}
 
 			if lekkoPath == "" {
