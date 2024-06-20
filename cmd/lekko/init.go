@@ -151,7 +151,7 @@ func initCmd() *cobra.Command {
 					return errors.Wrap(err, "failed to write Lekko workflow file")
 				}
 				// TODO: Consider moving instructions to end?
-				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml, please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
+				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml. Please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
 			}
 
 			// TODO: Install deps depending on project type
@@ -169,7 +169,7 @@ func initCmd() *cobra.Command {
 						return errors.Wrap(err, "failed to run go get")
 					}
 					spin.Stop()
-					fmt.Printf("%s Successfully installed Lekko Go SDK.\n", successCheck)
+					fmt.Printf("%s Successfully installed the Lekko Go SDK. See https://docs.lekko.com/sdks/go-sdk on how to use the SDK.\n", successCheck)
 					spin.Start()
 				}
 			case native.LangTypeScript:
@@ -201,7 +201,7 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/react-sdk.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/react-sdk. See https://docs.lekko.com/sdks/react-sdk on how to use the SDK.\n", successCheck)
 						spin.Start()
 						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
 						if out, err := installCmd.CombinedOutput(); err != nil {
@@ -211,7 +211,8 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install dev deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/vite-plugin. See https://www.npmjs.com/package/@lekko/vite-plugin on how to configure this plugin.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
 						spin.Start()
 					} else if nlProject.HasFramework(native.FwNext) {
 						var installArgs, installDevArgs []string
@@ -239,7 +240,7 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/next-sdk. See the docs to configure the SDK.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/next-sdk. See https://docs.lekko.com/sdks/next-sdk on how to configure and use the SDK.\n", successCheck)
 						spin.Start()
 						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
 						if out, err := installCmd.CombinedOutput(); err != nil {
@@ -249,7 +250,7 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install dev deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
 						spin.Start()
 					}
 				}
@@ -286,7 +287,7 @@ func initCmd() *cobra.Command {
 			}
 			spin.Stop()
 
-			fmt.Printf("%s Complete! Your project is now set up to use Lekko.\n", successCheck)
+			fmt.Printf("\n%s Complete! Your project is now set up to use Lekko.\n", successCheck)
 			return nil
 		},
 	}
