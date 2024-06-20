@@ -435,7 +435,7 @@ func pullCmd() *cobra.Command {
 			ctx := cmd.Context()
 
 			dot := try.To1(dotlekko.ReadDotLekko(""))
-			nativeMetadata, nativeLang := try.To2(native.DetectNativeLang(""))
+			nlProject := try.To1(native.DetectNativeLang(""))
 
 			repoPath := try.To1(repo.PrepareGithubRepo())
 			gitRepo := try.To1(git.PlainOpen(repoPath))
@@ -476,7 +476,7 @@ func pullCmd() *cobra.Command {
 						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
 					}
 				}
-				try.To(gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{NativeMetadata: nativeMetadata}))
+				try.To(gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{}))
 
 				dot.LockSHA = newHead.Hash().String()
 				if err := dot.WriteBack(); err != nil {
@@ -492,22 +492,22 @@ func pullCmd() *cobra.Command {
 			}
 			fmt.Printf("Rebasing from %s to %s\n\n", dot.LockSHA, newHead.Hash().String())
 
-			switch nativeLang {
-			case native.TS:
+			switch nlProject.Language {
+			case native.LangTypeScript:
 				tsPullCmd := exec.Command("npx", "lekko-repo-pull", "--lekko-dir", lekkoPath)
 				output, err := tsPullCmd.CombinedOutput()
 				fmt.Println(string(output))
 				if err != nil {
 					return errors.Wrap(err, "ts pull")
 				}
-			case native.GO:
+			case native.LangGo:
 				files, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
 				if err != nil {
 					return errors.Wrap(err, "go bisync")
 				}
 				hasConflicts := false
 				for _, f := range files {
-					hasConflicts = hasConflicts && try.To1(mergeFile(ctx, f, dot, nativeMetadata))
+					hasConflicts = hasConflicts && try.To1(mergeFile(ctx, f, dot, nlProject))
 				}
 				if !hasConflicts {
 					if _, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath); err != nil {
@@ -515,7 +515,7 @@ func pullCmd() *cobra.Command {
 					}
 				}
 			default:
-				return fmt.Errorf("unsupported language: %s", nativeLang)
+				return fmt.Errorf("unsupported language: %s", nlProject.Language)
 			}
 
 			dot.LockSHA = newHead.Hash().String()
@@ -530,7 +530,7 @@ func pullCmd() *cobra.Command {
 	return cmd
 }
 
-func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nativeMetadata native.Metadata) (hasConflicts bool, err error) {
+func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nlProject *native.Project) (hasConflicts bool, err error) {
 	defer err2.Handle(&err)
 	nativeLang, err := native.NativeLangFromExt(filename)
 	if err != nil {
@@ -580,10 +580,9 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
-		CodeRepoPath:   baseDir,
-		Namespaces:     []string{ns},
-		NativeMetadata: nativeMetadata,
+	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath: baseDir,
+		Namespaces:   []string{ns},
 	})
 	if err != nil {
 		return false, errors.Wrap(err, "gen native")
@@ -620,10 +619,9 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nat
 		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	err = gen.GenNative(ctx, nativeLang, dot.LekkoPath, repoPath, gen.GenOptions{
-		CodeRepoPath:   remoteDir,
-		Namespaces:     []string{ns},
-		NativeMetadata: nativeMetadata,
+	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath: remoteDir,
+		Namespaces:   []string{ns},
 	})
 	if err != nil {
 		return false, errors.Wrap(err, "gen native")

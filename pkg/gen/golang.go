@@ -1115,7 +1115,7 @@ func (p *noOpProvider) Close(ctx context.Context) error {
 	}
 	// Walk through lekko/ directory to find namespaces
 	// We walk through dir instead of just using the namespace from above because shared client init code should include every namespace
-	clientTemplateData.Namespaces = try.To1(native.ListNamespaces(g.outputPath, native.GO))
+	clientTemplateData.Namespaces = try.To1(native.ListNamespaces(g.outputPath, native.LangGo))
 	var contents bytes.Buffer
 	templ := template.Must(template.New("client").Funcs(clientTemplateFuncs).Parse(clientTemplateBody))
 	if err := templ.Execute(&contents, clientTemplateData); err != nil {

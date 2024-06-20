@@ -234,8 +234,8 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 		return false, err
 	}
 	dot := try.To1(dotlekko.ReadDotLekko(""))
-	_, nativeLang := try.To2(native.DetectNativeLang(""))
-	files := try.To1(native.ListNativeConfigFiles(dot.LekkoPath, nativeLang))
+	nlProject := try.To1(native.DetectNativeLang(""))
+	files := try.To1(native.ListNativeConfigFiles(dot.LekkoPath, nlProject.Language))
 	var notEqual bool
 	for _, f := range files {
 		relativePath, err := filepath.Rel(wd, f)

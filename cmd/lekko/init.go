@@ -15,11 +15,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -37,25 +35,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-type projectFramework int
-
-const (
-	pfUnknown projectFramework = iota
-	pfGo
-	pfNode
-	pfReact
-	pfVite
-	pfNext
-)
-
-type packageManager string
-
-const (
-	pmUnknown packageManager = ""
-	pmNPM     packageManager = "npm"
-	pmYarn    packageManager = "yarn"
-)
-
 func initCmd() *cobra.Command {
 	var lekkoPath, repoName string
 	cmd := &cobra.Command{
@@ -65,51 +44,34 @@ func initCmd() *cobra.Command {
 			defer err2.Handle(&err)
 			successCheck := logging.Green("\u2713")
 			spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-			// TODO:
-			// + create .lekko file
-			// + generate from `default` namespace
-			// + install lekko deps (depending on project type)
-			// + setup github actions
-			// - install linter
+
+			nlProject, err := native.DetectNativeLang("")
+			if err != nil {
+				return errors.Wrap(err, "detect project information")
+			}
+			// Output detected information
+			fmt.Println("Detected the following project information:")
+			fmt.Printf("- Language: %s\n", logging.Bold(nlProject.Language))
+			if nlProject.PackageManager != native.PmUnknown {
+				fmt.Printf("- Package manager: %s\n", logging.Bold(nlProject.PackageManager))
+			}
+			if len(nlProject.Frameworks) > 0 {
+				fmt.Printf("- Frameworks: ")
+				for i, fw := range nlProject.Frameworks {
+					fmt.Printf("%s", logging.Bold(fw))
+					if i < len(nlProject.Frameworks)-1 {
+						fmt.Printf(", ")
+					}
+				}
+				fmt.Printf("\n")
+			}
+			fmt.Println("")
+			// TODO: Ask for confirmation and if no, allow manual override
+
 			_, err = dotlekko.ReadDotLekko("")
 			if err == nil {
 				fmt.Println("Lekko is already initialized in this project.")
 				return nil
-			}
-			// TODO: print some info
-
-			// naive check for "known" project types
-			// TODO: Consolidate into DetectNativeLang
-			pf := pfUnknown
-			pm := pmUnknown
-			if _, err = os.Stat("go.mod"); err == nil {
-				pf = pfGo
-			} else if _, err = os.Stat("package.json"); err == nil {
-				pf = pfNode
-				pjBytes, err := os.ReadFile("package.json")
-				if err != nil {
-					return errors.Wrap(err, "failed to open package.json")
-				}
-				pjString := string(pjBytes)
-				if strings.Contains(pjString, "react-dom") {
-					pf = pfReact
-				}
-				// Vite config file could be js, cjs, mjs, etc.
-				if matches, err := filepath.Glob("vite.config.*"); matches != nil && err == nil {
-					pf = pfVite
-				}
-				// Next config file could be js, cjs, mjs, etc.
-				if matches, err := filepath.Glob("next.config.*"); matches != nil && err == nil {
-					pf = pfNext
-				}
-
-				pm = pmNPM
-				if _, err := os.Stat("yarn.lock"); err == nil {
-					pm = pmYarn
-				}
-			}
-			if pf == pfUnknown {
-				return errors.New("Unknown project type, Lekko currently supports Go and NPM projects.")
 			}
 
 			if lekkoPath == "" {
@@ -117,7 +79,7 @@ func initCmd() *cobra.Command {
 				if fi, err := os.Stat("src"); err == nil && fi.IsDir() {
 					lekkoPath = "src/lekko"
 				}
-				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && pf == pfGo {
+				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && nlProject.Language == native.LangGo {
 					lekkoPath = "internal/lekko"
 				}
 				try.To(survey.AskOne(&survey.Input{
@@ -180,7 +142,7 @@ func initCmd() *cobra.Command {
 					return errors.Wrap(err, "failed to mkdir .github/workflows")
 				}
 				workflowTemplate := getGitHubWorkflowTemplateBase()
-				if suffix, err := getGitHubWorkflowTemplateSuffix(pf, pm); err != nil {
+				if suffix, err := getGitHubWorkflowTemplateSuffix(nlProject); err != nil {
 					return err
 				} else {
 					workflowTemplate += suffix
@@ -189,15 +151,15 @@ func initCmd() *cobra.Command {
 					return errors.Wrap(err, "failed to write Lekko workflow file")
 				}
 				// TODO: Consider moving instructions to end?
-				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml, please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
+				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml. Please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
 			}
 
 			// TODO: Install deps depending on project type
 			// TODO: Determine package manager (npm/yarn/pnpm/etc.) for ts projects
 			spin.Suffix = " Installing dependencies..."
 			spin.Start()
-			switch pf {
-			case pfGo:
+			switch nlProject.Language {
+			case native.LangGo:
 				{
 					goGetCmd := exec.Command("go", "get", "github.com/lekkodev/go-sdk@latest")
 					if out, err := goGetCmd.CombinedOutput(); err != nil {
@@ -207,89 +169,90 @@ func initCmd() *cobra.Command {
 						return errors.Wrap(err, "failed to run go get")
 					}
 					spin.Stop()
-					fmt.Printf("%s Successfully installed Lekko Go SDK.\n", successCheck)
+					fmt.Printf("%s Successfully installed the Lekko Go SDK. See https://docs.lekko.com/sdks/go-sdk on how to use the SDK.\n", successCheck)
 					spin.Start()
 				}
-			case pfVite:
-				// NOTE: Vite doesn't necessarily mean React but we assume for now
+			case native.LangTypeScript:
 				{
-					var installArgs, installDevArgs []string
-					switch pm {
-					case pmNPM:
-						{
-							installArgs = []string{"install", "@lekko/react-sdk"}
-							installDevArgs = []string{"install", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+					if nlProject.HasFramework(native.FwVite) {
+						// NOTE: Vite doesn't necessarily mean React but we assume for now
+						var installArgs, installDevArgs []string
+						switch nlProject.PackageManager {
+						case native.PmNPM:
+							{
+								installArgs = []string{"install", "@lekko/react-sdk"}
+								installDevArgs = []string{"install", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+							}
+						case native.PmYarn:
+							{
+								installArgs = []string{"add", "@lekko/react-sdk"}
+								installDevArgs = []string{"add", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+							}
+						default:
+							{
+								return errors.Errorf("unsupported package manager %s", nlProject.PackageManager)
+							}
 						}
-					case pmYarn:
-						{
-							installArgs = []string{"add", "@lekko/react-sdk"}
-							installDevArgs = []string{"add", "-D", "@lekko/vite-plugin", "@lekko/eslint-plugin"}
+						installCmd := exec.Command(string(nlProject.PackageManager), installArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install deps command")
 						}
-					default:
-						{
-							return errors.Errorf("unsupported package manager %s", pm)
-						}
-					}
-					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
-					if out, err := installCmd.CombinedOutput(); err != nil {
 						spin.Stop()
-						fmt.Println(installCmd.String())
-						fmt.Println(string(out))
-						return errors.Wrap(err, "failed to run install deps command")
-					}
-					spin.Stop()
-					fmt.Printf("%s Successfully installed @lekko/react-sdk.\n", successCheck)
-					spin.Start()
-					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
-					if out, err := installCmd.CombinedOutput(); err != nil {
-						spin.Stop()
-						fmt.Println(installCmd.String())
-						fmt.Println(string(out))
-						return errors.Wrap(err, "failed to run install dev deps command")
-					}
-					spin.Stop()
-					fmt.Printf("%s Successfully installed @lekko/vite-plugin and @lekko/eslint-plugin. See the docs to configure these plugins.\n", successCheck)
-					spin.Start()
-				}
-			case pfNext:
-				{
-					var installArgs, installDevArgs []string
-					switch pm {
-					case pmNPM:
-						{
-							installArgs = []string{"install", "@lekko/next-sdk"}
-							installDevArgs = []string{"install", "-D", "@lekko/eslint-plugin"}
+						fmt.Printf("%s Successfully installed @lekko/react-sdk. See https://docs.lekko.com/sdks/react-sdk on how to use the SDK.\n", successCheck)
+						spin.Start()
+						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install dev deps command")
 						}
-					case pmYarn:
-						{
-							installArgs = []string{"add", "@lekko/next-sdk"}
-							installDevArgs = []string{"add", "-D", "@lekko/eslint-plugin"}
-						}
-					default:
-						{
-							return errors.Errorf("unsupported package manager %s", pm)
-						}
-					}
-					installCmd := exec.Command(string(pm), installArgs...) // #nosec G204
-					if out, err := installCmd.CombinedOutput(); err != nil {
 						spin.Stop()
-						fmt.Println(installCmd.String())
-						fmt.Println(string(out))
-						return errors.Wrap(err, "failed to run install deps command")
-					}
-					spin.Stop()
-					fmt.Printf("%s Successfully installed @lekko/next-sdk. See the docs to configure the SDK.\n", successCheck)
-					spin.Start()
-					installCmd = exec.Command(string(pm), installDevArgs...) // #nosec G204
-					if out, err := installCmd.CombinedOutput(); err != nil {
+						fmt.Printf("%s Successfully installed @lekko/vite-plugin. See https://www.npmjs.com/package/@lekko/vite-plugin on how to configure this plugin.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
+						spin.Start()
+					} else if nlProject.HasFramework(native.FwNext) {
+						var installArgs, installDevArgs []string
+						switch nlProject.PackageManager {
+						case native.PmNPM:
+							{
+								installArgs = []string{"install", "@lekko/next-sdk"}
+								installDevArgs = []string{"install", "-D", "@lekko/eslint-plugin"}
+							}
+						case native.PmYarn:
+							{
+								installArgs = []string{"add", "@lekko/next-sdk"}
+								installDevArgs = []string{"add", "-D", "@lekko/eslint-plugin"}
+							}
+						default:
+							{
+								return errors.Errorf("unsupported package manager %s", nlProject.PackageManager)
+							}
+						}
+						installCmd := exec.Command(string(nlProject.PackageManager), installArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install deps command")
+						}
 						spin.Stop()
-						fmt.Println(installCmd.String())
-						fmt.Println(string(out))
-						return errors.Wrap(err, "failed to run install dev deps command")
+						fmt.Printf("%s Successfully installed @lekko/next-sdk. See https://docs.lekko.com/sdks/next-sdk on how to configure and use the SDK.\n", successCheck)
+						spin.Start()
+						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install dev deps command")
+						}
+						spin.Stop()
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
+						spin.Start()
 					}
-					spin.Stop()
-					fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See the docs to configure this plugin.\n", successCheck)
-					spin.Start()
 				}
 			}
 			spin.Stop()
@@ -298,14 +261,19 @@ func initCmd() *cobra.Command {
 			spin.Suffix = " Running codegen..."
 			spin.Start()
 			// TODO: make sure that `default` namespace exists
-			try.To(runGen(cmd.Context(), lekkoPath, "default"))
+			repoPath := try.To1(repo.PrepareGithubRepo())
+			if err := gen.GenNative(cmd.Context(), nlProject, lekkoPath, repoPath, gen.GenOptions{
+				Namespaces: []string{"default"},
+			}); err != nil {
+				return errors.Wrap(err, "codegen for default namespace")
+			}
 			spin.Stop()
 
 			// Post-gen steps
 			spin.Suffix = " Running post-codegen steps..."
 			spin.Start()
-			switch pf {
-			case pfGo:
+			switch nlProject.Language {
+			case native.LangGo:
 				{
 					// For Go we want to run `go mod tidy` - this handles transitive deps
 					goTidyCmd := exec.Command("go", "mod", "tidy")
@@ -319,23 +287,13 @@ func initCmd() *cobra.Command {
 			}
 			spin.Stop()
 
-			fmt.Printf("%s Complete! Your project is now set up to use Lekko.\n", successCheck)
+			fmt.Printf("\n%s Complete! Your project is now set up to use Lekko.\n", successCheck)
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Location for Lekko files (relative to project root)")
 	cmd.Flags().StringVarP(&repoName, "repo-name", "r", "", "Config repository name, for example `my-org/lekko-configs`")
 	return cmd
-}
-
-func runGen(ctx context.Context, lekkoPath, ns string) (err error) {
-	defer err2.Handle(&err)
-	meta, nativeLang := try.To2(native.DetectNativeLang(""))
-	repoPath := try.To1(repo.PrepareGithubRepo())
-	return gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, gen.GenOptions{
-		NativeMetadata: meta,
-		Namespaces:     []string{ns},
-	})
 }
 
 func getGitHubWorkflowTemplateBase() string {
@@ -358,36 +316,30 @@ jobs:
 `
 }
 
-func getGitHubWorkflowTemplateSuffix(pf projectFramework, pm packageManager) (string, error) {
+func getGitHubWorkflowTemplateSuffix(nlProject *native.Project) (string, error) {
 	// NOTE: Make sure to keep the indentation matched with base
 	var ret string
-	switch pf {
-	case pfGo:
+	switch nlProject.Language {
+	case native.LangGo:
 		{
 			ret = `      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 `
 		}
-	case pfNode:
-		fallthrough
-	case pfReact:
-		fallthrough
-	case pfVite:
-		fallthrough
-	case pfNext:
+	case native.LangTypeScript:
 		{
 			ret = `      - uses: actions/setup-node@v4
         with:
           node-version: lts/Hydrogen
 `
-			switch pm {
-			case pmNPM:
+			switch nlProject.PackageManager {
+			case native.PmNPM:
 				{
 					ret += `      - run: npm install
 `
 				}
-			case pmYarn:
+			case native.PmYarn:
 				{
 					ret += `          cache: yarn
       - run: yarn install

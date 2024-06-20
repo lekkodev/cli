@@ -15,18 +15,19 @@
 package native
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"golang.org/x/mod/modfile"
 
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
+	"github.com/pkg/errors"
 )
 
 type Metadata interface {
@@ -39,53 +40,117 @@ type GoMetadata struct {
 
 func (GoMetadata) isMetadata() {}
 
-type NativeLang string
+// Representation of detected information about a native lang code project
+type Project struct {
+	Language       Language
+	PackageManager PackageManager
+	// A project can have multiple "frameworks" - e.g. React and Vite
+	Frameworks []Framework
 
-var (
-	GO NativeLang = "go"
-	TS NativeLang = "ts"
-)
-
-func DetectNativeLang(codeRepoPath string) (Metadata, NativeLang, error) {
-	// naive check for "known" project types
-	if _, err := os.Stat(filepath.Join(codeRepoPath, "go.mod")); err == nil {
-		b := try.To1(os.ReadFile(filepath.Join(codeRepoPath, "go.mod")))
-		mf := try.To1(modfile.ParseLax("go.mod", b, nil))
-		return GoMetadata{ModulePath: mf.Module.Mod.Path}, GO, nil
-	} else if _, err = os.Stat(filepath.Join(codeRepoPath, "package.json")); err == nil {
-		return nil, TS, nil
-	}
-	return nil, "", errors.New("unknown project type, Lekko currently supports Go and NPM projects")
+	Metadata Metadata
 }
 
-func NativeLangFromExt(filename string) (NativeLang, error) {
+type Language string
+
+const (
+	LangUnknown    Language = ""
+	LangGo         Language = "Go"
+	LangTypeScript Language = "TypeScript"
+)
+
+type PackageManager string
+
+const (
+	PmUnknown PackageManager = ""
+	PmNPM     PackageManager = "npm"
+	PmYarn    PackageManager = "yarn"
+)
+
+type Framework string
+
+const (
+	FwUnknown Framework = ""
+	FwNode    Framework = "Node"
+	FwReact   Framework = "React"
+	FwVite    Framework = "Vite"
+	FwNext    Framework = "Next.js"
+)
+
+func (p *Project) HasFramework(fw Framework) bool {
+	return slices.Contains(p.Frameworks, fw)
+}
+
+// Check files in a code project to detect native lang information
+func DetectNativeLang(codeRepoPath string) (*Project, error) {
+	if _, err := os.Stat(filepath.Join(codeRepoPath, "go.mod")); err == nil {
+		// For Go, also parse go.mod
+		b := try.To1(os.ReadFile(filepath.Join(codeRepoPath, "go.mod")))
+		mf := try.To1(modfile.ParseLax("go.mod", b, nil))
+		return &Project{
+			Language: LangGo,
+			Metadata: GoMetadata{ModulePath: mf.Module.Mod.Path},
+		}, nil
+	} else if _, err = os.Stat(filepath.Join(codeRepoPath, "package.json")); err == nil {
+		project := &Project{
+			Language:       LangTypeScript,
+			PackageManager: PmNPM,
+		}
+
+		// Read package.json to see if this is a React project
+		pjBytes, err := os.ReadFile(filepath.Join(codeRepoPath, "package.json"))
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to open package.json")
+		}
+		pjString := string(pjBytes)
+		if strings.Contains(pjString, "react-dom") {
+			project.Frameworks = append(project.Frameworks, FwReact)
+		}
+		// Vite config file could be js, cjs, mjs, etc.
+		if matches, err := filepath.Glob("vite.config.*"); matches != nil && err == nil {
+			project.Frameworks = append(project.Frameworks, FwVite)
+		}
+		// Next config file could be js, cjs, mjs, etc.
+		if matches, err := filepath.Glob("next.config.*"); matches != nil && err == nil {
+			project.Frameworks = append(project.Frameworks, FwNext)
+		}
+
+		if _, err := os.Stat("yarn.lock"); err == nil {
+			project.PackageManager = PmYarn
+		}
+
+		return project, nil
+	}
+	return nil, errors.New("unknown project type, Lekko currently supports Go and NPM projects")
+}
+
+func NativeLangFromExt(filename string) (Language, error) {
 	ext := filepath.Ext(filename)
 	switch ext {
 	case ".go":
-		return GO, nil
+		return LangGo, nil
 	case ".ts":
-		return TS, nil
+		return LangTypeScript, nil
 	}
 	return "", fmt.Errorf("unsupported file extension: %v", ext)
 }
 
-func (l *NativeLang) Ext() string {
+func (l *Language) Ext() string {
 	switch *l {
-	case GO:
+	case LangGo:
 		return ".go"
-	case TS:
+	case LangTypeScript:
 		return ".ts"
 	}
 	return ""
 }
 
-func (l *NativeLang) GetNamespace(filename string) (string, error) {
+func (l *Language) GetNamespace(filename string) (string, error) {
 	var ns string
 	switch *l {
-	case GO:
+	case LangGo:
 		// TODO: check that filename == ns too
 		ns = filepath.Base(filepath.Dir(filename))
-	case TS:
+	case LangTypeScript:
 		base := filepath.Base(filename)
 		ns = strings.TrimSuffix(base, l.Ext())
 	default:
@@ -97,7 +162,7 @@ func (l *NativeLang) GetNamespace(filename string) (string, error) {
 	return ns, nil
 }
 
-func ListNativeConfigFiles(lekkoPath string, nativeLang NativeLang) ([]string, error) {
+func ListNativeConfigFiles(lekkoPath string, lang Language) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(lekkoPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -107,9 +172,8 @@ func ListNativeConfigFiles(lekkoPath string, nativeLang NativeLang) ([]string, e
 			return fs.SkipDir
 		}
 		if !d.IsDir() &&
-			strings.HasSuffix(d.Name(), nativeLang.Ext()) &&
-			!strings.HasSuffix(d.Name(), "_gen"+nativeLang.Ext()) {
-			//
+			strings.HasSuffix(d.Name(), lang.Ext()) &&
+			!strings.HasSuffix(d.Name(), "_gen"+lang.Ext()) {
 			files = append(files, path)
 		}
 		return nil
@@ -120,14 +184,14 @@ func ListNativeConfigFiles(lekkoPath string, nativeLang NativeLang) ([]string, e
 	return files, nil
 }
 
-func ListNamespaces(lekkoPath string, nativeLang NativeLang) (namespaces []string, err error) {
+func ListNamespaces(lekkoPath string, lang Language) (namespaces []string, err error) {
 	defer err2.Handle(&err)
-	files, err := ListNativeConfigFiles(lekkoPath, nativeLang)
+	files, err := ListNativeConfigFiles(lekkoPath, lang)
 	if err != nil {
 		return nil, err
 	}
 	for _, file := range files {
-		namespaces = append(namespaces, try.To1(nativeLang.GetNamespace(file)))
+		namespaces = append(namespaces, try.To1(lang.GetNamespace(file)))
 	}
 	return namespaces, nil
 }
