@@ -30,20 +30,19 @@ import (
 )
 
 type GenOptions struct {
-	CodeRepoPath   string
-	Namespaces     []string
-	InitMode       bool
-	NativeMetadata native.Metadata
+	CodeRepoPath string
+	Namespaces   []string
+	InitMode     bool
 }
 
 func GenAuto(ctx context.Context, configRepoPath, codeRepoPath string) (err error) {
 	defer err2.Handle(&err)
-	nativeMetadata, nativeLang := try.To2(native.DetectNativeLang(codeRepoPath))
+	project := try.To1(native.DetectNativeLang(codeRepoPath))
 	dot := try.To1(dotlekko.ReadDotLekko(codeRepoPath))
-	return GenNative(ctx, nativeLang, dot.LekkoPath, configRepoPath, GenOptions{CodeRepoPath: codeRepoPath, NativeMetadata: nativeMetadata})
+	return GenNative(ctx, project, dot.LekkoPath, configRepoPath, GenOptions{CodeRepoPath: codeRepoPath})
 }
 
-func GenNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath string, opts GenOptions) (err error) {
+func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath string, opts GenOptions) (err error) {
 	defer err2.Handle(&err)
 
 	absLekkoPath := filepath.Join(opts.CodeRepoPath, lekkoPath)
@@ -53,30 +52,30 @@ func GenNative(ctx context.Context, nativeLang native.NativeLang, lekkoPath, rep
 	}
 
 	if len(opts.Namespaces) == 0 {
-		opts.Namespaces = try.To1(native.ListNamespaces(absLekkoPath, nativeLang))
+		opts.Namespaces = try.To1(native.ListNamespaces(absLekkoPath, project.Language))
 	}
 
-	switch nativeLang {
-	case native.TS:
+	switch project.Language {
+	case native.LangTypeScript:
 		if opts.InitMode {
 			return errors.New("init mode not supported for TS")
 		}
 		for _, ns := range opts.Namespaces {
-			outFilename := filepath.Join(absLekkoPath, ns+nativeLang.Ext())
+			outFilename := filepath.Join(absLekkoPath, ns+project.Language.Ext())
 			try.To(genFormattedTS(ctx, repoPath, ns, outFilename))
 		}
 		return nil
-	case native.GO:
-		return genFormattedGo(ctx, repoPath, lekkoPath, opts)
+	case native.LangGo:
+		return genFormattedGo(ctx, project, repoPath, lekkoPath, opts)
 	default:
 		return errors.New("Unsupported language")
 	}
 }
 
-func genFormattedGo(ctx context.Context, repoPath, lekkoPath string, opts GenOptions) (err error) {
+func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekkoPath string, opts GenOptions) (err error) {
 	defer err2.Handle(&err)
 	var moduleRoot string
-	switch m := opts.NativeMetadata.(type) {
+	switch m := project.Metadata.(type) {
 	case native.GoMetadata:
 		moduleRoot = m.ModulePath
 	default:

@@ -36,7 +36,7 @@ import (
 
 func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.DotLekko) (err error) {
 	defer err2.Handle(&err)
-	nativeMetadata, nativeLang, err := native.DetectNativeLang("")
+	nlProject, err := native.DetectNativeLang("")
 	if err != nil {
 		return err
 	}
@@ -85,9 +85,9 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 	for _, ns := range rootMD.Namespaces {
 		nsMap[ns] = true
 	}
-	nativeFiles := try.To1(native.ListNativeConfigFiles(lekkoPath, nativeLang))
+	nativeFiles := try.To1(native.ListNativeConfigFiles(lekkoPath, nlProject.Language))
 	for _, f := range nativeFiles {
-		if _, ok := nsMap[try.To1(nativeLang.GetNamespace(f))]; ok {
+		if _, ok := nsMap[try.To1(nlProject.Language.GetNamespace(f))]; ok {
 			updatesExistingNamespace = true
 		}
 	}
@@ -109,25 +109,24 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 		return errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	namespaces := try.To1(native.ListNamespaces(lekkoPath, nativeLang))
-	try.To(gen.GenNative(ctx, nativeLang, lekkoPath, repoPath, gen.GenOptions{
-		CodeRepoPath:   remoteDir,
-		Namespaces:     namespaces,
-		NativeMetadata: nativeMetadata,
+	namespaces := try.To1(native.ListNamespaces(lekkoPath, nlProject.Language))
+	try.To(gen.GenNative(ctx, nlProject, lekkoPath, repoPath, gen.GenOptions{
+		CodeRepoPath: remoteDir,
+		Namespaces:   namespaces,
 	}))
-	switch nativeLang {
-	case native.TS:
+	switch nlProject.Language {
+	case native.LangTypeScript:
 		err = BisyncTS(lekkoPath, repoPath)
 		if err != nil {
 			return err
 		}
-	case native.GO:
+	case native.LangGo:
 		_, err = BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
 		if err != nil {
 			return err
 		}
 	default:
-		return fmt.Errorf("unsupported language: %s", nativeLang)
+		return fmt.Errorf("unsupported language: %s", nlProject.Language)
 	}
 
 	// Print diff between local and remote

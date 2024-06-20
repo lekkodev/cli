@@ -36,8 +36,8 @@ func bisyncCmd() *cobra.Command {
 Files at the provided path that contain valid Lekko config functions will first be translated and synced to the config repository on the local filesystem, then translated back to Lekko-canonical form, performing any code generation as necessary.
 This may affect ordering of functions/parameters and formatting.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, nativeLang := try.To2(native.DetectNativeLang(""))
-			return bisync(context.Background(), nativeLang, lekkoPath, repoPath)
+			nlProject := try.To1(native.DetectNativeLang(""))
+			return bisync(context.Background(), nlProject, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
@@ -47,7 +47,7 @@ This may affect ordering of functions/parameters and formatting.`,
 	return cmd
 }
 
-func bisync(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPath string) error {
+func bisync(ctx context.Context, project *native.Project, lekkoPath, repoPath string) error {
 	if len(lekkoPath) == 0 {
 		dot := try.To1(dotlekko.ReadDotLekko(""))
 		lekkoPath = dot.LekkoPath
@@ -55,10 +55,10 @@ func bisync(ctx context.Context, nativeLang native.NativeLang, lekkoPath, repoPa
 	if len(repoPath) == 0 {
 		repoPath = try.To1(repo.PrepareGithubRepo())
 	}
-	switch nativeLang {
-	case native.GO:
+	switch project.Language {
+	case native.LangGo:
 		_ = try.To1(sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath))
-	case native.TS:
+	case native.LangTypeScript:
 		try.To(sync.BisyncTS(lekkoPath, repoPath))
 	default:
 		return errors.New("unsupported language")
@@ -72,7 +72,11 @@ func bisyncGoCmd() *cobra.Command {
 		Use:   "go",
 		Short: "Lekko bisync for Go. Should be run from project root.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return bisync(context.Background(), native.GO, lekkoPath, repoPath)
+			nlProject := try.To1(native.DetectNativeLang(""))
+			if nlProject.Language != native.LangGo {
+				return errors.Errorf("not a Go project, detected %v instead", nlProject.Language)
+			}
+			return bisync(context.Background(), nlProject, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
@@ -86,7 +90,11 @@ func bisyncTSCmd() *cobra.Command {
 		Use:   "ts",
 		Short: "Lekko bisync for Typescript. Should be run from project root.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return bisync(context.Background(), native.TS, lekkoPath, repoPath)
+			nlProject := try.To1(native.DetectNativeLang(""))
+			if nlProject.Language != native.LangTypeScript {
+				return errors.Errorf("not a TypeScript project, detected %v instead", nlProject.Language)
+			}
+			return bisync(context.Background(), nlProject, lekkoPath, repoPath)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
