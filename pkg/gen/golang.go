@@ -652,13 +652,13 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		}
 		data.CallString = "args"
 	} else {
-		data.CtxStuff = "ctx := context.Background()\n"
+		data.CtxStuff = "args := context.Background()\n"
 		data.NaturalLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		var ctxAddLines []string
 		for f, t := range usedVariables {
 			arguments = append(arguments, fmt.Sprintf("%s %s", strcase.ToLowerCamel(f), t))
-			ctxAddLines = append(ctxAddLines, fmt.Sprintf("ctx = client.Add(ctx, \"%s\", %s)", f, strcase.ToLowerCamel(f)))
+			ctxAddLines = append(ctxAddLines, fmt.Sprintf("args = client.Add(args, \"%s\", %s)", f, strcase.ToLowerCamel(f)))
 		}
 		// TODO: Sorting by name might not be the best solution for long-term UX... but it's simple and it works for now
 		slices.Sort(arguments)
