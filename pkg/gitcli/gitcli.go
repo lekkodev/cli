@@ -14,17 +14,34 @@
 
 package gitcli
 
-import "os/exec"
+import (
+	"bytes"
+	"os/exec"
+
+	"github.com/pkg/errors"
+)
 
 func Clone(url, path string) error {
 	cmd := exec.Command("git", "clone", url, path)
-	return cmd.Run()
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, buf.String())
+	}
+	return nil
 }
 
 func Pull(path string) error {
 	cmd := exec.Command("git", "pull")
 	cmd.Dir = path
-	return cmd.Run()
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	if err := cmd.Run(); err != nil {
+		return errors.Wrap(err, buf.String())
+	}
+	return nil
 }
 
 func Push(path string) ([]byte, error) {

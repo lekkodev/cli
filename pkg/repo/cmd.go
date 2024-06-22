@@ -161,8 +161,7 @@ func PrepareGithubRepo() (string, error) {
 	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
 
 	if shouldClone {
-		err := gitcli.Clone(githubRepoURL, repoPath)
-		if err != nil {
+		if err := gitcli.Clone(githubRepoURL, repoPath); err != nil {
 			return "", err
 		}
 	} else {

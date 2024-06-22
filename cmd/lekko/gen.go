@@ -17,6 +17,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"path"
 	"path/filepath"
 	"strings"
@@ -66,7 +67,11 @@ func genNative(ctx context.Context, nativeMetadata native.Metadata, nativeLang n
 		lekkoPath = dot.LekkoPath
 	}
 	if len(repoPath) == 0 {
-		repoPath = try.To1(repo.PrepareGithubRepo())
+		path, err := repo.PrepareGithubRepo()
+		if err != nil {
+			log.Fatalf("error preparing github repo %v", err)
+		}
+		repoPath = path
 	}
 	opts := gen.GenOptions{
 		InitMode:       initMode,
