@@ -309,7 +309,7 @@ on:
 permissions:
   contents: read
 jobs:
-  build:
+  push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

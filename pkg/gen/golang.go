@@ -490,7 +490,7 @@ func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 		{{ $.CtxStuff }}
 	result := &{{$.RetType}}{}
-	err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}", result)
+	err := c.{{$.GetFunction}}(args, "{{$.Namespace}}", "{{$.Key}}", result)
 	if err == nil {
 			return result
 		}
