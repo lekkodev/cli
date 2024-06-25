@@ -121,6 +121,7 @@ func main() {
 		diffCmd(),
 		confCmd(),
 		convertLangCmd(),
+		lintGoCmd(),
 	)
 
 	logging.InitColors()
