@@ -254,7 +254,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			for i := 0; i < d.Fields().Len(); i++ {
 				f := d.Fields().Get(i)
 				t := FieldDescriptorToTS(f)
-				fields = append(fields, fmt.Sprintf("%s?: %s;", strcase.ToLowerCamel(f.TextName()), t))
+				fields = append(fields, fmt.Sprintf("%s: %s;", strcase.ToLowerCamel(f.TextName()), t))
 				varNames = append(varNames, strcase.ToLowerCamel(f.TextName()))
 			}
 

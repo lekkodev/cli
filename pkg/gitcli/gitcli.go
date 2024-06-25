@@ -21,10 +21,10 @@ func Clone(url, path string) ([]byte, error) {
 	return cmd.CombinedOutput()
 }
 
-func Pull(path string) error {
+func Pull(path string) ([]byte, error) {
 	cmd := exec.Command("git", "pull")
 	cmd.Dir = path
-	return cmd.Run()
+	return cmd.CombinedOutput()
 }
 
 func Push(path string) ([]byte, error) {

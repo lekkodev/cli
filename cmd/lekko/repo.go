@@ -458,7 +458,7 @@ func pullCmd() *cobra.Command {
 				return errors.New("No remote found, please finish setup instructions")
 			}
 			fmt.Printf("Pulling from %s\n", remotes[0].Config().URLs[0])
-			try.To(gitcli.Pull(repoPath))
+			try.To1(gitcli.Pull(repoPath))
 			newHead := try.To1(gitRepo.Head())
 
 			lekkoPath := dot.LekkoPath
