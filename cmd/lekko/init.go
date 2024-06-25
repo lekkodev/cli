@@ -85,6 +85,7 @@ func initCmd() *cobra.Command {
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Location for Lekko files (relative to project root):",
 					Default: lekkoPath,
+					Help:    "You will write/manage dynamic functions written in files under this path.",
 				}, &lekkoPath, survey.WithValidator(func(val interface{}) error {
 					s, ok := val.(string)
 					if !ok {
@@ -121,12 +122,14 @@ func initCmd() *cobra.Command {
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Lekko repository name, for example `my-org/lekko-configs`:",
 					Default: repoName,
-					Help:    "If you set up your team on app.lekko.com, you can find your Lekko repository by logging in.",
+					Help:    "If you've set up your team on https://app.lekko.com, you can find your Lekko repository by logging in.",
 				}, &repoName))
 			}
 
 			dot := dotlekko.NewDotLekko(lekkoPath, repoName)
 			try.To(dot.WriteBack())
+			fmt.Printf("%s Successfully added %s.\n", successCheck, dot.GetPath())
+
 			owner = strings.Split(repoName, "/")[0]
 
 			// Instructions for next steps that user should take, categorized by top level lib/feature/concept
