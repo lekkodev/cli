@@ -426,6 +426,7 @@ import (
 		// Final canonical Go format
 		formatted, err := format.Source(contents.Bytes())
 		if err != nil {
+			fmt.Printf("dbg// %s\n", contents.String())
 			return errors.Wrap(err, fmt.Sprintf("format %s", path.Join(g.lekkoPath, output.fileName)))
 		}
 		if f, err := os.Create(path.Join(g.outputPath, g.namespace, output.fileName)); err != nil {
@@ -478,7 +479,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -498,7 +499,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -531,7 +532,7 @@ const (
 
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -613,19 +614,19 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	}
 
 	data := struct {
-		Description     string
-		FuncName        string
-		PrivateFunc     string
-		GetFunction     string
-		RetType         string
-		Namespace       string
-		Key             string
-		NaturalLanguage []string
-		ArgumentString  string
-		CallString      string
-		EnumTypeName    string
-		EnumFields      []EnumField
-		CtxStuff        string
+		Description    string
+		FuncName       string
+		PrivateFunc    string
+		GetFunction    string
+		RetType        string
+		Namespace      string
+		Key            string
+		NativeLanguage []string
+		ArgumentString string
+		CallString     string
+		EnumTypeName   string
+		EnumFields     []EnumField
+		CtxStuff       string
 	}{
 		f.Description,
 		funcName,
@@ -644,7 +645,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	generated := &generatedConfigCode{}
 	usedVariables := make(map[string]string)
 	if staticCtxType != nil {
-		data.NaturalLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		if staticCtxType.PackageAlias != "" {
 			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type)
 		} else {
@@ -653,7 +654,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		data.CallString = "args"
 	} else {
 		data.CtxStuff = "args := context.Background()\n"
-		data.NaturalLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		var ctxAddLines []string
 		for f, t := range usedVariables {
@@ -945,12 +946,14 @@ func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) 
 		if val.MessageIs((*wrapperspb.StringValue)(nil)) {
 			var s wrapperspb.StringValue
 			try.To(val.UnmarshalTo(&s))
+			// Escape nested quotes
+			replaced := strings.ReplaceAll(s.Value, "\"", "\\\"")
 			// If multiline string value, gen as raw string literal instead
 			quote := "\""
-			if strings.Count(s.Value, "\n") > 0 {
+			if strings.Count(replaced, "\n") > 0 {
 				quote = "`"
 			}
-			return fmt.Sprintf("%s%s%s", quote, s.Value, quote)
+			return fmt.Sprintf("%s%s%s", quote, replaced, quote)
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
