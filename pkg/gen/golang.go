@@ -896,13 +896,7 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 		// TODO: Actually handle enums, right now they're just numbers
 		return val.String()
 	case protoreflect.StringKind:
-		// If the string value is multiline, transform to raw literal instead
-		valString := val.String()
-		quote := "\""
-		if strings.Count(valString, "\n") > 0 {
-			quote = "`"
-		}
-		return fmt.Sprintf("%s%s%s", quote, val.String(), quote)
+		return g.toQuoted(val.String())
 	case protoreflect.BoolKind:
 		return val.String()
 	case protoreflect.BytesKind:
@@ -945,14 +939,7 @@ func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) 
 		if val.MessageIs((*wrapperspb.StringValue)(nil)) {
 			var s wrapperspb.StringValue
 			try.To(val.UnmarshalTo(&s))
-			// Escape nested quotes
-			replaced := strings.ReplaceAll(s.Value, "\"", "\\\"")
-			// If multiline string value, gen as raw string literal instead
-			quote := "\""
-			if strings.Count(replaced, "\n") > 0 {
-				quote = "`"
-			}
-			return fmt.Sprintf("%s%s%s", quote, replaced, quote)
+			return g.toQuoted(s.Value)
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
@@ -977,6 +964,16 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 	} else {
 		return fmt.Sprintf("%s{%s}", literalType, strings.Join(lines, ""))
 	}
+}
+
+// Takes a string and returns a double-quoted literal with applicable internal characters escaped, etc.
+// For strings with newlines, returns a raw string literal instead.
+func (g *goGenerator) toQuoted(s string) string {
+	if strings.Count(s, "\n") > 0 {
+		return fmt.Sprintf("`%s`", s)
+	}
+	// Quote automatically handles escaping, etc.
+	return strconv.Quote(s)
 }
 
 // Handles getting import & type literal information for both top-level and nested messages.

@@ -578,7 +578,13 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 	case *ast.BasicLit:
 		switch x.Kind {
 		case token.STRING:
-			return strings.Trim(x.Value, "\"`")
+			// Need to unescape escaped - Unquote also handles escaped chars in middle
+			// and is fine with alternate quotes like ' or `
+			if unescaped, err := strconv.Unquote(x.Value); err == nil {
+				return unescaped
+			} else {
+				panic(errors.Wrapf(err, "unescape string literal %s", x.Value))
+			}
 		case token.INT:
 			// TODO - parse/validate based on field Kind, because this breaks for
 			// int32, etc. fields
