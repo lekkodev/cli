@@ -18,7 +18,6 @@
 package gen
 
 import (
-	"fmt"
 	"path"
 	"strings"
 )
@@ -54,8 +53,8 @@ func UnpackProtoType(moduleRoot, outputPath, typeURL string) *ProtoImport {
 	importPath := path.Join(append([]string{moduleRoot, outputPath, "proto"}, typeParts[:len(typeParts)-1]...)...)
 	// e.g. configv1beta1
 	// TODO: shouldn't we be doing namespace + configv1beta1? what if there are multiple namespaces?
-	prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
-	prefix = ""
+	//prefix := fmt.Sprintf(`%s%s`, typeParts[len(typeParts)-3], typeParts[len(typeParts)-2])
+	prefix := ""
 	// TODO do google.protobuf.X
 	switch fqType {
 	case "google.protobuf.Duration":

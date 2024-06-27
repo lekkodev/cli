@@ -153,6 +153,7 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				panic("packages for lekko must start with 'lekko'")
 			}
 			namespace.Name = x.Name.Name[5:]
+			g.Namespace = namespace.Name
 			if len(namespace.Name) == 0 {
 				panic("namespace name cannot be empty")
 			}
@@ -309,6 +310,7 @@ type goSyncer struct {
 
 	TypeRegistry  *protoregistry.Types
 	protoPackages map[string]string // Map of local package names to protobuf packages (e.g. configv1beta1 -> default.config.v1beta1)
+	Namespace     string
 }
 
 func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*goSyncer, error) {
@@ -346,6 +348,7 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
 		TypeRegistry:  registry,
+		Namespace:     namespace,
 	}, nil
 }
 
@@ -597,8 +600,8 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 		if !ok {
 			panic("Unknown syntax")
 		}
-		// TODO - fix this
-		namespace := "default"
+		// TODO - fix this - this is gross af
+		namespace := g.Namespace
 		fullName = protoreflect.FullName(fmt.Sprintf("%s.config.v1beta1", namespace)).Append(protoreflect.Name(ident.Name))
 		mt, err := g.TypeRegistry.FindMessageByName(fullName)
 		if err != nil {

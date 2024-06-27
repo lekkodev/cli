@@ -180,6 +180,7 @@ import (
 
 	var publicFuncStrings []string
 	var privateFuncStrings []string
+	protoImportSet := make(map[string]*ProtoImport)
 	addStringsImport := false
 	addSlicesImport := false
 	for _, f := range features {
@@ -198,8 +199,10 @@ import (
 			if err != nil {
 				panic(errors.Wrapf(err, "%s", f.Tree.Default.TypeUrl))
 			}
-			// This feels bad...
-			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor()))
+			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
+				// This feels bad...
+				privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor()))
+			}
 		}
 
 		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
@@ -214,6 +217,18 @@ import (
 		if generated.usedSlices {
 			addSlicesImport = true
 		}
+		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			// TODO: Return imports from gen methods and collect, this doesn't handle imports for nested
+			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			if protoImport.PackageAlias != "" {
+				protoImportSet[protoImport.ImportPath] = protoImport
+			}
+		}
+	}
+
+	var protoImports []string
+	for _, imp := range protoImportSet {
+		protoImports = append(protoImports, fmt.Sprintf(`%s "%s"`, imp.PackageAlias, imp.ImportPath))
 	}
 
 	data := struct {
@@ -224,7 +239,7 @@ import (
 		AddStringsImport   bool
 		AddSlicesImport    bool
 	}{
-		[]string{}, // TODO - not awesome, but ideally this would go away.. but not sure if I'll get to that in this PR :(
+		protoImports,
 		g.namespace,
 		publicFuncStrings,
 		privateFuncStrings,
@@ -1189,7 +1204,11 @@ func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
 		case protoreflect.BytesKind:
 			goType = "[]byte"
 		case protoreflect.MessageKind, protoreflect.GroupKind:
-			goType = "*" + string(field.Message().Name())
+			if field.Message().FullName() == "google.protobuf.Duration" {
+				goType = "*durationpb.Duration"
+			} else {
+				goType = "*" + string(field.Message().Name())
+			}
 		case protoreflect.EnumKind:
 			goType = string(field.Enum().Name())
 		default:

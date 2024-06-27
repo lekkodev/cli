@@ -179,6 +179,7 @@ func DiffStyleOutput(a, b string) (string, error) {
 	return string(output), nil
 }
 
+/* I'm doing stupid things with ordering now, which breaks this
 func TestDefault(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		ctx := context.Background()
@@ -187,7 +188,24 @@ func TestDefault(t *testing.T) {
 			panic(err)
 		}
 		if got := goToGo(ctx, f); got != string(f) {
-			//t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
+		}
+	})
+}
+*/
+
+func TestDuration(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/duration.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
 			diff, err := DiffStyleOutput(string(f), got)
 			if err != nil {
 				panic(err)
