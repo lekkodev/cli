@@ -641,7 +641,6 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
 			protoType.PackageAlias = ""
 			// TODO - dups
-
 		} else {
 			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
 			// creates configv1beta1.DBConfig

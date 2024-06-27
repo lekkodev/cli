@@ -610,7 +610,6 @@ func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.M
 			return mt
 		}
 	}
-
 }
 
 func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
@@ -1011,8 +1010,16 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 					panic("unknown star expression type in struct")
 				}
 			case *ast.MapType:
-				keyType := fieldType.Key.(*ast.Ident).Name
-				valueType := fieldType.Value.(*ast.Ident).Name
+				keyIdent, ok := fieldType.Key.(*ast.Ident)
+				if !ok {
+					panic("fieldType.Key is not of type *ast.Ident")
+				}
+				keyType := keyIdent.Name
+				valueIdent, ok := fieldType.Value.(*ast.Ident)
+				if !ok {
+					panic("fieldType.Value is not of type *ast.Ident")
+				}
+				valueType := valueIdent.Name
 				mapEntryDescriptor := &descriptorpb.DescriptorProto{
 					Name: proto.String(fieldName.Name + "Entry"),
 				}

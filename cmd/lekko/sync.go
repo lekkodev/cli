@@ -506,8 +506,10 @@ func goToGo(ctx context.Context, f []byte) string {
 	if err != nil {
 		panic(err)
 	}
-	registry.AddFileDescriptor(durationpb.File_google_protobuf_duration_proto, false)
-
+	err = registry.AddFileDescriptor(durationpb.File_google_protobuf_duration_proto, false)
+	if err != nil {
+		panic(err)
+	}
 	syncer := sync.NewGoSyncerLite("", "", registry.Types)
 	namespace, err := syncer.SourceToNamespace(ctx, f)
 	if err != nil {

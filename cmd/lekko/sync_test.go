@@ -163,7 +163,7 @@ func DiffStyleOutput(a, b string) (string, error) {
 	}
 
 	// Call the diff command
-	cmd := exec.Command("diff", "-u", fileA.Name(), fileB.Name())
+	cmd := exec.Command("diff", "-u", fileA.Name(), fileB.Name()) //#nosec G204
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// diff command returns non-zero exit code when files differ, ignore the error
