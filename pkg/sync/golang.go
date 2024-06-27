@@ -118,13 +118,14 @@ type Namespace struct {
 }
 
 func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace string) error {
-	// TODO - calling this multiple times probably doesn't work.. need to build up all of them and do it all at once
 	fileDescriptorProto := &descriptorpb.FileDescriptorProto{
 		Name:        proto.String(fmt.Sprintf("%s/config/v1beta1/lekko.proto", namespace)),
 		Package:     proto.String(fmt.Sprintf("%s.config.v1beta1", namespace)),
 		MessageType: []*descriptorpb.DescriptorProto{d},
+		Dependency:  []string{"google/protobuf/duration.proto"},
 	}
-	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, nil)
+
+	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, protoregistry.GlobalFiles)
 	if err != nil {
 		return err
 	}
@@ -167,6 +168,19 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 					relProtoDir := try.To1(filepath.Rel(protoDir, strings.Trim(is.Path.Value, "\"'")))
 					protoPackage := strings.ReplaceAll(relProtoDir, "/", ".")
 					g.protoPackages[is.Name.Name] = protoPackage
+				}
+			}
+		// should we just register all the structs here?
+		case *ast.GenDecl:
+			for _, spec := range x.Specs {
+				typeSpec, ok := spec.(*ast.TypeSpec)
+				if !ok {
+					return true
+				}
+				d := StructToDescriptor(typeSpec)
+				err := g.RegisterDescriptor(d, namespace.Name)
+				if err != nil {
+					fmt.Println(err)
 				}
 			}
 		case *ast.FuncDecl:
@@ -224,10 +238,12 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 					case "string":
 						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
 					default:
+						// TODO - check if it is one of our structs to allow non *
 						panic(fmt.Errorf("unsupported primitive return type %s", t.Name))
 					}
 				case *ast.StarExpr:
 					feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
+
 				default:
 					panic(fmt.Errorf("unsupported return type expression %+v", t))
 				}
@@ -540,37 +556,58 @@ func exprToNameParts(expr ast.Expr) []string {
 }
 
 func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit) protoreflect.MessageType {
-	innerIdent, ok := x.Type.(*ast.SelectorExpr).X.(*ast.Ident)
-	if ok && innerIdent.Name == "durationpb" {
-		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
-		if err == nil {
-			return mt
+	var protoPackage string
+	var fullName protoreflect.FullName
+	innerExpr, ok := x.Type.(*ast.SelectorExpr)
+	if ok {
+		innerIdent, ok := innerExpr.X.(*ast.Ident)
+		if ok && innerIdent.Name == "durationpb" {
+			mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(x.Type.(*ast.SelectorExpr).Sel.Name)))
+			if err == nil {
+				return mt
+			}
+			panic(err)
 		}
-		panic(err)
-	}
-	parts := exprToNameParts(x.Type)
-	assert.Equal(len(parts), 2, fmt.Sprintf("expected message name to be 2 parts: %v", parts))
-	protoPackage, ok := g.protoPackages[parts[0]]
-	assert.Equal(ok, true, fmt.Sprintf("unknown package %v", parts[0]))
-	fullName := protoreflect.FullName(protoPackage).Append(protoreflect.Name(parts[1]))
-	mt, err := g.TypeRegistry.FindMessageByName(fullName)
-	if errors.Is(err, protoregistry.NotFound) {
-		// Check if nested type (e.g. Outer_Inner) (only works 2 levels for now)
-		if strings.Contains(parts[1], "_") {
-			names := strings.Split(parts[1], "_")
-			assert.Equal(len(names), 2, fmt.Sprintf("only singly nested messages are supported: %v", parts[1]))
-			if outerDescriptor, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
-				if innerDescriptor := outerDescriptor.Descriptor().Messages().ByName(protoreflect.Name(names[1])); innerDescriptor != nil {
-					return dynamicpb.NewMessageType(innerDescriptor)
+		parts := exprToNameParts(x.Type)
+		assert.Equal(len(parts), 2, fmt.Sprintf("expected message name to be 2 parts: %v", parts))
+		protoPackage, ok = g.protoPackages[parts[0]]
+		assert.Equal(ok, true, fmt.Sprintf("unknown package %v", parts[0]))
+		fullName = protoreflect.FullName(protoPackage).Append(protoreflect.Name(parts[1]))
+		mt, err := g.TypeRegistry.FindMessageByName(fullName)
+		if errors.Is(err, protoregistry.NotFound) {
+			// Check if nested type (e.g. Outer_Inner) (only works 2 levels for now)
+			if strings.Contains(parts[1], "_") {
+				names := strings.Split(parts[1], "_")
+				assert.Equal(len(names), 2, fmt.Sprintf("only singly nested messages are supported: %v", parts[1]))
+				if outerDescriptor, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(protoPackage).Append(protoreflect.Name(names[0]))); err == nil {
+					if innerDescriptor := outerDescriptor.Descriptor().Messages().ByName(protoreflect.Name(names[1])); innerDescriptor != nil {
+						return dynamicpb.NewMessageType(innerDescriptor)
+					}
 				}
 			}
+			panic(fmt.Errorf("missing proto type in registry %s", fullName))
+		} else if err != nil {
+			panic(errors.Wrap(err, "error while finding message type registry"))
+		} else {
+			return mt
 		}
-		panic(fmt.Errorf("missing proto type in registry %s", fullName))
-	} else if err != nil {
-		panic(errors.Wrap(err, "error while finding message type registry"))
 	} else {
-		return mt
+		// it should be an ident for a bare raw struct
+		ident, ok := x.Type.(*ast.Ident)
+		if !ok {
+			panic("Unknown syntax")
+		}
+		// TODO - fix this
+		namespace := "default"
+		fullName = protoreflect.FullName(fmt.Sprintf("%s.config.v1beta1", namespace)).Append(protoreflect.Name(ident.Name))
+		mt, err := g.TypeRegistry.FindMessageByName(fullName)
+		if err != nil {
+			panic(errors.Wrap(err, "error while finding message type registry"))
+		} else {
+			return mt
+		}
 	}
+
 }
 
 func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
@@ -940,8 +977,8 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 			switch fieldType := field.Type.(type) {
 			case *ast.Ident:
 				switch fieldType.Name {
-				case "int":
-					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()
+				case "int64":
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
 				case "string":
 					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
 				case "float64":
@@ -951,6 +988,78 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 				default:
 					panic("unknown type in struct")
 				}
+			case *ast.SelectorExpr:
+				if pkgIdent, ok := fieldType.X.(*ast.Ident); ok && pkgIdent.Name == "durationpb" && fieldType.Sel.Name == "Duration" {
+					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
+					fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
+				} else {
+					panic("unknown selector type in struct")
+				}
+			case *ast.StarExpr:
+				// Handle durationpb.Duration type
+				if selectorExpr, ok := fieldType.X.(*ast.SelectorExpr); ok {
+					if pkgIdent, ok := selectorExpr.X.(*ast.Ident); ok && pkgIdent.Name == "durationpb" && selectorExpr.Sel.Name == "Duration" {
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
+						fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
+					} else {
+						panic("unknown star expression type in struct")
+					}
+				} else {
+					panic("unknown star expression type in struct")
+				}
+			case *ast.MapType:
+				keyType := fieldType.Key.(*ast.Ident).Name
+				valueType := fieldType.Value.(*ast.Ident).Name
+				mapEntryDescriptor := &descriptorpb.DescriptorProto{
+					Name: proto.String(fieldName.Name + "Entry"),
+				}
+
+				keyField := &descriptorpb.FieldDescriptorProto{
+					Name:   proto.String("key"),
+					Number: proto.Int32(1),
+					Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				}
+				valueField := &descriptorpb.FieldDescriptorProto{
+					Name:   proto.String("value"),
+					Number: proto.Int32(2),
+					Label:  descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+				}
+
+				switch keyType {
+				case "int64":
+					keyField.Type = descriptorpb.FieldDescriptorProto_TYPE_INT32.Enum()
+				case "string":
+					keyField.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+				case "float64":
+					keyField.Type = descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+				case "bool":
+					keyField.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+				default:
+					panic("unknown map key type in struct")
+				}
+
+				switch valueType {
+				case "int64":
+					valueField.Type = descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
+				case "string":
+					valueField.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+				case "float64":
+					valueField.Type = descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+				case "bool":
+					valueField.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+				default:
+					panic("unknown map value type in struct")
+				}
+
+				mapEntryDescriptor.Field = append(mapEntryDescriptor.Field, keyField, valueField)
+				mapEntryDescriptor.Options = &descriptorpb.MessageOptions{
+					MapEntry: proto.Bool(true),
+				}
+
+				descriptor.NestedType = append(descriptor.NestedType, mapEntryDescriptor)
+				fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
+				fieldDescriptor.TypeName = proto.String(fieldName.Name + "Entry")
+				fieldDescriptor.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
 			default:
 				panic("not a struct I understand")
 			}

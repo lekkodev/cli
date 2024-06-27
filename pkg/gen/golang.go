@@ -193,6 +193,15 @@ import (
 			ctxType = staticCtxType
 		}
 
+		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			msg, err := anypb.UnmarshalNew(f.Tree.Default, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
+			if err != nil {
+				panic(errors.Wrapf(err, "%s", f.Tree.Default.TypeUrl))
+			}
+			// This feels bad...
+			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor()))
+		}
+
 		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
 		if err != nil {
 			return "", "", errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
@@ -245,7 +254,7 @@ func getContents(templateBody string, fileName string, data any) (string, error)
 	// Final canonical Go format
 	formatted, err := format.Source(contents.Bytes())
 	if err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("format %s", fileName))
+		return "", errors.Wrap(err, fmt.Sprintf("format %s\n %s\n\n", fileName, contents.String()))
 	}
 	return string(formatted), nil
 }
@@ -607,9 +616,22 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
 		templateBody = g.getProtoTemplateBody()
-		protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
-		// creates configv1beta1.DBConfig
-		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
+		matched, err := regexp.MatchString(fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.[a-zA-Z0-9]", ns), f.Tree.Default.TypeUrl)
+		if err != nil {
+			panic(err)
+		}
+		if matched {
+			parts := strings.Split(f.Tree.Default.TypeUrl, ".")
+			retType = parts[len(parts)-1]
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			protoType.PackageAlias = ""
+			// TODO - dups
+
+		} else {
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			// creates configv1beta1.DBConfig
+			retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
+		}
 	}
 
 	data := struct {
@@ -966,7 +988,11 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 	})
 	literalType := ""
 	if !omitLiteralType {
-		literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
+		if protoType.PackageAlias == "" {
+			literalType = fmt.Sprintf("&%s", protoType.Type)
+		} else {
+			literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
+		}
 	}
 	if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
 		slices.Sort(lines)
