@@ -426,7 +426,6 @@ import (
 		// Final canonical Go format
 		formatted, err := format.Source(contents.Bytes())
 		if err != nil {
-			fmt.Printf("dbg// %s\n", contents.String())
 			return errors.Wrap(err, fmt.Sprintf("format %s", path.Join(g.lekkoPath, output.fileName)))
 		}
 		if f, err := os.Create(path.Join(g.outputPath, g.namespace, output.fileName)); err != nil {
