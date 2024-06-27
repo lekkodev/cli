@@ -62,8 +62,7 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 	if err != nil {
 		return errors.Wrap(err, "reset and clean")
 	}
-	err = gitcli.Pull(repoPath)
-	if err != nil {
+	if _, err = gitcli.Pull(repoPath); err != nil {
 		return errors.Wrap(err, "pull from GitHub")
 	}
 	head, err := gitRepo.Head()

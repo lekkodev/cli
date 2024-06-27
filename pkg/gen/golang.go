@@ -502,7 +502,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -522,7 +522,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -555,7 +555,7 @@ const (
 
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range  $.NativeLanguage}}{{ . }}
 {{end}}}`,
 	}
 }
@@ -649,19 +649,19 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	}
 
 	data := struct {
-		Description     string
-		FuncName        string
-		PrivateFunc     string
-		GetFunction     string
-		RetType         string
-		Namespace       string
-		Key             string
-		NaturalLanguage []string
-		ArgumentString  string
-		CallString      string
-		EnumTypeName    string
-		EnumFields      []EnumField
-		CtxStuff        string
+		Description    string
+		FuncName       string
+		PrivateFunc    string
+		GetFunction    string
+		RetType        string
+		Namespace      string
+		Key            string
+		NativeLanguage []string
+		ArgumentString string
+		CallString     string
+		EnumTypeName   string
+		EnumFields     []EnumField
+		CtxStuff       string
 	}{
 		f.Description,
 		funcName,
@@ -680,7 +680,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	generated := &generatedConfigCode{}
 	usedVariables := make(map[string]string)
 	if staticCtxType != nil {
-		data.NaturalLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		if staticCtxType.PackageAlias != "" {
 			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type)
 		} else {
@@ -689,7 +689,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		data.CallString = "args"
 	} else {
 		data.CtxStuff = "args := context.Background()\n"
-		data.NaturalLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		var ctxAddLines []string
 		for f, t := range usedVariables {
@@ -932,13 +932,7 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 		// TODO: Actually handle enums, right now they're just numbers
 		return val.String()
 	case protoreflect.StringKind:
-		// If the string value is multiline, transform to raw literal instead
-		valString := val.String()
-		quote := "\""
-		if strings.Count(valString, "\n") > 0 {
-			quote = "`"
-		}
-		return fmt.Sprintf("%s%s%s", quote, val.String(), quote)
+		return g.toQuoted(val.String())
 	case protoreflect.BoolKind:
 		return val.String()
 	case protoreflect.BytesKind:
@@ -981,12 +975,7 @@ func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) 
 		if val.MessageIs((*wrapperspb.StringValue)(nil)) {
 			var s wrapperspb.StringValue
 			try.To(val.UnmarshalTo(&s))
-			// If multiline string value, gen as raw string literal instead
-			quote := "\""
-			if strings.Count(s.Value, "\n") > 0 {
-				quote = "`"
-			}
-			return fmt.Sprintf("%s%s%s", quote, s.Value, quote)
+			return g.toQuoted(s.Value)
 		}
 		return string(try.To1(protojson.Marshal(msg)))
 	}
@@ -1015,6 +1004,16 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 	} else {
 		return fmt.Sprintf("%s{%s}", literalType, strings.Join(lines, ""))
 	}
+}
+
+// Takes a string and returns a double-quoted literal with applicable internal characters escaped, etc.
+// For strings with newlines, returns a raw string literal instead.
+func (g *goGenerator) toQuoted(s string) string {
+	if strings.Count(s, "\n") > 0 {
+		return fmt.Sprintf("`%s`", s)
+	}
+	// Quote automatically handles escaping, etc.
+	return strconv.Quote(s)
 }
 
 // Handles getting import & type literal information for both top-level and nested messages.
