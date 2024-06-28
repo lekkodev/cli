@@ -994,7 +994,10 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 				case "bool":
 					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 				default:
-					panic("unknown type in struct")
+					// TODO - anonymous nested vs defined.. for right now.. I think that we will use defined more for composing things.. I think.. maybe..
+					//fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum() // TODO validate
+					//fieldDescriptor.TypeName = proto.String(strcase.ToSnake(fieldType.Name))     // TODO Need the full path :( - This library interface is garbage
+					panic(fmt.Sprintf("unknown type in struct: %s\n", fieldType.Name))
 				}
 			case *ast.SelectorExpr:
 				if pkgIdent, ok := fieldType.X.(*ast.Ident); ok && pkgIdent.Name == "durationpb" && fieldType.Sel.Name == "Duration" {
