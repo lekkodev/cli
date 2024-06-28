@@ -85,6 +85,7 @@ func initCmd() *cobra.Command {
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Location for Lekko files (relative to project root):",
 					Default: lekkoPath,
+					Help:    "You will write/manage dynamic functions written in files under this path.",
 				}, &lekkoPath, survey.WithValidator(func(val interface{}) error {
 					s, ok := val.(string)
 					if !ok {
@@ -97,9 +98,9 @@ func initCmd() *cobra.Command {
 				})))
 			}
 
+			owner := ""
 			if repoName == "" {
 				// try to use owner of the current repo
-				owner := ""
 				if gitRepo, err := git.PlainOpen("."); err == nil {
 					if remote, err := gitRepo.Remote("origin"); err == nil && len(remote.Config().URLs) > 0 {
 						url := remote.Config().URLs[0]
@@ -121,19 +122,26 @@ func initCmd() *cobra.Command {
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Lekko repository name, for example `my-org/lekko-configs`:",
 					Default: repoName,
-					Help:    "If you set up your team on app.lekko.com, you can find your Lekko repository by logging in.",
+					Help:    "If you've set up your team on https://app.lekko.com, you can find your Lekko repository by logging in.",
 				}, &repoName))
 			}
 
 			dot := dotlekko.NewDotLekko(lekkoPath, repoName)
 			try.To(dot.WriteBack())
+			fmt.Printf("%s Successfully added %s.\n", successCheck, dot.GetPath())
+
+			owner = strings.Split(repoName, "/")[0]
+
+			// Instructions for next steps that user should take, categorized by top level lib/feature/concept
+			nextSteps := make(map[string][]string)
+			nextSteps["API key"] = make([]string, 0)
 
 			// Add GitHub workflow file
 			var addWorkflow bool
 			if err := survey.AskOne(&survey.Confirm{
 				Message: "Add GitHub workflow file at .github/workflows/lekko.yaml?",
 				Default: true,
-				Help:    "This workflow will use the Lekko Push Action, which enables the automatic mirrorring feature.",
+				Help:    "This workflow will use the Lekko Push Action, which enables the automatic mirroring feature.",
 			}, &addWorkflow); err != nil {
 				return err
 			}
@@ -150,17 +158,17 @@ func initCmd() *cobra.Command {
 				if err := os.WriteFile(".github/workflows/lekko.yaml", []byte(workflowTemplate), 0600); err != nil {
 					return errors.Wrap(err, "failed to write Lekko workflow file")
 				}
-				// TODO: Consider moving instructions to end?
-				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml. Please make sure to add LEKKO_API_KEY as a secret in your GitHub repository/org settings.\n", successCheck)
+				fmt.Printf("%s Successfully added .github/workflows/lekko.yaml.\n", successCheck)
+				nextSteps["API key"] = append(nextSteps["API key"], fmt.Sprintf("Add %s as a secret in your GitHub repository/organization settings", logging.Bold("LEKKO_API_KEY")))
 			}
 
-			// TODO: Install deps depending on project type
-			// TODO: Determine package manager (npm/yarn/pnpm/etc.) for ts projects
+			// Install Lekko-related project dependencies
 			spin.Suffix = " Installing dependencies..."
 			spin.Start()
 			switch nlProject.Language {
 			case native.LangGo:
 				{
+					// TODO: Try to install (and maybe setup) Go linter here
 					goGetCmd := exec.Command("go", "get", "github.com/lekkodev/go-sdk@latest")
 					if out, err := goGetCmd.CombinedOutput(); err != nil {
 						spin.Stop()
@@ -169,7 +177,8 @@ func initCmd() *cobra.Command {
 						return errors.Wrap(err, "failed to run go get")
 					}
 					spin.Stop()
-					fmt.Printf("%s Successfully installed the Lekko Go SDK. See https://docs.lekko.com/sdks/go-sdk on how to use the SDK.\n", successCheck)
+					fmt.Printf("%s Successfully installed the Lekko Go SDK.\n", successCheck)
+					nextSteps["Go SDK"] = append(nextSteps["Go SDK"], "See https://docs.lekko.com/sdks/go-sdk to get started")
 					spin.Start()
 				}
 			case native.LangTypeScript:
@@ -201,7 +210,8 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/react-sdk. See https://docs.lekko.com/sdks/react-sdk on how to use the SDK.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/react-sdk.\n", successCheck)
+						nextSteps["React SDK"] = append(nextSteps["React SDK"], "See https://docs.lekko.com/sdks/react-sdk to get started")
 						spin.Start()
 						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
 						if out, err := installCmd.CombinedOutput(); err != nil {
@@ -211,8 +221,10 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install dev deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/vite-plugin. See https://www.npmjs.com/package/@lekko/vite-plugin on how to configure this plugin.\n", successCheck)
-						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/vite-plugin.\n", successCheck)
+						nextSteps["Vite"] = append(nextSteps["Vite"], "See https://www.npmjs.com/package/@lekko/vite-plugin to configure the Lekko Vite plugin")
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin.\n", successCheck)
+						nextSteps["ESLint"] = append(nextSteps["ESLint"], "See https://www.npmjs.com/package/@lekko/eslint-plugin to configure the Lekko ESLint plugin")
 						spin.Start()
 					} else if nlProject.HasFramework(native.FwNext) {
 						var installArgs, installDevArgs []string
@@ -240,7 +252,8 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/next-sdk. See https://docs.lekko.com/sdks/next-sdk on how to configure and use the SDK.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/next-sdk.\n", successCheck)
+						nextSteps["Next.js SDK"] = append(nextSteps["Next.js SDK"], "See https://docs.lekko.com/sdks/next-sdk to get started")
 						spin.Start()
 						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
 						if out, err := installCmd.CombinedOutput(); err != nil {
@@ -250,7 +263,8 @@ func initCmd() *cobra.Command {
 							return errors.Wrap(err, "failed to run install dev deps command")
 						}
 						spin.Stop()
-						fmt.Printf("%s Successfully installed @lekko/eslint-plugin. See https://www.npmjs.com/package/@lekko/eslint-plugin on how to configure this plugin.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin.\n", successCheck)
+						nextSteps["ESLint"] = append(nextSteps["ESLint"], "See https://www.npmjs.com/package/@lekko/eslint-plugin to configure the Lekko ESLint plugin")
 						spin.Start()
 					}
 				}
@@ -288,6 +302,29 @@ func initCmd() *cobra.Command {
 			spin.Stop()
 
 			fmt.Printf("\n%s Complete! Your project is now set up to use Lekko.\n", successCheck)
+
+			nextSteps["API key"] = append([]string{fmt.Sprintf("Go to https://app.lekko.com/teams/%s/admin?tab=APIKeys to generate an API key", owner)}, nextSteps["API key"]...)
+
+			// Output next steps
+			var sb strings.Builder
+			if len(nextSteps) > 0 {
+				sb.WriteString("Next steps:\n")
+				sb.WriteString("-----------\n")
+				for category, steps := range nextSteps {
+					if len(steps) > 0 {
+						sb.WriteString("* ")
+						sb.WriteString(logging.Bold(category))
+						sb.WriteString(":\n")
+						for _, step := range steps {
+							sb.WriteString("  - ")
+							sb.WriteString(step)
+							sb.WriteString("\n")
+						}
+					}
+				}
+				fmt.Printf("\n%s\n", sb.String())
+			}
+
 			return nil
 		},
 	}
