@@ -1166,6 +1166,8 @@ func (g *goSyncer) exprToRule(expr ast.Expr, contextKeys map[string]string) *rul
 		return g.exprToRule(node.X, contextKeys)
 	case *ast.UnaryExpr:
 		return g.unaryExprToRule(node, contextKeys)
+	case *ast.SelectorExpr: // TODO - make sure this is args
+		return g.identToRule(node.Sel, contextKeys)
 	default:
 		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
 	}
