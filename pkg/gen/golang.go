@@ -118,9 +118,7 @@ func getExample() bool {
 	if err != nil {
 		return errors.Wrapf(err, "format %s", fullOutputPath)
 	}
-	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
-		return err
-	}
+	try.To(os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770))
 	f, err := os.Create(fullOutputPath)
 	if err != nil {
 		return errors.Wrapf(err, "create %s", fullOutputPath)
