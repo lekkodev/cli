@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"go/format"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -148,6 +147,8 @@ package lekko{{$.Namespace}}
 
 import (
 	"context"
+	"log"
+	"google.golang.org/protobuf/reflect/protoreflect"
 {{range $.ProtoImports}}
 	{{ . }}{{end}}
 	client "github.com/lekkodev/go-sdk/client"
@@ -175,13 +176,17 @@ import (
 )
 {{end}}
 
+{{range $.StructDefs}}
+{{ . }}{{end}}
 {{range $.PrivateFuncStrings}}
 {{ . }}{{end}}`
 
 	var publicFuncStrings []string
 	var privateFuncStrings []string
+	protoImportSet := make(map[string]*ProtoImport)
 	addStringsImport := false
 	addSlicesImport := false
+	StructDefMap := make(map[string]string)
 	for _, f := range features {
 		var ctxType *ProtoImport
 		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
@@ -191,6 +196,17 @@ import (
 			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
 		} else {
 			ctxType = staticCtxType
+		}
+
+		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			msg, err := anypb.UnmarshalNew(f.Tree.Default, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
+			if err != nil {
+				panic(errors.Wrapf(err, "%s", f.Tree.Default.TypeUrl))
+			}
+			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
+				// This feels bad...
+				StructDefMap[f.Tree.Default.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
+			}
 		}
 
 		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
@@ -205,7 +221,25 @@ import (
 		if generated.usedSlices {
 			addSlicesImport = true
 		}
+		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+			// TODO: Return imports from gen methods and collect, this doesn't handle imports for nested
+			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			if protoImport.PackageAlias != "" {
+				protoImportSet[protoImport.ImportPath] = protoImport
+			}
+		}
 	}
+
+	var protoImports []string
+	for _, imp := range protoImportSet {
+		protoImports = append(protoImports, fmt.Sprintf(`%s "%s"`, imp.PackageAlias, imp.ImportPath))
+	}
+
+	var structDefs []string
+	for _, sd := range StructDefMap {
+		structDefs = append(structDefs, sd)
+	}
+	sort.Strings(structDefs)
 
 	data := struct {
 		ProtoImports       []string
@@ -214,13 +248,15 @@ import (
 		PrivateFuncStrings []string
 		AddStringsImport   bool
 		AddSlicesImport    bool
+		StructDefs         []string
 	}{
-		[]string{}, // TODO - not awesome, but ideally this would go away.. but not sure if I'll get to that in this PR :(
+		protoImports,
 		g.namespace,
 		publicFuncStrings,
 		privateFuncStrings,
 		addStringsImport,
 		addSlicesImport,
+		structDefs,
 	}
 
 	public, err := getContents(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", g.namespace), data)
@@ -245,7 +281,7 @@ func getContents(templateBody string, fileName string, data any) (string, error)
 	// Final canonical Go format
 	formatted, err := format.Source(contents.Bytes())
 	if err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("format %s", fileName))
+		return "", errors.Wrap(err, fmt.Sprintf("format %s\n %s\n\n", fileName, contents.String()))
 	}
 	return string(formatted), nil
 }
@@ -271,15 +307,7 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 	sort.SliceStable(ffs, func(i, j int) bool {
 		return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
 	})
-
-	var publicFuncStrings []string
-	var privateFuncStrings []string
-	protoImportSet := make(map[string]*ProtoImport)
-	addStringsImport := false
-	addSlicesImport := false
-	if staticCtxType != nil {
-		protoImportSet[staticCtxType.ImportPath] = staticCtxType
-	}
+	var features []*featurev1beta1.Feature
 	for _, ff := range ffs {
 		fff, err := os.ReadFile(path.Join(g.repoPath, g.namespace, ff.CompiledProtoBinFileName))
 		if err != nil {
@@ -289,162 +317,26 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 		if err := proto.Unmarshal(fff, f); err != nil {
 			return err
 		}
-		var ctxType *ProtoImport
-		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
-		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
-		if err == nil {
-			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
-			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
-		} else {
-			ctxType = staticCtxType
-		}
-		generated, err := g.genGoForFeature(ctx, r, f, g.namespace, ctxType)
-		if err != nil {
-			return errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
-		}
-		publicFuncStrings = append(publicFuncStrings, generated.public)
-		privateFuncStrings = append(privateFuncStrings, generated.private)
-		if generated.usedStrings {
-			addStringsImport = true
-		}
-		if generated.usedSlices {
-			addSlicesImport = true
-		}
-		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-			// TODO: Return imports from gen methods and collect, this doesn't handle imports for nested
-			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
-			protoImportSet[protoImport.ImportPath] = protoImport
-		}
+		features = append(features, f)
 	}
-	// For each namespace, we want to generate under lekko/:
-	// lekko/
-	//   <namespace>/
-	//     <namespace>.go
-	//     <namespace>_gen.go
-
-	// <namespace>.go is meant to be edited by the user, contains private native lang funcs
-	// <namespace>_gen.go is marked as machine-generated, contains public funcs to be used in application code
-
-	const publicFileTemplateBody = `// Generated by Lekko. DO NOT EDIT.
-package lekko{{$.Namespace}}
-
-import (
-	"context"
-{{range $.ProtoImports}}
-	{{ . }}{{end}}
-	client "github.com/lekkodev/go-sdk/client"
-)
-
-type LekkoClient struct {
-client.Client
-}
-
-{{range $.PublicFuncStrings}}
-{{ . }}{{end}}`
-
-	// TODOs for the template:
-	// - make sure to test if slices is valid depending on go versions
-	// - add go generate directive to invoke this command
-	//   - but if doing 2-way and directive already exists, should respect original
-	const privateFileTemplateBody = `package lekko{{$.Namespace}}
-
-{{if or $.AddStringsImport $.AddSlicesImport (gt (len $.ProtoImports) 0)}}
-import (
-	{{if $.AddStringsImport}}"strings"{{end}}
-{{range $.ProtoImports}}
-	{{ . }}{{end}}
-	{{if $.AddSlicesImport}}"golang.org/x/exp/slices"{{end}}
-)
-{{end}}
-
-{{range $.PrivateFuncStrings}}
-{{ . }}{{end}}`
-
-	// buf generate --template '{"version":"v1","plugins":[{"plugin":"go","out":"gen/go"}]}'
-	//
-	// This generates the code for the config repo, assuming it has a buf.gen.yml in that repo.
-	// In OUR repos, and maybe some of our customers, they may already have a buf.gen.yml, so if
-	// that is the case, we should identify that, not run code gen (maybe?) and instead need to
-	// take the prefix by parsing the buf.gen.yml to understand where the go code goes.
-	//
-	// With proto packages with >= 3 segments, the go package only takes the last 2.
-	// e.g. default.config.v1beta1 -> configv1beta1
-	// https://github.com/bufbuild/buf/issues/1263
-	pCmd := exec.Command(
-		"buf",
-		"generate",
-		// TODO: Fix the hardcoded stuff
-		fmt.Sprintf(`--template={"managed": {"enabled": true, "go_package_prefix": {"default": "%s/%s/proto"}}, "version":"v1","plugins":[{"plugin":"buf.build/protocolbuffers/go:v1.33.0","out":"%s/proto", "opt": "paths=source_relative"}]}`, g.moduleRoot, g.lekkoPath, g.outputPath),
-		"--include-imports",
-		g.repoPath) // #nosec G204
-	pCmd.Dir = "."
-	if out, err := pCmd.CombinedOutput(); err != nil {
-		fmt.Printf("Error when generating code with buf: %s\n %e\n", out, err)
+	public, private, err := g.GenNamespaceFiles(ctx, features, staticCtxType)
+	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
+	if f, err := os.Create(path.Join(g.outputPath, g.namespace, fmt.Sprintf("%s_gen.go", g.namespace))); err != nil {
 		return err
-	}
-	var protoImports []string
-	for _, imp := range protoImportSet {
-		protoImports = append(protoImports, fmt.Sprintf(`%s "%s"`, imp.PackageAlias, imp.ImportPath))
-	}
-	data := struct {
-		ProtoImports       []string
-		Namespace          string
-		PublicFuncStrings  []string
-		PrivateFuncStrings []string
-		AddStringsImport   bool
-		AddSlicesImport    bool
-	}{
-		protoImports,
-		g.namespace,
-		publicFuncStrings,
-		privateFuncStrings,
-		addStringsImport,
-		addSlicesImport,
-	}
-	outputs := []struct {
-		templateBody string
-		fileName     string
-	}{
-		{
-			templateBody: publicFileTemplateBody,
-			fileName:     fmt.Sprintf("%s_gen.go", g.namespace),
-		},
-		{
-			templateBody: privateFileTemplateBody,
-			fileName:     fmt.Sprintf("%s.go", g.namespace),
-		},
-	}
-	for _, output := range outputs {
-		var contents bytes.Buffer
-		templ := template.Must(template.New(output.fileName).Parse(output.templateBody))
-		if err := templ.Execute(&contents, data); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("%s template", output.fileName))
-		}
-		// Final canonical Go format
-		formatted, err := format.Source(contents.Bytes())
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("format %s", path.Join(g.lekkoPath, output.fileName)))
-		}
-		if f, err := os.Create(path.Join(g.outputPath, g.namespace, output.fileName)); err != nil {
-			return err
-		} else {
-			if _, err := f.Write(formatted); err != nil {
-				return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
-			}
+	} else {
+		if _, err := f.WriteString(public); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
 		}
 	}
-
-	// Under lekko/, we also generate
-	// lekko/
-	//   client_gen.go <--
-	//   <namespace>/
-	//     ...
-
-	// This is the "entrypoint" shared client initialization code that can be imported by the user
-	// and allows access to all namespaces
+	if f, err := os.Create(path.Join(g.outputPath, g.namespace, fmt.Sprintf("%s.go", g.namespace))); err != nil {
+		return err
+	} else {
+		if _, err := f.WriteString(private); err != nil {
+			return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
+		}
+	}
 	return g.genClientFile(g.moduleRoot)
 }
 
@@ -470,10 +362,12 @@ func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 		public: `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
+	 log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
   	result, err := c.{{$.GetFunction}}(args, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	  	return result
   	}
+	log.Printf("Lekko static fallback with error: %s\n", err)
   	return {{$.PrivateFunc}}({{$.CallString}})
 }`,
 		private: `// {{$.Description}}
@@ -489,11 +383,14 @@ func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
 		public: `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 		{{ $.CtxStuff }}
-	result := &{{$.RetType}}{}
-	err := c.{{$.GetFunction}}(args, "{{$.Namespace}}", "{{$.Key}}", result)
+    ret := &{{$.RetType}}{}
+	log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
+	result, err := c.GetAny(args, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
-			return result
+	{{$.ProtoStructFilling}}
+			return ret
 		}
+		log.Printf("Lekko static fallback with error: %s\n", err)
 		return {{$.PrivateFunc}}({{$.CallString}})
 }`,
 		private: `// {{$.Description}}
@@ -547,6 +444,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	var retType string
 	var getFunction string
 	var enumTypeName string
+	var protoStructFilling string
 	type EnumField struct {
 		Name  string
 		Value string
@@ -607,25 +505,58 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
 		templateBody = g.getProtoTemplateBody()
-		protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
-		// creates configv1beta1.DBConfig
-		retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
+		matched, err := regexp.MatchString(fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.[a-zA-Z0-9]", ns), f.Tree.Default.TypeUrl)
+		if err != nil {
+			panic(err)
+		}
+		if matched {
+			parts := strings.Split(f.Tree.Default.TypeUrl, ".")
+			retType = parts[len(parts)-1]
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			protoType.PackageAlias = ""
+			// TODO - dups
+		} else { // For things like returning WKT like Duration
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
+		}
+		mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.Default.TypeUrl)
+		if err != nil {
+			panic(err)
+		}
+		protoStructFilling = `result.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+						switch fd.Name() {`
+		for i := 0; i < mt.Descriptor().Fields().Len(); i++ {
+			fd := mt.Descriptor().Fields().Get(i)
+			fieldName := fd.Name()
+			fieldType := FieldDescriptorToGoTypeString(fd)
+			protoStructFilling = protoStructFilling + fmt.Sprintf(`
+		case "%[1]s":
+							v, ok := result.ProtoReflect().Get(fd).Interface().(%[2]s)
+							if (ok) {
+								ret.%[1]s = v
+							}`, strcase.ToCamel(string(fieldName)), fieldType)
+		}
+		protoStructFilling = protoStructFilling + `
+		}
+		 return true
+					})`
 	}
 
 	data := struct {
-		Description    string
-		FuncName       string
-		PrivateFunc    string
-		GetFunction    string
-		RetType        string
-		Namespace      string
-		Key            string
-		NativeLanguage []string
-		ArgumentString string
-		CallString     string
-		EnumTypeName   string
-		EnumFields     []EnumField
-		CtxStuff       string
+		Description        string
+		FuncName           string
+		PrivateFunc        string
+		GetFunction        string
+		RetType            string
+		Namespace          string
+		Key                string
+		NativeLanguage     []string
+		ArgumentString     string
+		CallString         string
+		EnumTypeName       string
+		EnumFields         []EnumField
+		CtxStuff           string
+		ProtoStructFilling string
 	}{
 		f.Description,
 		funcName,
@@ -640,6 +571,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		enumTypeName,
 		enumFields,
 		"",
+		protoStructFilling,
 	}
 	generated := &generatedConfigCode{}
 	usedVariables := make(map[string]string)
@@ -915,6 +847,7 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 		// Don't need to do anything special for numerics
 		return val.String()
 	case protoreflect.MessageKind:
+		// TODO - Maps are a special thing - do they work here?
 		return g.translateProtoValue(parent, val.Message(), omitLiteralType)
 	default:
 		panic(fmt.Errorf("unsupported proto value type: %v", kind))
@@ -955,7 +888,11 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 	})
 	literalType := ""
 	if !omitLiteralType {
-		literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
+		if protoType.PackageAlias == "" {
+			literalType = fmt.Sprintf("&%s", protoType.Type)
+		} else {
+			literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
+		}
 	}
 	if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
 		slices.Sort(lines)
@@ -968,6 +905,7 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 
 // Takes a string and returns a double-quoted literal with applicable internal characters escaped, etc.
 // For strings with newlines, returns a raw string literal instead.
+// TODO - this type of thing might be a lot simpler with the AST library and the Printer
 func (g *goGenerator) toQuoted(s string) string {
 	if strings.Count(s, "\n") > 0 {
 		return fmt.Sprintf("`%s`", s)
@@ -1028,6 +966,9 @@ func (g *goGenerator) genClientFile(moduleRoot string) (err error) {
 	defer err2.Handle(&err)
 	// Template for generated client initialization code.
 	// TODO: consider an ergonomic way of letting caller know that static fallback will be used due to failed remote init
+	// TODO: use the retry-provider to keep attempting to connect
+	// TODO: log that we didn't connect
+	// TODO: change "not implemented" to like "Not connected to Lekko Server, using fallback"
 	const clientTemplateBody = `// Generated by Lekko. DO NOT EDIT.
 package lekko
 
@@ -1040,6 +981,7 @@ import (
 	{{- range $.Namespaces}}
 	{{nsToImport .}}{{end}}
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type LekkoClient struct {
@@ -1091,6 +1033,9 @@ func (p *noOpProvider) GetProto(ctx context.Context, key string, namespace strin
 func (p *noOpProvider) GetJSON(ctx context.Context, key string, namespace string, result interface{}) error {
 	return errors.New("not implemented")
 }
+func (p *noOpProvider) GetAny(ctx context.Context, key string, namespace string) (protoreflect.ProtoMessage, error) {
+	return nil, errors.New("not implemented")
+}
 func (p *noOpProvider) Close(ctx context.Context) error {
 	return nil
 }
@@ -1141,35 +1086,48 @@ func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
 	for i := 0; i < fields.Len(); i++ {
 		field := fields.Get(i)
 		fieldName := strcase.ToCamel(string(field.Name()))
-		var goType string
-		switch field.Kind() {
-		case protoreflect.BoolKind:
-			goType = "bool"
-		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-			goType = "int32"
-		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-			goType = "int64"
-		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-			goType = "uint32"
-		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-			goType = "uint64"
-		case protoreflect.FloatKind:
-			goType = "float32"
-		case protoreflect.DoubleKind:
-			goType = "float64"
-		case protoreflect.StringKind:
-			goType = "string"
-		case protoreflect.BytesKind:
-			goType = "[]byte"
-		case protoreflect.MessageKind, protoreflect.GroupKind:
-			goType = "*" + string(field.Message().Name())
-		case protoreflect.EnumKind:
-			goType = string(field.Enum().Name())
-		default:
-			goType = "interface{}"
-		}
+		goType := FieldDescriptorToGoTypeString(field)
 		result += fmt.Sprintf("\t%s %s;\n", fieldName, goType)
 	}
 	result += "}\n"
 	return result
+}
+
+func FieldDescriptorToGoTypeString(field protoreflect.FieldDescriptor) string {
+	var goType string
+	switch field.Kind() {
+	case protoreflect.BoolKind:
+		goType = "bool"
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		goType = "int32"
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		goType = "int64"
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		goType = "uint32"
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		goType = "uint64"
+	case protoreflect.FloatKind:
+		goType = "float32"
+	case protoreflect.DoubleKind:
+		goType = "float64"
+	case protoreflect.StringKind:
+		goType = "string"
+	case protoreflect.BytesKind:
+		goType = "[]byte"
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		if field.IsMap() {
+			keyField := field.MapKey()
+			valueField := field.MapValue()
+			goType = "map[" + FieldDescriptorToGoTypeString(keyField) + "]" + FieldDescriptorToGoTypeString(valueField)
+		} else if field.Message().FullName() == "google.protobuf.Duration" {
+			goType = "*durationpb.Duration"
+		} else {
+			goType = "*" + string(field.Message().Name())
+		}
+	case protoreflect.EnumKind:
+		goType = string(field.Enum().Name())
+	default:
+		goType = "interface{}"
+	}
+	return goType
 }

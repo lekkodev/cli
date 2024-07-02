@@ -39,6 +39,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -502,6 +503,10 @@ func convertLangCmd() *cobra.Command {
 
 func goToGo(ctx context.Context, f []byte) string {
 	registry, err := prototypes.RegisterDynamicTypes(nil)
+	if err != nil {
+		panic(err)
+	}
+	err = registry.AddFileDescriptor(durationpb.File_google_protobuf_duration_proto, false)
 	if err != nil {
 		panic(err)
 	}

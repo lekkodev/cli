@@ -18,6 +18,7 @@ import (
 	//"bytes"
 	"context"
 	"os"
+	"os/exec"
 
 	//"os/exec"
 	"testing"
@@ -124,6 +125,90 @@ func Test_goToGo(t *testing.T) {
 		}
 		if got := goToGo(ctx, f); got != string(f) {
 			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
+		}
+	})
+
+	t.Run("gertrude", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/gertrude.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
+		}
+	})
+}
+
+func DiffStyleOutput(a, b string) (string, error) {
+	// Create temporary files to hold the input strings
+	fileA, err := os.CreateTemp("", "fileA")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(fileA.Name())
+
+	fileB, err := os.CreateTemp("", "fileB")
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(fileB.Name())
+
+	// Write strings to temporary files
+	if _, err := fileA.WriteString(a); err != nil {
+		return "", err
+	}
+	if _, err := fileB.WriteString(b); err != nil {
+		return "", err
+	}
+
+	// Call the diff command
+	cmd := exec.Command("diff", "-u", fileA.Name(), fileB.Name()) //#nosec G204
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		// diff command returns non-zero exit code when files differ, ignore the error
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() != 1 {
+				return "", err
+			}
+		} else {
+			return "", err
+		}
+	}
+
+	return string(output), nil
+}
+
+func TestDefault(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/default.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
+		}
+	})
+}
+
+func TestDuration(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		ctx := context.Background()
+		f, err := os.ReadFile("./testdata/duration.go")
+		if err != nil {
+			panic(err)
+		}
+		if got := goToGo(ctx, f); got != string(f) {
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
 		}
 	})
 }

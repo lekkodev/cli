@@ -6,7 +6,7 @@ replace github.com/bazelbuild/buildtools => github.com/lekkodev/buildtools v0.0.
 
 require (
 	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240528213244-5fdc18b47eea.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.1-20240528213244-5fdc18b47eea.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.2-20240528213244-5fdc18b47eea.2
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/atotto/clipboard v0.1.4
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
@@ -28,24 +28,24 @@ require (
 	github.com/whilp/git-urls v1.0.0
 	github.com/zalando/go-keyring v0.2.4
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
-	golang.org/x/mod v0.14.0
+	golang.org/x/mod v0.17.0
 	golang.org/x/oauth2 v0.7.0
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.34.1-20230419180142-0694c10ef23c.1 // indirect
+	buf.build/gen/go/lekkodev/sdk/protocolbuffers/go v1.34.2-20230810202034-1c821065b9a0.2 // indirect
 	dario.cat/mergo v1.0.0 // indirect
-	github.com/Microsoft/go-winio v0.6.1 // indirect
+	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/ProtonMail/go-crypto v1.0.0 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
 	github.com/cli/safeexec v1.0.0 // indirect
-	github.com/cloudflare/circl v1.3.7 // indirect
-	github.com/cyphar/filepath-securejoin v0.2.4 // indirect
+	github.com/cloudflare/circl v1.3.9 // indirect
+	github.com/cyphar/filepath-securejoin v0.2.5 // indirect
 	github.com/danieljoos/wincred v1.2.0 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fatih/color v1.7.0 // indirect
@@ -68,18 +68,17 @@ require (
 	github.com/shurcooL/graphql v0.0.0-20230722043721-ed46e5a46466 // indirect
 	github.com/skeema/knownhosts v1.2.2 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
-	golang.org/x/tools v0.16.0 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
+	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/term v0.21.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20201019141844-1ed22bb0c154 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 )
 
 require (
-	github.com/cenkalti/backoff/v4 v4.2.0
+	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cli/oauth v0.9.0
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -88,5 +87,5 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stripe/skycfg v0.1.1-0.20220125220303-4571141c5da1
 	go.starlark.net v0.0.0-20231121155337-90ade8b19d09
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
 )
