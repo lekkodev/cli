@@ -118,9 +118,7 @@ func getExample() bool {
 	if err != nil {
 		return errors.Wrapf(err, "format %s", fullOutputPath)
 	}
-	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
-		return err
-	}
+	try.To(os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770))
 	f, err := os.Create(fullOutputPath)
 	if err != nil {
 		return errors.Wrapf(err, "create %s", fullOutputPath)
@@ -149,7 +147,9 @@ package lekko{{$.Namespace}}
 import (
 	"context"
 	"log"
+{{if $.ImportProtoReflect}}
 	"google.golang.org/protobuf/reflect/protoreflect"
+{{else}}{{end}}
 {{range $.ProtoImports}}
 	{{ . }}{{end}}
 	client "github.com/lekkodev/go-sdk/client"
@@ -188,6 +188,7 @@ import (
 	addStringsImport := false
 	addSlicesImport := false
 	StructDefMap := make(map[string]string)
+	importProtoReflect := false
 	for _, f := range features {
 		var ctxType *ProtoImport
 		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
@@ -208,6 +209,7 @@ import (
 				// This feels bad...
 				StructDefMap[f.Tree.Default.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
 			}
+			importProtoReflect = true
 		}
 
 		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
@@ -250,6 +252,7 @@ import (
 		AddStringsImport   bool
 		AddSlicesImport    bool
 		StructDefs         []string
+		ImportProtoReflect bool
 	}{
 		protoImports,
 		g.namespace,
@@ -258,6 +261,7 @@ import (
 		addStringsImport,
 		addSlicesImport,
 		structDefs,
+		importProtoReflect,
 	}
 
 	public, err := getContents(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", g.namespace), data)
@@ -287,7 +291,8 @@ func getContents(templateBody string, fileName string, data any) (string, error)
 	return string(formatted), nil
 }
 
-func (g *goGenerator) Gen(ctx context.Context) error {
+func (g *goGenerator) Gen(ctx context.Context) (err error) {
+	defer err2.Handle(&err)
 	r, err := repo.NewLocal(g.repoPath, nil)
 	if err != nil {
 		return errors.Wrap(err, "read config repository")
@@ -319,6 +324,10 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 			return err
 		}
 		features = append(features, f)
+	}
+	// Create intermediate directories for output
+	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
+		return err
 	}
 	public, private, err := g.GenNamespaceFiles(ctx, features, staticCtxType)
 	if err != nil {
