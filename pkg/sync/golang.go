@@ -53,6 +53,7 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -94,6 +95,7 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 			}
 			namespace := filepath.Base(filepath.Dir(p))
 			generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoPath, namespace)
+			generator.TypeRegistry = syncer.TypeRegistry
 			if err != nil {
 				return errors.Wrap(err, "initialize code generator")
 			}
@@ -341,6 +343,12 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 	if err != nil {
 		return nil, err
 	}
+	d := &durationpb.Duration{}
+	err = registry.RegisterMessage(d.ProtoReflect().Type())
+	if err != nil {
+		return nil, err
+	}
+	// TODO - need to add other well known types -- I hate proto
 	return &goSyncer{
 		moduleRoot: moduleRoot,
 		// Assumes target file is at <lekkoPath>/<namespace>/<file>
@@ -373,16 +381,10 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 	if err != nil {
 		return err
 	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return err
-	}
-
 	namespace, err := g.FileLocationToNamespace(ctx)
 	if err != nil {
 		return err
 	}
-
 	nsExists := false
 	// Need to keep track of which configs were synced
 	// Any configs that were already present but not synced should be removed
@@ -405,19 +407,19 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 			return errors.Wrap(err, "add namespace")
 		}
 	}
+
 	// TODO - is this where we write the structs to the proto files?
 	for _, configProto := range namespace.Features {
 		// create a new starlark file from a template (based on the config type)
 		var starBytes []byte
 		starImports := make([]*featurev1beta1.ImportStatement, 0)
-
 		if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
 			messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
 			if !found {
 				return fmt.Errorf("can't parse type url: %s", typeURL)
 			}
-			starInputs, err := r.BuildProtoStarInputs(ctx, messageType, feature.LatestNamespaceVersion())
+			starInputs, err := r.BuildProtoStarInputsWithTypes(ctx, messageType, feature.LatestNamespaceVersion(), g.TypeRegistry)
 			if err != nil {
 				return err
 			}
@@ -446,9 +448,8 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 				return err
 			}
 		}
-
 		// mutate starlark with the actual config
-		walker := static.NewWalker("", starBytes, registry, feature.NamespaceVersionV1Beta7)
+		walker := static.NewWalker("", starBytes, g.TypeRegistry, feature.NamespaceVersionV1Beta7)
 		newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
 			Key:  configProto.Key,
 			Type: configProto.GetType(),
@@ -466,10 +467,9 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 		if err := r.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
 			return errors.Wrap(err, "write after mutation")
 		}
-
 		// compile newly generated starlark file
 		_, err = r.Compile(ctx, &repo.CompileRequest{
-			Registry:        registry,
+			Registry:        g.TypeRegistry,
 			NamespaceFilter: namespace.Name,
 			FeatureFilter:   configProto.Key,
 		})
@@ -485,6 +485,224 @@ func (g *goSyncer) Sync(ctx context.Context, r repo.ConfigurationRepository) err
 		}
 	}
 
+	return nil
+}
+
+func reconstructProto(fdProto *descriptorpb.FileDescriptorProto) string {
+	var sb strings.Builder
+
+	sb.WriteString("syntax = \"proto3\";\n\n")
+
+	if pkg := fdProto.GetPackage(); pkg != "" {
+		sb.WriteString(fmt.Sprintf("package %s;\n\n", pkg))
+	}
+
+	for _, dep := range fdProto.Dependency {
+		sb.WriteString(fmt.Sprintf("import \"%s\";\n", dep))
+	}
+	sb.WriteString("\n")
+
+	for _, msg := range fdProto.MessageType {
+		reconstructMessage(&sb, msg, 0)
+	}
+
+	for _, enum := range fdProto.EnumType {
+		reconstructEnum(&sb, enum, 0)
+	}
+
+	for _, svc := range fdProto.Service {
+		reconstructService(&sb, svc, 0)
+	}
+
+	return sb.String()
+}
+
+func reconstructMessage(sb *strings.Builder, msg *descriptorpb.DescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%smessage %s {\n", indent, msg.GetName()))
+
+	// Identify map entry types to avoid nesting them
+	mapEntries := make(map[string]bool)
+	for _, field := range msg.Field {
+		if isMapEntry(field, msg) {
+			keyType, valueType := getMapTypes(field, msg)
+			sb.WriteString(fmt.Sprintf("%s  map<%s, %s> %s = %d;\n", indent, keyType, valueType, field.GetName(), field.GetNumber()))
+			mapEntries[getMapEntryName(field)] = true
+		} else {
+			fieldType := getFieldType(field)
+			fieldLabel := getFieldLabel(field)
+			sb.WriteString(fmt.Sprintf("%s  %s %s %s = %d;\n", indent, fieldLabel, fieldType, field.GetName(), field.GetNumber()))
+		}
+	}
+
+	// Include nested types, excluding map entries
+	for _, nestedMsg := range msg.NestedType {
+		if !mapEntries[nestedMsg.GetName()] {
+			reconstructMessage(sb, nestedMsg, indentLevel+1)
+		}
+	}
+
+	for _, enum := range msg.EnumType {
+		reconstructEnum(sb, enum, indentLevel+1)
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func reconstructEnum(sb *strings.Builder, enum *descriptorpb.EnumDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%senum %s {\n", indent, enum.GetName()))
+
+	for _, value := range enum.Value {
+		sb.WriteString(fmt.Sprintf("%s  %s = %d;\n", indent, value.GetName(), value.GetNumber()))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func reconstructService(sb *strings.Builder, svc *descriptorpb.ServiceDescriptorProto, indentLevel int) {
+	indent := strings.Repeat("  ", indentLevel)
+	sb.WriteString(fmt.Sprintf("%sservice %s {\n", indent, svc.GetName()))
+
+	for _, method := range svc.Method {
+		sb.WriteString(fmt.Sprintf("%s  rpc %s (%s) returns (%s);\n", indent, method.GetName(), trimPackage(method.GetInputType()), trimPackage(method.GetOutputType())))
+	}
+
+	sb.WriteString(fmt.Sprintf("%s}\n\n", indent))
+}
+
+func getFieldType(field *descriptorpb.FieldDescriptorProto) string {
+	switch *field.Type {
+	case descriptorpb.FieldDescriptorProto_TYPE_DOUBLE:
+		return "double"
+	case descriptorpb.FieldDescriptorProto_TYPE_FLOAT:
+		return "float"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT64:
+		return "int64"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT64:
+		return "uint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_INT32:
+		return "int32"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED64:
+		return "fixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_FIXED32:
+		return "fixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_BOOL:
+		return "bool"
+	case descriptorpb.FieldDescriptorProto_TYPE_STRING:
+		return "string"
+	case descriptorpb.FieldDescriptorProto_TYPE_BYTES:
+		return "bytes"
+	case descriptorpb.FieldDescriptorProto_TYPE_UINT32:
+		return "uint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_ENUM:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED32:
+		return "sfixed32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SFIXED64:
+		return "sfixed64"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT32:
+		return "sint32"
+	case descriptorpb.FieldDescriptorProto_TYPE_SINT64:
+		return "sint64"
+	case descriptorpb.FieldDescriptorProto_TYPE_MESSAGE:
+		return trimPackage(field.GetTypeName())
+	case descriptorpb.FieldDescriptorProto_TYPE_GROUP:
+		return "group"
+	default:
+		return "unknown"
+	}
+}
+
+func getFieldLabel(field *descriptorpb.FieldDescriptorProto) string {
+	if field.GetLabel() == descriptorpb.FieldDescriptorProto_LABEL_REPEATED {
+		return "repeated"
+	}
+	return ""
+}
+
+func isMapEntry(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) bool {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) && nested.GetOptions().GetMapEntry() {
+			return true
+		}
+	}
+	return false
+}
+
+func getMapEntryName(field *descriptorpb.FieldDescriptorProto) string {
+	parts := strings.Split(field.GetTypeName(), ".")
+	return parts[len(parts)-1]
+}
+
+func getMapTypes(field *descriptorpb.FieldDescriptorProto, msg *descriptorpb.DescriptorProto) (string, string) {
+	for _, nested := range msg.NestedType {
+		if nested.GetName() == getMapEntryName(field) {
+			var keyType, valueType string
+			for _, nestedField := range nested.Field {
+				if nestedField.GetName() == "key" {
+					keyType = getFieldType(nestedField)
+				} else if nestedField.GetName() == "value" {
+					valueType = getFieldType(nestedField)
+				}
+			}
+			return keyType, valueType
+		}
+	}
+	return "unknown", "unknown"
+}
+
+func trimPackage(typeName string) string {
+	if len(typeName) > 0 && typeName[0] == '.' {
+		return typeName[1:]
+	}
+	return typeName
+}
+
+func TypesToFileDescriptorSet(types *protoregistry.Types) *descriptorpb.FileDescriptorSet {
+	fdSet := &descriptorpb.FileDescriptorSet{}
+	files := &protoregistry.Files{}
+
+	types.RangeMessages(func(mt protoreflect.MessageType) bool {
+		file := mt.Descriptor().ParentFile()
+		_ = files.RegisterFile(file)
+		return true
+	})
+
+	files.RangeFiles(func(fileDesc protoreflect.FileDescriptor) bool {
+		fdProto := protodesc.ToFileDescriptorProto(fileDesc)
+		fdSet.File = append(fdSet.File, fdProto)
+		return true
+	})
+
+	return fdSet
+}
+
+func writeProtoFiles(fds *descriptorpb.FileDescriptorSet) map[string]string {
+	ret := make(map[string]string)
+	for _, fdProto := range fds.File {
+		protoContent := reconstructProto(fdProto)
+		ret[fdProto.GetName()] = protoContent
+	}
+	return ret
+}
+
+func WriteToRepo(ctx context.Context, r repo.ConfigurationRepository, types *protoregistry.Types) error {
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return err
+	}
+	fds := TypesToFileDescriptorSet(types)
+	files := writeProtoFiles(fds)
+	for fn, contents := range files {
+		if strings.HasSuffix(fn, "/config/v1beta1/lekko.proto") {
+			path := filepath.Join(rootMD.ProtoDirectory, fn)
+			err = r.WriteFile(path, []byte(contents), 0600)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -948,6 +1166,8 @@ func (g *goSyncer) exprToRule(expr ast.Expr, contextKeys map[string]string) *rul
 		return g.exprToRule(node.X, contextKeys)
 	case *ast.UnaryExpr:
 		return g.unaryExprToRule(node, contextKeys)
+	case *ast.SelectorExpr: // TODO - make sure this is args
+		return g.identToRule(node.Sel, contextKeys)
 	default:
 		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
 	}
