@@ -54,6 +54,7 @@ type ConfigurationStore interface {
 	Format(ctx context.Context, verbose bool) error
 	AddFeature(ctx context.Context, ns, featureName string, fType eval.ConfigType, protoMessageName string, defaultValue interface{}) (string, error)
 	BuildProtoStarInputs(ctx context.Context, messageName string, nv feature.NamespaceVersion) (*star.ProtoStarInputs, error)
+	BuildProtoStarInputsWithTypes(ctx context.Context, messageName string, nv feature.NamespaceVersion, types *protoregistry.Types) (*star.ProtoStarInputs, error)
 	RemoveFeature(ctx context.Context, ns, featureName string) error
 	AddNamespace(ctx context.Context, name string) error
 	RemoveNamespace(ctx context.Context, ns string) error
@@ -811,18 +812,7 @@ func (r *repository) addFeatureFromProto(ctx context.Context, messageName string
 	return star.RenderExistingProtoTemplate(*inputs, nv)
 }
 
-func (r *repository) BuildProtoStarInputs(ctx context.Context, messageName string, nv feature.NamespaceVersion) (*star.ProtoStarInputs, error) {
-	// Get the MessageType from the name, it involves loading the type registry again. This can probably be cached
-	// from the initial call when the type names were computed
-	rootMD, _, err := r.ParseMetadata(ctx)
-	if err != nil {
-		return nil, err
-	}
-	types, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return nil, err
-	}
-
+func (r *repository) BuildProtoStarInputsWithTypes(ctx context.Context, messageName string, nv feature.NamespaceVersion, types *protoregistry.Types) (*star.ProtoStarInputs, error) {
 	mt, err := types.FindMessageByName(protoreflect.FullName(messageName))
 	if err != nil {
 		return nil, err
@@ -898,6 +888,23 @@ func (r *repository) BuildProtoStarInputs(ctx context.Context, messageName strin
 		Packages: packageMap,
 		Fields:   fieldDefaults,
 	}, nil
+}
+
+func (r *repository) BuildProtoStarInputs(ctx context.Context, messageName string, nv feature.NamespaceVersion) (*star.ProtoStarInputs, error) {
+	// Get the MessageType from the name, it involves loading the type registry again. This can probably be cached
+	// from the initial call when the type names were computed
+	rootMD, _, err := r.ParseMetadata(ctx)
+	if err != nil {
+		return nil, err
+	}
+	types, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
+	if err != nil {
+		return nil, err
+	}
+	println("FML")
+	println(messageName)
+	fmt.Printf("%+v\n", types)
+	return r.BuildProtoStarInputsWithTypes(ctx, messageName, nv, types)
 }
 
 func packageAlias(pkgName string) string {

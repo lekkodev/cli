@@ -201,6 +201,7 @@ import (
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			msg, err := anypb.UnmarshalNew(f.Tree.Default, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
 			if err != nil {
+				fmt.Printf("%+v\n\n", g.TypeRegistry)
 				panic(errors.Wrapf(err, "%s", f.Tree.Default.TypeUrl))
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
@@ -292,8 +293,10 @@ func (g *goGenerator) Gen(ctx context.Context) error {
 		return errors.Wrap(err, "read config repository")
 	}
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
-	// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
-	g.TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	if g.TypeRegistry == nil {
+		// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
+		g.TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	}
 	nsMD, ok := nsMDs[g.namespace]
 	if !ok {
 		return fmt.Errorf("%s is not a namespace in the config repository", g.namespace)
