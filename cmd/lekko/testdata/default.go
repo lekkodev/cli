@@ -7,25 +7,6 @@ import (
 	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
-type OAuthDeviceConfig struct {
-	VerificationUri        string
-	PollingIntervalSeconds int64
-}
-
-type MiddlewareConfig struct {
-	TeamExemptProcedures   map[string]bool
-	RequireOauthProcedures map[string]bool
-}
-
-type RolloutConfig struct {
-	LockTtl           *durationpb.Duration
-	NumRolloutWorkers int64
-	RolloutTimeout    *durationpb.Duration
-	ChanBufferSize    int64
-	Delay             *durationpb.Duration
-	Jitter            *durationpb.Duration
-}
-
 type DBConfig struct {
 	MaxIdleConns int64
 	MaxOpenConns int64
@@ -40,11 +21,30 @@ type MemcachedConfig struct {
 	TimeoutMs    int64
 }
 
+type MiddlewareConfig struct {
+	TeamExemptProcedures   map[string]bool
+	RequireOauthProcedures map[string]bool
+}
+
+type OAuthDeviceConfig struct {
+	VerificationUri        string
+	PollingIntervalSeconds int64
+}
+
 type RegistrationConfig struct {
 	RegistrationBaseUrl    string
 	TokenExpirationMinutes int64
 	EmailTemplate          string
 	EmailSubject           string
+}
+
+type RolloutConfig struct {
+	LockTtl           *durationpb.Duration
+	NumRolloutWorkers int64
+	RolloutTimeout    *durationpb.Duration
+	ChanBufferSize    int64
+	Delay             *durationpb.Duration
+	Jitter            *durationpb.Duration
 }
 
 type RolloutContentsConfig struct {
@@ -500,19 +500,18 @@ func getRolloutContentsProto(env string) *RolloutContentsConfig {
 func getRollout(env string) *RolloutConfig {
 	if env == "staging" {
 		return &RolloutConfig{
+			ChanBufferSize:    100,
 			Delay:             &durationpb.Duration{Seconds: 180},
 			Jitter:            &durationpb.Duration{Seconds: 30},
-			ChanBufferSize:    100,
 			LockTtl:           &durationpb.Duration{Seconds: 60},
 			NumRolloutWorkers: 250,
 			RolloutTimeout:    &durationpb.Duration{Seconds: 60},
 		}
 	}
 	return &RolloutConfig{
-
+		ChanBufferSize:    100,
 		Delay:             &durationpb.Duration{Seconds: 900},
 		Jitter:            &durationpb.Duration{Seconds: 60},
-		ChanBufferSize:    100,
 		LockTtl:           &durationpb.Duration{Seconds: 300},
 		NumRolloutWorkers: 250,
 		RolloutTimeout:    &durationpb.Duration{Seconds: 480},

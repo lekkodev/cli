@@ -179,7 +179,6 @@ func DiffStyleOutput(a, b string) (string, error) {
 	return string(output), nil
 }
 
-/* I'm doing stupid things with ordering now, which breaks this
 func TestDefault(t *testing.T) {
 	t.Run("default", func(t *testing.T) {
 		ctx := context.Background()
@@ -196,7 +195,6 @@ func TestDefault(t *testing.T) {
 		}
 	})
 }
-*/
 
 func TestDuration(t *testing.T) {
 	t.Run("default", func(t *testing.T) {

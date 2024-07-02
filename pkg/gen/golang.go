@@ -176,6 +176,8 @@ import (
 )
 {{end}}
 
+{{range $.StructDefs}}
+{{ . }}{{end}}
 {{range $.PrivateFuncStrings}}
 {{ . }}{{end}}`
 
@@ -184,6 +186,7 @@ import (
 	protoImportSet := make(map[string]*ProtoImport)
 	addStringsImport := false
 	addSlicesImport := false
+	StructDefMap := make(map[string]string)
 	for _, f := range features {
 		var ctxType *ProtoImport
 		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
@@ -202,7 +205,7 @@ import (
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
 				// This feels bad...
-				privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor()))
+				StructDefMap[f.Tree.Default.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
 			}
 		}
 
@@ -232,6 +235,12 @@ import (
 		protoImports = append(protoImports, fmt.Sprintf(`%s "%s"`, imp.PackageAlias, imp.ImportPath))
 	}
 
+	var structDefs []string
+	for _, sd := range StructDefMap {
+		structDefs = append(structDefs, sd)
+	}
+	sort.Strings(structDefs)
+
 	data := struct {
 		ProtoImports       []string
 		Namespace          string
@@ -239,6 +248,7 @@ import (
 		PrivateFuncStrings []string
 		AddStringsImport   bool
 		AddSlicesImport    bool
+		StructDefs         []string
 	}{
 		protoImports,
 		g.namespace,
@@ -246,6 +256,7 @@ import (
 		privateFuncStrings,
 		addStringsImport,
 		addSlicesImport,
+		structDefs,
 	}
 
 	public, err := getContents(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", g.namespace), data)
@@ -1099,8 +1110,11 @@ func FieldDescriptorToGoTypeString(field protoreflect.FieldDescriptor) string {
 	case protoreflect.BytesKind:
 		goType = "[]byte"
 	case protoreflect.MessageKind, protoreflect.GroupKind:
-		// TODO HANDLE MAPS!
-		if field.Message().FullName() == "google.protobuf.Duration" {
+		if field.IsMap() {
+			keyField := field.MapKey()
+			valueField := field.MapValue()
+			goType = "map[" + FieldDescriptorToGoTypeString(keyField) + "]" + FieldDescriptorToGoTypeString(valueField)
+		} else if field.Message().FullName() == "google.protobuf.Duration" {
 			goType = "*durationpb.Duration"
 		} else {
 			goType = "*" + string(field.Message().Name())
