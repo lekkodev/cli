@@ -23,6 +23,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/briandowns/spinner"
+	"github.com/cli/browser"
 	"github.com/go-git/go-git/v5"
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
@@ -305,10 +306,18 @@ func initCmd() *cobra.Command {
 
 			nextSteps["API key"] = append([]string{fmt.Sprintf("Go to https://app.lekko.com/teams/%s/admin?tab=APIKeys to generate an API key", owner)}, nextSteps["API key"]...)
 
-			// Output next steps
+			// TODO: If possible, lekko-fy message and URL
+			docURL := "https://docs.lekko.com/#add-lekko-build-decorators"
+			fmt.Printf("\nPress %s to open the getting started documentation...", logging.Bold("[Enter]"))
+			_ = waitForEnter(os.Stdin)
+			if err := browser.OpenURL(docURL); err != nil {
+				return errors.Wrapf(err, "failed to open browser at url %s", docURL)
+			}
+
+			// Output next steps/references
 			var sb strings.Builder
 			if len(nextSteps) > 0 {
-				sb.WriteString("Next steps:\n")
+				sb.WriteString("References:\n")
 				sb.WriteString("-----------\n")
 				for category, steps := range nextSteps {
 					if len(steps) > 0 {
