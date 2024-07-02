@@ -36,6 +36,7 @@ import (
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
+	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -1053,8 +1054,8 @@ type LekkoClient struct {
 // If these values are missing or if there are any connection errors, the static fallbacks will be used.
 func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoClient {
 	apiKey := os.Getenv("LEKKO_API_KEY")
-	repoOwner := os.Getenv("LEKKO_REPOSITORY_OWNER")
-	repoName := os.Getenv("LEKKO_REPOSITORY_NAME")
+	repoOwner := "{{$.RepositoryOwner}}"
+	repoName := "{{$.RepositoryName}}"
 	opts = append(opts, client.WithAPIKey(apiKey))
 	provider, err := client.CachedAPIProvider(ctx, &client.RepositoryKey{
 		OwnerName: repoOwner,
@@ -1096,10 +1097,18 @@ func (p *noOpProvider) Close(ctx context.Context) error {
 }
 `
 
+	// TODO: Refactor to just pass dotlekko when constructing generator
+	dot := try.To1(dotlekko.ReadDotLekko(""))
+	repoOwner, repoName := dot.GetRepoInfo()
+
 	clientTemplateData := struct {
-		Namespaces []string
+		Namespaces      []string
+		RepositoryOwner string
+		RepositoryName  string
 	}{
 		[]string{},
+		repoOwner,
+		repoName,
 	}
 	clientTemplateFuncs := map[string]any{
 		"nsToImport": func(ns string) string {
