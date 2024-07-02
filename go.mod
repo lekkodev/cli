@@ -2,8 +2,6 @@ module github.com/lekkodev/cli
 
 go 1.22
 
-replace github.com/lekkodev/go-sdk => ../go-sdk
-
 replace github.com/bazelbuild/buildtools => github.com/lekkodev/buildtools v0.0.0-20240325231538-96eefd799042
 
 require (
