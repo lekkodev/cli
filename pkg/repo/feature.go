@@ -901,9 +901,6 @@ func (r *repository) BuildProtoStarInputs(ctx context.Context, messageName strin
 	if err != nil {
 		return nil, err
 	}
-	println("FML")
-	println(messageName)
-	fmt.Printf("%+v\n", types)
 	return r.BuildProtoStarInputsWithTypes(ctx, messageName, nv, types)
 }
 

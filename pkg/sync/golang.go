@@ -344,7 +344,10 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 		return nil, err
 	}
 	d := &durationpb.Duration{}
-	registry.RegisterMessage(d.ProtoReflect().Type())
+	err = registry.RegisterMessage(d.ProtoReflect().Type())
+	if err != nil {
+		return nil, err
+	}
 	// TODO - need to add other well known types -- I hate proto
 	return &goSyncer{
 		moduleRoot: moduleRoot,
