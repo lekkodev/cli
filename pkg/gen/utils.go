@@ -26,6 +26,7 @@ type ProtoImport struct {
 	PackageAlias string
 	ImportPath   string
 	Type         string
+	TypeUrl      string
 }
 
 // This function handles both the google.protobuf.Any.TypeURL variable
@@ -62,5 +63,5 @@ func UnpackProtoType(moduleRoot, outputPath, typeURL string) *ProtoImport {
 		prefix = "durationpb"
 	default:
 	}
-	return &ProtoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1]}
+	return &ProtoImport{PackageAlias: prefix, ImportPath: importPath, Type: typeParts[len(typeParts)-1], TypeUrl: typeURL}
 }
