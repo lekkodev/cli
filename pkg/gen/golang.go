@@ -1014,8 +1014,8 @@ type LekkoClient struct {
 }
 
 // Initializes the Lekko SDK client.
-// For remote configs to be fetched correctly, the LEKKO_API_KEY, LEKKO_REPOSITORY_OWNER, and LEKKO_REPOSITORY_NAME env variables are required.
-// If these values are missing or if there are any connection errors, the static fallbacks will be used.
+// For remote configs to be fetched correctly, the LEKKO_API_KEY env variable is required.
+// If the env variable is missing or if there are any connection errors, the static fallbacks will be used.
 func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoClient {
 	apiKey := os.Getenv("LEKKO_API_KEY")
 	repoOwner := "{{$.RepositoryOwner}}"
