@@ -195,7 +195,7 @@ import (
 		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
 		if err == nil {
 			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
-			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name())}
+			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name()), TypeUrl: "type.googleapis.com/" + messagePath}
 		} else {
 			ctxType = staticCtxType
 		}
@@ -376,7 +376,7 @@ func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
 	 log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
-  	result, err := c.{{$.GetFunction}}(args, "{{$.Namespace}}", "{{$.Key}}")
+  	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	  	return result
   	}
@@ -398,7 +398,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 		{{ $.CtxStuff }}
     ret := &{{$.RetType}}{}
 	log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
-	result, err := c.GetAny(args, "{{$.Namespace}}", "{{$.Key}}")
+	result, err := c.GetAny(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	{{$.ProtoStructFilling}}
 			return ret
@@ -596,14 +596,24 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			data.ArgumentString = fmt.Sprintf("args *%s", staticCtxType.Type)
 		}
 		data.CallString = "args"
+		data.CtxStuff = "ctx := context.Background()\n"
+		mt, err := g.TypeRegistry.FindMessageByURL(staticCtxType.TypeUrl)
+		if err != nil {
+			panic(err)
+		}
+		for i := 0; i < mt.Descriptor().Fields().Len(); i++ {
+			fd := mt.Descriptor().Fields().Get(i)
+			fieldName := string(fd.Name())
+			data.CtxStuff = data.CtxStuff + fmt.Sprintf("ctx = client.Add(ctx, \"%s\", args.%s)\n", fieldName, strcase.ToCamel(fieldName))
+		}
 	} else {
-		data.CtxStuff = "args := context.Background()\n"
+		data.CtxStuff = "ctx := context.Background()\n"
 		data.NativeLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		var ctxAddLines []string
 		for f, t := range usedVariables {
 			arguments = append(arguments, fmt.Sprintf("%s %s", strcase.ToLowerCamel(f), t))
-			ctxAddLines = append(ctxAddLines, fmt.Sprintf("args = client.Add(args, \"%s\", %s)", f, strcase.ToLowerCamel(f)))
+			ctxAddLines = append(ctxAddLines, fmt.Sprintf("ctx = client.Add(ctx, \"%s\", %s)", f, strcase.ToLowerCamel(f)))
 		}
 		// TODO: Sorting by name might not be the best solution for long-term UX... but it's simple and it works for now
 		slices.Sort(arguments)

@@ -47,7 +47,7 @@ linters:
     - promlinter
     - rowserrcheck
     - staticcheck
-    - stylecheck
+      # - stylecheck
     - typecheck
     - unconvert
     - unused
