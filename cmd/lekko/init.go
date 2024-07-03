@@ -298,6 +298,7 @@ func initCmd() *cobra.Command {
 				return errors.Wrap(err, "codegen for default namespace")
 			}
 			spin.Stop()
+			fmt.Printf("%s Successfully generated example code in %s.\n", successCheck, dot.LekkoPath)
 
 			// Post-gen steps
 			spin.Suffix = " Running post-codegen steps..."
