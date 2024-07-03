@@ -119,12 +119,39 @@ type Namespace struct {
 	Features []*featurev1beta1.Feature
 }
 
+func GetDependencies(descriptor *descriptorpb.DescriptorProto) []string {
+	dependencies := make(map[string]struct{})
+
+	for _, field := range descriptor.GetField() {
+		if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+			if !isMapEntry(field, descriptor) {
+				dependencies[field.GetTypeName()] = struct{}{}
+			}
+		}
+	}
+
+	for _, nested := range descriptor.GetNestedType() {
+		nestedDeps := GetDependencies(nested)
+		for _, dep := range nestedDeps {
+			dependencies[dep] = struct{}{}
+		}
+	}
+
+	// Convert map to slice
+	var depList []string
+	for dep := range dependencies {
+		depList = append(depList, strings.ToLower(strings.Replace(dep[1:], ".", "/", -1)+".proto"))
+	}
+
+	return depList
+}
+
 func (g *goSyncer) RegisterDescriptor(d *descriptorpb.DescriptorProto, namespace string) error {
 	fileDescriptorProto := &descriptorpb.FileDescriptorProto{
 		Name:        proto.String(fmt.Sprintf("%s/config/v1beta1/lekko.proto", namespace)),
 		Package:     proto.String(fmt.Sprintf("%s.config.v1beta1", namespace)),
 		MessageType: []*descriptorpb.DescriptorProto{d},
-		Dependency:  []string{"google/protobuf/duration.proto"},
+		Dependency:  GetDependencies(d),
 	}
 
 	fileDescriptor, err := protodesc.NewFile(fileDescriptorProto, protoregistry.GlobalFiles)
