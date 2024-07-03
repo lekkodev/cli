@@ -67,12 +67,20 @@ func initCmd() *cobra.Command {
 				fmt.Printf("\n")
 			}
 			fmt.Println("")
-			// TODO: Ask for confirmation and if no, allow manual override
 
-			_, err = dotlekko.ReadDotLekko("")
+			// If dotlekko already exists, ask if want to re-run; if yes, try use prevDot info for nicer defaults
+			prevDot, err := dotlekko.ReadDotLekko("")
 			if err == nil {
-				fmt.Println("Lekko is already initialized in this project.")
-				return nil
+				rerun := false
+				if err := survey.AskOne(&survey.Confirm{
+					Message: "A Lekko configuration file already exists. Re-run initialization?",
+					Default: rerun,
+				}, &rerun); err != nil {
+					return errors.Wrap(err, "confirm rerun")
+				}
+				if !rerun {
+					return nil
+				}
 			}
 
 			if lekkoPath == "" {
@@ -83,6 +91,9 @@ func initCmd() *cobra.Command {
 				if fi, err := os.Stat("internal"); err == nil && fi.IsDir() && nlProject.Language == native.LangGo {
 					lekkoPath = "internal/lekko"
 				}
+				if prevDot != nil && prevDot.LekkoPath != "" {
+					lekkoPath = prevDot.LekkoPath
+				}
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Location for Lekko files (relative to project root):",
 					Default: lekkoPath,
@@ -92,6 +103,7 @@ func initCmd() *cobra.Command {
 					if !ok {
 						return errors.New("invalid path")
 					}
+					// TODO: Remove this check if we remove the requirement from our codegen/transformer tools
 					if !strings.HasSuffix(s, "lekko") {
 						return errors.New("path must end with 'lekko'")
 					}
@@ -119,6 +131,9 @@ func initCmd() *cobra.Command {
 				}
 				if owner != "" {
 					repoName = fmt.Sprintf("%s/lekko-configs", owner)
+				}
+				if prevDot != nil && prevDot.Repository != "" {
+					repoName = prevDot.Repository
 				}
 				try.To(survey.AskOne(&survey.Input{
 					Message: "Lekko repository name, for example `my-org/lekko-configs`:",
