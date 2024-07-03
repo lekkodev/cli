@@ -124,7 +124,9 @@ func GetDependencies(descriptor *descriptorpb.DescriptorProto) []string {
 
 	for _, field := range descriptor.GetField() {
 		if field.GetType() == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
-			dependencies[field.GetTypeName()] = struct{}{}
+			if !isMapEntry(field, descriptor) {
+				dependencies[field.GetTypeName()] = struct{}{}
+			}
 		}
 	}
 
