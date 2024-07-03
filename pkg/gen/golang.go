@@ -599,8 +599,6 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		data.CtxStuff = "ctx := context.Background()\n"
 		mt, err := g.TypeRegistry.FindMessageByURL(staticCtxType.TypeUrl)
 		if err != nil {
-			fmt.Printf("%#v\n", staticCtxType)
-			println(staticCtxType.TypeUrl)
 			panic(err)
 		}
 		for i := 0; i < mt.Descriptor().Fields().Len(); i++ {
