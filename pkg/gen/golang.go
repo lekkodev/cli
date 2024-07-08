@@ -146,13 +146,14 @@ package lekko{{$.Namespace}}
 
 import (
 	"context"
-	"log"
+	"errors"
 {{if $.ImportProtoReflect}}
 	"google.golang.org/protobuf/reflect/protoreflect"
 {{else}}{{end}}
 {{range $.ProtoImports}}
 	{{ . }}{{end}}
-	client "github.com/lekkodev/go-sdk/client"
+	"github.com/lekkodev/go-sdk/client"
+	"github.com/lekkodev/go-sdk/pkg/debug"
 )
 
 type LekkoClient struct {
@@ -375,13 +376,16 @@ func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 		public: `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	{{ $.CtxStuff }}
-	 log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
   	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	  	return result
   	}
-	log.Printf("Lekko static fallback with error: %s\n", err)
-  	return {{$.PrivateFunc}}({{$.CallString}})
+   	result = {{$.PrivateFunc}}({{$.CallString}})
+    if !errors.Is(err, client.ErrNoOpProvider) {
+    	debug.LogInfo("Lekko evaluation error", "err", err)
+    }
+    debug.LogInfo("Lekko fallback", "result", result)
+  	return result
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
@@ -395,16 +399,19 @@ func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
 	return &configCodeTemplate{
 		public: `// {{$.Description}}
 func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
-		{{ $.CtxStuff }}
+	{{ $.CtxStuff }}
     ret := &{{$.RetType}}{}
-	log.Printf("Lekko getting {{$.Namespace}}.{{$.Key}}\n" )
 	result, err := c.GetAny(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	{{$.ProtoStructFilling}}
-			return ret
-		}
-		log.Printf("Lekko static fallback with error: %s\n", err)
-		return {{$.PrivateFunc}}({{$.CallString}})
+		return ret
+	}
+	result = {{$.PrivateFunc}}({{$.CallString}})
+    if !errors.Is(err, client.ErrNoOpProvider) {
+    	debug.LogInfo("Lekko evaluation error", "err", err)
+    }
+    debug.LogInfo("Lekko fallback", "result", result)
+  	return result
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
@@ -619,7 +626,9 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		slices.Sort(arguments)
 		slices.Sort(ctxAddLines)
 		data.ArgumentString = strings.Join(arguments, ", ")
-		data.CtxStuff += strings.Join(ctxAddLines, "\n")
+		if len(ctxAddLines) > 0 {
+			data.CtxStuff += strings.Join(ctxAddLines, "\n")
+		}
 		var keys []string
 		for f := range usedVariables {
 			keys = append(keys, strcase.ToLowerCamel(f))
@@ -997,14 +1006,10 @@ package lekko
 
 import (
 	"context"
-	"errors"
-	"os"
 
 	client "github.com/lekkodev/go-sdk/client"
 	{{- range $.Namespaces}}
 	{{nsToImport .}}{{end}}
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 type LekkoClient struct {
@@ -1017,50 +1022,14 @@ type LekkoClient struct {
 // For remote configs to be fetched correctly, the LEKKO_API_KEY env variable is required.
 // If the env variable is missing or if there are any connection errors, the static fallbacks will be used.
 func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoClient {
-	apiKey := os.Getenv("LEKKO_API_KEY")
 	repoOwner := "{{$.RepositoryOwner}}"
 	repoName := "{{$.RepositoryName}}"
-	opts = append(opts, client.WithAPIKey(apiKey))
-	provider, err := client.CachedAPIProvider(ctx, &client.RepositoryKey{
-		OwnerName: repoOwner,
-		RepoName: repoName,
-	}, opts...)
-	if err != nil {
-		provider = &noOpProvider{}
-	}
-	cli, close := client.NewClient(provider)
+	cli, close := client.NewClientFromEnv(ctx, repoOwner, repoName, opts...)
 	return &LekkoClient{
 		{{- range $.Namespaces}}
 		{{nsToClientField .}},{{end}}
 		Close: close,
 	}
-}
-
-type noOpProvider struct {}
-
-func (p *noOpProvider) GetBool(ctx context.Context, key string, namespace string) (bool, error) {
-	return false, errors.New("not implemented")
-}
-func (p *noOpProvider) GetInt(ctx context.Context, key string, namespace string) (int64, error) {
-	return 0, errors.New("not implemented")
-}
-func (p *noOpProvider) GetFloat(ctx context.Context, key string, namespace string) (float64, error) {
-	return 0, errors.New("not implemented")
-}
-func (p *noOpProvider) GetString(ctx context.Context, key string, namespace string) (string, error) {
-	return "", errors.New("not implemented")
-}
-func (p *noOpProvider) GetProto(ctx context.Context, key string, namespace string, result proto.Message) error {
-	return errors.New("not implemented")
-}
-func (p *noOpProvider) GetJSON(ctx context.Context, key string, namespace string, result interface{}) error {
-	return errors.New("not implemented")
-}
-func (p *noOpProvider) GetAny(ctx context.Context, key string, namespace string) (protoreflect.ProtoMessage, error) {
-	return nil, errors.New("not implemented")
-}
-func (p *noOpProvider) Close(ctx context.Context) error {
-	return nil
 }
 `
 
