@@ -32,6 +32,7 @@ message Feature {
   Tree tree = 3;
   FeatureType type = 4;
   google.protobuf.Struct metadata = 7;
+  string signature_type_url = 8;
 }
 
 // Enumerates the canonical types that lekko supports
