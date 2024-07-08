@@ -9,11 +9,11 @@ func getOne(args *OneArgs) string {
 	return "one"
 }
 
-type TwoArgs struct {
+type AnyName struct {
 	Two string
 }
 
 // Two
-func getTwo(args *TwoArgs) string {
+func getTwo(args *AnyName) string {
 	return "two"
 }

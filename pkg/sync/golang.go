@@ -225,11 +225,14 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				}
 				privateName := x.Name.Name // TODO - not sure how we use this, but does it work right with letting people just declare GetFoo and letting them be happy?
 				configName := strcase.ToKebab(privateName[3:])
-
+				feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, " "), Tree: &featurev1beta1.Tree{}}
+				namespace.Features = append(namespace.Features, feature)
 				contextKeys := make(map[string]string)
+
 				as := FindArgStruct(x, pf)
 				if as != nil {
 					d := StructToDescriptor(as)
+					feature.SignatureTypeUrl = fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.%s", namespace.Name, *d.Name)
 					err := g.RegisterDescriptor(d, namespace.Name)
 					if err != nil {
 						fmt.Println(err)
@@ -254,8 +257,7 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 				if len(results) != 1 {
 					panic("must have one return type")
 				}
-				feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, " "), Tree: &featurev1beta1.Tree{}}
-				namespace.Features = append(namespace.Features, feature)
+
 				switch t := results[0].Type.(type) {
 				case *ast.Ident:
 					switch t.Name {

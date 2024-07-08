@@ -191,13 +191,22 @@ import (
 	importProtoReflect := false
 	for _, f := range features {
 		var ctxType *ProtoImport
-		messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
-		mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
-		if err == nil {
-			privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
-			ctxType = &ProtoImport{Type: string(mt.Descriptor().Name()), TypeUrl: "type.googleapis.com/" + messagePath}
-		} else {
-			ctxType = staticCtxType
+		if f.SignatureTypeUrl != "" {
+			mt, err := g.TypeRegistry.FindMessageByURL(f.SignatureTypeUrl)
+			if err == nil {
+				privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
+				ctxType = &ProtoImport{Type: string(mt.Descriptor().Name()), TypeUrl: f.SignatureTypeUrl}
+			}
+		}
+		if ctxType == nil {
+			messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
+			mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
+			if err == nil {
+				privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
+				ctxType = &ProtoImport{Type: string(mt.Descriptor().Name()), TypeUrl: "type.googleapis.com/" + messagePath}
+			} else {
+				ctxType = staticCtxType
+			}
 		}
 
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
