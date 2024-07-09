@@ -420,7 +420,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
     	debug.LogInfo("Lekko evaluation error", "err", err)
     }
     debug.LogInfo("Lekko fallback", "result", ret)
-  	return ret
+    return ret
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
