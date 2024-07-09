@@ -372,10 +372,13 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 	if err != nil {
 		return nil, err
 	}
-	d := &durationpb.Duration{}
-	err = registry.RegisterMessage(d.ProtoReflect().Type())
-	if err != nil {
-		return nil, err
+	// Attempt to register duration since it's a well-known type
+	if _, err := registry.FindMessageByName("google.protobuf.Duration"); err == protoregistry.NotFound {
+		d := &durationpb.Duration{}
+		err = registry.RegisterMessage(d.ProtoReflect().Type())
+		if err != nil {
+			return nil, errors.Wrap(err, "pre-register Duration")
+		}
 	}
 	// TODO - need to add other well known types -- I hate proto
 	return &goSyncer{
