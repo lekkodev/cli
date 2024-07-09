@@ -415,12 +415,12 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 	{{$.ProtoStructFilling}}
 		return ret
 	}
-	result = {{$.PrivateFunc}}({{$.CallString}})
+	ret = {{$.PrivateFunc}}({{$.CallString}})
     if !errors.Is(err, client.ErrNoOpProvider) {
     	debug.LogInfo("Lekko evaluation error", "err", err)
     }
-    debug.LogInfo("Lekko fallback", "result", result)
-  	return result
+    debug.LogInfo("Lekko fallback", "result", ret)
+    return ret
 }`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
