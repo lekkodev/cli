@@ -266,16 +266,12 @@ func repoInitCmd() *cobra.Command {
 			if rs.GetGithubUser() == owner {
 				owner = "" // create repo expects an empty owner for personal accounts
 			}
-
-			ghRepo, err := ghCli.CreateRepo(ctx, owner, repoName, description, true)
+			repo, err := ghCli.Init(ctx, owner, repoName, description, true)
 			if err != nil {
 				return errors.Wrap(err, "Failed to create GitHub repository")
 			}
-			if err := repo.MirrorAtURL(ctx, rs, ghRepo.GetCloneURL()); err != nil {
-				return errors.Wrapf(err, "Failed to mirror at URL: %s", ghRepo.GetCloneURL())
-			}
 
-			fmt.Printf("Mirrored repo at URL %s\n", ghRepo.GetCloneURL())
+			fmt.Printf("Initialized repo at %s\n", repo.GetCloneURL())
 			return nil
 		},
 	}
