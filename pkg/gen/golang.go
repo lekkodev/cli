@@ -1103,26 +1103,29 @@ func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
 }
 
 func FieldDescriptorToGoTypeString(field protoreflect.FieldDescriptor) string {
-	var goType string
+	goType := ""
+	if field.Cardinality() == protoreflect.Repeated {
+		goType = "[]"
+	}
 	switch field.Kind() {
 	case protoreflect.BoolKind:
-		goType = "bool"
+		goType += "bool"
 	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		goType = "int32"
+		goType += "int32"
 	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		goType = "int64"
+		goType += "int64"
 	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		goType = "uint32"
+		goType += "uint32"
 	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		goType = "uint64"
+		goType += "uint64"
 	case protoreflect.FloatKind:
-		goType = "float32"
+		goType += "float32"
 	case protoreflect.DoubleKind:
-		goType = "float64"
+		goType += "float64"
 	case protoreflect.StringKind:
-		goType = "string"
+		goType += "string"
 	case protoreflect.BytesKind:
-		goType = "[]byte"
+		goType += "[]byte"
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		if field.IsMap() {
 			keyField := field.MapKey()
