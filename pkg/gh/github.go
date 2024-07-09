@@ -71,15 +71,14 @@ func (gc *GithubClient) GetUserEmails(ctx context.Context) ([]*github.UserEmail,
 }
 
 // Init will create a new github repo based off of lekko's config repo template.
-func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, private bool) (string, error) {
+func (gc *GithubClient) Init(ctx context.Context, owner, repoName, description string, private bool) (*github.Repository, error) {
 	repo, resp, err := gc.Repositories.Get(ctx, owner, repoName)
 	if err == nil {
-		return repo.GetCloneURL(), errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
+		return repo, errors.Wrapf(git.ErrRepositoryAlreadyExists, "repo: %s", repo.GetCloneURL())
 	}
 	if resp != nil && resp.StatusCode != http.StatusNotFound { // some other error occurred
-		return "", errors.New(SanitizedErrorMessage(err))
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
-	description := defaultDescription
 	repo, _, err = gc.Repositories.CreateFromTemplate(ctx, templateOwner, templateRepo, &github.TemplateRepoRequest{
 		Name:        &repoName,
 		Owner:       &owner,
@@ -87,9 +86,9 @@ func (gc *GithubClient) Init(ctx context.Context, owner, repoName string, privat
 		Private:     &private,
 	})
 	if err != nil {
-		return "", errors.New(SanitizedErrorMessage(err))
+		return nil, errors.New(SanitizedErrorMessage(err))
 	}
-	return repo.GetCloneURL(), nil
+	return repo, nil
 }
 
 func (gc *GithubClient) CreateRepo(ctx context.Context, owner, repoName string, description string, private bool) (*github.Repository, error) {
