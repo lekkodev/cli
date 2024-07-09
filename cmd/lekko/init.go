@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -44,6 +45,10 @@ func initCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
 			successCheck := logging.Green("\u2713")
+			wd, err := os.Getwd()
+			if err != nil {
+				return errors.Wrap(err, "get working directory")
+			}
 			spin := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 
 			nlProject, err := native.DetectNativeLang("")
@@ -73,13 +78,50 @@ func initCmd() *cobra.Command {
 			if err == nil {
 				rerun := false
 				if err := survey.AskOne(&survey.Confirm{
-					Message: "A Lekko configuration file already exists. Re-run initialization?",
+					Message: "A Lekko configuration file (.lekko) already exists. Re-run initialization?",
 					Default: rerun,
 				}, &rerun); err != nil {
 					return errors.Wrap(err, "confirm rerun")
 				}
 				if !rerun {
 					return nil
+				}
+			}
+
+			owner := ""
+			if repoName == "" {
+				// Auto-detect owner of current repo
+				// If no remote, fail and prompt user to push
+				needPush := false
+				if gitRepo, err := git.PlainOpen("."); err == nil {
+					if remote, err := gitRepo.Remote("origin"); err == nil && len(remote.Config().URLs) > 0 {
+						url := remote.Config().URLs[0]
+						currentRepoName := ""
+						if strings.HasPrefix(url, "https://github.com/") {
+							currentRepoName = strings.TrimPrefix(url, "https://github.com/")
+						} else if strings.HasPrefix(url, "git@github.com:") {
+							currentRepoName = strings.TrimPrefix(url, "git@github.com:")
+						}
+						parts := strings.Split(currentRepoName, "/")
+						if len(parts) == 2 {
+							owner = strings.Split(currentRepoName, "/")[0]
+						}
+					} else if remote == nil || len(remote.Config().URLs) == 0 {
+						needPush = true
+					}
+				} else {
+					needPush = true
+				}
+				if needPush {
+					fmt.Printf("Lekko needs to be initialized on a repository stored on GitHub. Please push your project to GitHub first and then rerun %s.\n\n", logging.Bold("lekko init"))
+					fmt.Printf("Example:\n--------\nCreate a repository on https://github.com/new\ngit init\ngit add .\ngit commit -m \"Initialize project\"\ngit branch -M main\ngit remote add origin git@github.com:<YOUR_ORG>/%s.git\ngit branch -M main\ngit push -u origin main\n", filepath.Base(wd))
+					os.Exit(1)
+				}
+				if owner != "" {
+					repoName = fmt.Sprintf("%s/lekko-configs", owner)
+				}
+				if prevDot != nil && prevDot.Repository != "" {
+					repoName = prevDot.Repository
 				}
 			}
 
@@ -109,37 +151,6 @@ func initCmd() *cobra.Command {
 					}
 					return nil
 				})))
-			}
-
-			owner := ""
-			if repoName == "" {
-				// try to use owner of the current repo
-				if gitRepo, err := git.PlainOpen("."); err == nil {
-					if remote, err := gitRepo.Remote("origin"); err == nil && len(remote.Config().URLs) > 0 {
-						url := remote.Config().URLs[0]
-						currentRepoName := ""
-						if strings.HasPrefix(url, "https://github.com/") {
-							currentRepoName = strings.TrimPrefix(url, "https://github.com/")
-						} else if strings.HasPrefix(url, "git@github.com:") {
-							currentRepoName = strings.TrimPrefix(url, "git@github.com:")
-						}
-						parts := strings.Split(currentRepoName, "/")
-						if len(parts) == 2 {
-							owner = strings.Split(currentRepoName, "/")[0]
-						}
-					}
-				}
-				if owner != "" {
-					repoName = fmt.Sprintf("%s/lekko-configs", owner)
-				}
-				if prevDot != nil && prevDot.Repository != "" {
-					repoName = prevDot.Repository
-				}
-				try.To(survey.AskOne(&survey.Input{
-					Message: "Lekko repository name, for example `my-org/lekko-configs`:",
-					Default: repoName,
-					Help:    "If you've set up your team on https://app.lekko.com, you can find your Lekko repository by logging in.",
-				}, &repoName))
 			}
 
 			dot := dotlekko.NewDotLekko(lekkoPath, repoName)
