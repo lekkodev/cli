@@ -1331,6 +1331,33 @@ func StructToDescriptor(typeSpec *ast.TypeSpec) *descriptorpb.DescriptorProto {
 				fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
 				fieldDescriptor.TypeName = proto.String(fieldName.Name + "Entry")
 				fieldDescriptor.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
+			case *ast.ArrayType:
+				fieldDescriptor.Label = descriptorpb.FieldDescriptorProto_LABEL_REPEATED.Enum()
+				elemType := fieldType.Elt
+				switch elemType := elemType.(type) {
+				case *ast.Ident:
+					switch elemType.Name {
+					case "int64":
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_INT64.Enum()
+					case "string":
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_STRING.Enum()
+					case "float64":
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_DOUBLE.Enum()
+					case "bool":
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
+					default:
+						panic(fmt.Sprintf("unknown array element type in struct: %s\n", elemType.Name))
+					}
+				case *ast.SelectorExpr:
+					if pkgIdent, ok := elemType.X.(*ast.Ident); ok && pkgIdent.Name == "durationpb" && elemType.Sel.Name == "Duration" {
+						fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
+						fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
+					} else {
+						panic("unknown selector type in struct")
+					}
+				default:
+					panic("unknown array element type in struct")
+				}
 			default:
 				panic("not a struct I understand")
 			}

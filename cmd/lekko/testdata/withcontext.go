@@ -1,5 +1,9 @@
 package lekkofrontend
 
+type BlockedDomains struct {
+	Domains []string
+}
+
 type DefaultEditorModeArgs struct {
 	Username string
 }
@@ -10,4 +14,19 @@ func getDefaultEditorMode(args *DefaultEditorModeArgs) string {
 		return "visual"
 	}
 	return "code"
+}
+
+// Blocked auto-join domains
+func getBlockedAutoJoinDomains() *BlockedDomains {
+	return &BlockedDomains{
+		Domains: []string{
+			"gmail.com",
+			"yahoo.com",
+			"hotmail.com",
+			"outlook.com",
+			"aol.com",
+			"icloud.com",
+			"me.com",
+		},
+	}
 }
