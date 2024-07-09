@@ -14,21 +14,50 @@
 
 package gitcli
 
-import "os/exec"
+import (
+	"bytes"
+	"os"
+	"os/exec"
+
+	"github.com/pkg/errors"
+)
+
+func disablePrompts(cmd *exec.Cmd) {
+	cmd.Env = append(os.Environ(),
+		"GIT_TERMINAL_PROMPT=0",
+		"GIT_SSH_COMMAND='ssh -oBatchMode=yes'",
+	)
+}
+
+func handleAuthFailures(output []byte, err error) ([]byte, error) {
+	if err == nil {
+		return output, nil
+	}
+	if bytes.Contains(output, []byte("Repository not found")) {
+		return output, errors.New("Repository not found. Make sure that the repository exists and you have access to it.")
+	}
+	if bytes.Contains(output, []byte("terminal prompts disabled")) {
+		return output, errors.New("Failed to read GitHub credentials, please follow https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-authentication-to-github#authenticating-with-the-command-line to authenticate with GitHub.")
+	}
+	return output, err
+}
 
 func Clone(url, path string) ([]byte, error) {
 	cmd := exec.Command("git", "clone", url, path)
-	return cmd.CombinedOutput()
+	disablePrompts(cmd)
+	return handleAuthFailures(cmd.CombinedOutput())
 }
 
 func Pull(path string) ([]byte, error) {
 	cmd := exec.Command("git", "pull")
+	disablePrompts(cmd)
 	cmd.Dir = path
-	return cmd.CombinedOutput()
+	return handleAuthFailures(cmd.CombinedOutput())
 }
 
 func Push(path string) ([]byte, error) {
 	cmd := exec.Command("git", "push")
+	disablePrompts(cmd)
 	cmd.Dir = path
-	return cmd.CombinedOutput()
+	return handleAuthFailures(cmd.CombinedOutput())
 }
