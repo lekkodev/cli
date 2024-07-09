@@ -23,10 +23,7 @@ import (
 )
 
 func disablePrompts(cmd *exec.Cmd) {
-	cmd.Env = append(os.Environ(),
-		"GIT_TERMINAL_PROMPT=0",
-		"GIT_SSH_COMMAND='ssh -oBatchMode=yes'",
-	)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 }
 
 func handleAuthFailures(output []byte, err error) ([]byte, error) {
