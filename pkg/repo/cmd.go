@@ -156,15 +156,22 @@ func PrepareGithubRepo() (string, error) {
 			shouldClone = true
 		}
 	}
-
 	repoOwner, repoName := dot.GetRepoInfo()
 	githubRepoURL := fmt.Sprintf("https://github.com/%s/%s.git", repoOwner, repoName)
-
+	githubRepoURLSSH := fmt.Sprintf("git@github.com:%s/%s.git", repoOwner, repoName)
 	if shouldClone {
-		cloneOut, err := gitcli.Clone(githubRepoURL, repoPath)
+		// first try ssh clone
+		cloneOut, err := gitcli.Clone(githubRepoURLSSH, repoPath)
 		if err != nil {
-			fmt.Println(string(cloneOut))
-			return "", errors.Wrapf(err, "git clone %s to %s", githubRepoURL, repoPath)
+			// next try https
+			cloneOut2, err2 := gitcli.Clone(githubRepoURL, repoPath)
+			if err2 != nil {
+				fmt.Println("failed to clone via ssh, trying via https")
+				fmt.Println(string(cloneOut))
+				fmt.Println(string(cloneOut2))
+				return "", errors.Wrapf(err2, "git cloning %s to %s with both https and ssh, your git setup may be unreachable, or you haven't created a Lekko account and linked to github Help @ https://docs.lekko.com", githubRepoURL, repoPath)
+
+			}
 		}
 	} else {
 		gitRepo, err := git.PlainOpen(repoPath)
@@ -172,7 +179,7 @@ func PrepareGithubRepo() (string, error) {
 			remote, err := gitRepo.Remote("origin")
 			if err == nil {
 				// TODO: support comparing ssh and https urls
-				if len(remote.Config().URLs) == 0 || remote.Config().URLs[0] != githubRepoURL {
+				if len(remote.Config().URLs) == 0 || (remote.Config().URLs[0] != githubRepoURL && remote.Config().URLs[0] != githubRepoURLSSH) {
 					return "", errors.Errorf("repo already exists at %s but with different origin: %s", repoPath, remote.Config().URLs[0])
 				}
 				if err := ResetAndClean(gitRepo); err != nil {
