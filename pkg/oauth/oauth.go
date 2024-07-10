@@ -317,7 +317,7 @@ func (a *OAuth) loginGithub(ctx context.Context, ws secrets.WriteSecrets) error 
 		}
 		log.Printf("Existing gh token expired: %v\n", err)
 	}
-	fmt.Printf("\nLekko requires authorization to use GitHub API on your behalf to create and manage configuration repositories.\n")
+	fmt.Printf("\nLekko requires authorization to use GitHub's API on your behalf to create and manage a repository for lekkos.\n")
 	fmt.Println("Initiating OAuth for GitHub")
 	flow := &ghauth.Flow{
 		Host:     ghauth.GitHubHost("https://github.com"),
