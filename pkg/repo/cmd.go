@@ -197,8 +197,6 @@ func PrepareGithubRepo() (string, error) {
 					return "", errors.Wrap(err, "checkout main")
 				}
 				if pullOut, err := gitcli.Pull(repoPath); err != nil {
-					fmt.Println("asdfjklasdfjklasdfjkl")
-					fmt.Println(remote.Config().URLs)
 					fmt.Println(string(pullOut))
 					return "", errors.Wrap(err, "pull")
 				}
