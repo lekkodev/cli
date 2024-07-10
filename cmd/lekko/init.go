@@ -303,9 +303,7 @@ func initCmd() *cobra.Command {
 			spin.Start()
 			// TODO: make sure that `default` namespace exists
 			repoPath := try.To1(repo.PrepareGithubRepo())
-			if err := gen.GenNative(cmd.Context(), nlProject, lekkoPath, repoPath, gen.GenOptions{
-				Namespaces: []string{"default"},
-			}); err != nil {
+			if err := gen.GenNative(cmd.Context(), nlProject, lekkoPath, repoPath, gen.GenOptions{}); err != nil {
 				return errors.Wrap(err, "codegen for default namespace")
 			}
 			spin.Stop()
