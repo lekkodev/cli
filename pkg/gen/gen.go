@@ -27,6 +27,7 @@ import (
 
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/native"
+	"github.com/lekkodev/cli/pkg/repo"
 )
 
 type GenOptions struct {
@@ -50,9 +51,24 @@ func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath
 	if err != nil {
 		return errors.Wrap(err, "create output dir")
 	}
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return errors.Wrap(err, "read local repository")
+	}
 
 	if len(opts.Namespaces) == 0 {
+		// Try to generate from only existing namespaces in code
 		opts.Namespaces = try.To1(native.ListNamespaces(absLekkoPath, project.Language))
+		// If no existing namespaces in code, generate from all namespaces in config repo
+		if len(opts.Namespaces) == 0 {
+			nsMDs, err := r.ListNamespaces(ctx)
+			if err != nil {
+				return errors.Wrap(err, "list namespaces")
+			}
+			for _, nsMD := range nsMDs {
+				opts.Namespaces = append(opts.Namespaces, nsMD.Name)
+			}
+		}
 	}
 
 	switch project.Language {
