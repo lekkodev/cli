@@ -391,9 +391,9 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
   	}
    	result = {{$.PrivateFunc}}({{$.CallString}})
     if !errors.Is(err, client.ErrNoOpProvider) {
-    	debug.LogInfo("Lekko evaluation error", "err", err)
+        debug.LogError("Lekko evaluation error", "err", err)
     }
-    debug.LogInfo("Lekko fallback", "result", result)
+    debug.LogDebug("Lekko fallback", "result", result)
   	return result
 }`,
 		private: `// {{$.Description}}
@@ -417,9 +417,9 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
 	}
 	ret = {{$.PrivateFunc}}({{$.CallString}})
     if !errors.Is(err, client.ErrNoOpProvider) {
-    	debug.LogInfo("Lekko evaluation error", "err", err)
+        debug.LogError("Lekko evaluation error", "err", err)
     }
-    debug.LogInfo("Lekko fallback", "result", ret)
+    debug.LogDebug("Lekko fallback", "result", ret)
     return ret
 }`,
 		private: `// {{$.Description}}
