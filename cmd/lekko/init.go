@@ -18,21 +18,23 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/briandowns/spinner"
 	"github.com/cli/browser"
-	"github.com/go-git/go-git/v5"
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
 	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/lekko"
 	"github.com/lekkodev/cli/pkg/logging"
 	"github.com/lekkodev/cli/pkg/native"
+	"github.com/lekkodev/cli/pkg/oauth"
 	"github.com/lekkodev/cli/pkg/repo"
+	"github.com/lekkodev/cli/pkg/secrets"
+	"github.com/lekkodev/cli/pkg/team"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -44,8 +46,8 @@ func initCmd() *cobra.Command {
 		Short: "initialize Lekko in your project",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
+			ctx := cmd.Context()
 			successCheck := logging.Green("\u2713")
-			wd, err := os.Getwd()
 			if err != nil {
 				return errors.Wrap(err, "get working directory")
 			}
@@ -88,41 +90,72 @@ func initCmd() *cobra.Command {
 				}
 			}
 
-			owner := ""
-			if repoName == "" {
-				// Auto-detect owner of current repo
-				// If no remote, fail and prompt user to push
-				needPush := false
-				if gitRepo, err := git.PlainOpen("."); err == nil {
-					if remote, err := gitRepo.Remote("origin"); err == nil && len(remote.Config().URLs) > 0 {
-						url := remote.Config().URLs[0]
-						currentRepoName := ""
-						if strings.HasPrefix(url, "https://github.com/") {
-							currentRepoName = strings.TrimPrefix(url, "https://github.com/")
-						} else if strings.HasPrefix(url, "git@github.com:") {
-							currentRepoName = strings.TrimPrefix(url, "git@github.com:")
-						}
-						parts := strings.Split(currentRepoName, "/")
-						if len(parts) == 2 {
-							owner = strings.Split(currentRepoName, "/")[0]
-						}
-					} else if remote == nil || len(remote.Config().URLs) == 0 {
-						needPush = true
-					}
-				} else {
-					needPush = true
+			// Prompt user to log in, extract team and repo information
+			var teamName string
+			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
+				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
+				fmt.Println("Logging in to Lekko...")
+				if err := auth.LoginLekko(ctx, ws); err != nil {
+					return errors.Wrap(err, "login")
 				}
-				if needPush {
-					fmt.Printf("Lekko needs to be initialized on a repository stored on GitHub. Please push your project to GitHub first and then rerun %s.\n\n", logging.Bold("lekko init"))
-					fmt.Printf("Example:\n--------\nCreate a repository on https://github.com/new\ngit init\ngit add .\ngit commit -m \"Initialize project\"\ngit branch -M main\ngit remote add origin git@github.com:<YOUR_ORG>/%s.git\ngit branch -M main\ngit push -u origin main\n", filepath.Base(wd))
+				fmt.Printf("%s Successfully logged in as %s!\n\n", successCheck, logging.Bold(ws.GetLekkoUsername()))
+
+				bff := lekko.NewBFFClient(ws)
+
+				teamCmd := team.NewTeam(bff)
+				memberships, err := teamCmd.List(ctx)
+				if err != nil {
+					return errors.Wrap(err, "list teams")
+				}
+				if len(memberships) == 0 {
+					fmt.Printf("You are not a member of any Lekko team. Please finish onboarding at https://app.lekko.com to create or join a team.\n")
 					os.Exit(1)
 				}
-				if owner != "" {
-					repoName = fmt.Sprintf("%s/lekko-configs", owner)
+				teamName = memberships[0].TeamName
+				// If more than one team (e.g. tried onboarding on personal, invited to team) ask to choose
+				if len(memberships) > 1 {
+					teams := make([]string, len(memberships))
+					for i, mem := range memberships {
+						teams[i] = mem.TeamName
+					}
+					if err := survey.AskOne(&survey.Select{
+						Message: "Choose Lekko team:",
+						Help:    "You can always change the active team with `lekko team switch`.",
+						Options: teams,
+					}, &teamName); err != nil {
+						return errors.Wrap(err, "choose Lekko team")
+					}
+					if err := teamCmd.Use(ctx, teamName, ws); err != nil {
+						return errors.Wrapf(err, "use Lekko team %s", teamName)
+					}
 				}
-				if prevDot != nil && prevDot.Repository != "" {
-					repoName = prevDot.Repository
+				if repoName == "" {
+					repoCmd := repo.NewRepoCmd(bff, ws)
+					repos, err := repoCmd.List(ctx)
+					if err != nil {
+						return errors.Wrap(err, "list repositories")
+					}
+					if len(repos) == 0 {
+						fmt.Printf("No Lekko repositories found for team %s. Please finish onboarding at https://app.lekko.com to create a Lekko repository.\n", logging.Bold(teamName))
+					}
+					repoName = fmt.Sprintf("%s/%s", repos[0].Owner, repos[0].RepoName)
+					if len(repos) > 1 {
+						repoNames := make([]string, len(repos))
+						for i, repo := range repos {
+							repoNames[i] = fmt.Sprintf("%s/%s", repo.Owner, repo.RepoName)
+						}
+						if err := survey.AskOne(&survey.Select{
+							Message: "Choose Lekko repository:",
+							Help:    fmt.Sprintf("These are machine-managed repositories owned by your Lekko team %s.", teamName),
+							Options: repoNames,
+						}, &repoName); err != nil {
+							return errors.Wrap(err, "choose Lekko repository")
+						}
+					}
 				}
+				return nil
+			}); err != nil {
+				return err
 			}
 
 			if lekkoPath == "" {
@@ -157,7 +190,7 @@ func initCmd() *cobra.Command {
 			try.To(dot.WriteBack())
 			fmt.Printf("%s Successfully added %s.\n", successCheck, dot.GetPath())
 
-			owner = strings.Split(repoName, "/")[0]
+			repoPath := try.To1(repo.PrepareGithubRepo())
 
 			// Instructions for next steps that user should take, categorized by top level lib/feature/concept
 			nextSteps := make(map[string][]string)
@@ -301,8 +334,7 @@ func initCmd() *cobra.Command {
 			// Codegen
 			spin.Suffix = " Running codegen..."
 			spin.Start()
-			repoPath := try.To1(repo.PrepareGithubRepo())
-			if err := gen.GenNative(cmd.Context(), nlProject, lekkoPath, repoPath, gen.GenOptions{}); err != nil {
+			if err := gen.GenNative(ctx, nlProject, lekkoPath, repoPath, gen.GenOptions{}); err != nil {
 				return errors.Wrap(err, "codegen for default namespace")
 			}
 			spin.Stop()
@@ -328,15 +360,7 @@ func initCmd() *cobra.Command {
 
 			fmt.Printf("\n%s Complete! Your project is now set up to use Lekko.\n", successCheck)
 
-			nextSteps["API key"] = append([]string{fmt.Sprintf("Go to https://app.lekko.com/teams/%s/admin?tab=APIKeys to generate an API key", owner)}, nextSteps["API key"]...)
-
-			// TODO: If possible, lekko-fy message and URL
-			docURL := "https://docs.lekko.com/#add-lekko-build-decorators"
-			fmt.Printf("\nPress %s to open the getting started documentation...", logging.Bold("[Enter]"))
-			_ = waitForEnter(os.Stdin)
-			if err := browser.OpenURL(docURL); err != nil {
-				return errors.Wrapf(err, "failed to open browser at url %s", docURL)
-			}
+			nextSteps["API key"] = append([]string{fmt.Sprintf("Go to https://app.lekko.com/teams/%s/admin?tab=APIKeys to generate an API key", teamName)}, nextSteps["API key"]...)
 
 			// Output next steps/references
 			var sb strings.Builder
@@ -355,7 +379,15 @@ func initCmd() *cobra.Command {
 						}
 					}
 				}
-				fmt.Printf("\n%s\n", sb.String())
+				fmt.Printf("\n%s", sb.String())
+			}
+
+			// TODO: If possible, lekko-fy message and URL
+			docURL := "https://docs.lekko.com/#add-lekko-build-decorators"
+			fmt.Printf("\nPress %s to open the getting started documentation...", logging.Bold("[Enter]"))
+			_ = waitForEnter(os.Stdin)
+			if err := browser.OpenURL(docURL); err != nil {
+				return errors.Wrapf(err, "failed to open browser at url %s", docURL)
 			}
 
 			return nil
