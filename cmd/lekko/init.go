@@ -95,10 +95,10 @@ func initCmd() *cobra.Command {
 			if err := secrets.WithWriteSecrets(func(ws secrets.WriteSecrets) error {
 				auth := oauth.NewOAuth(lekko.NewBFFClient(ws))
 				fmt.Println("Logging in to Lekko...")
-				if err := auth.Login(ctx, ws); err != nil {
+				if err := auth.LoginLekko(ctx, ws); err != nil {
 					return errors.Wrap(err, "login")
 				}
-				fmt.Printf("\n")
+				fmt.Printf("%s Successfully logged in as %s!\n\n", successCheck, logging.Bold(ws.GetLekkoUsername()))
 
 				bff := lekko.NewBFFClient(ws)
 

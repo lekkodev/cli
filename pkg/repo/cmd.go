@@ -169,7 +169,7 @@ func PrepareGithubRepo() (string, error) {
 				fmt.Println("failed to clone via ssh, trying via https")
 				fmt.Println(string(cloneOut))
 				fmt.Println(string(cloneOut2))
-				return "", errors.Wrapf(err2, "git cloning %s to %s with both https and ssh, your git setup may be unreachable, or you haven't created a Lekko account and linked to github Help @ https://docs.lekko.com", githubRepoURL, repoPath)
+				return "", errors.Wrapf(err2, "git cloning %s to %s with both https and ssh, your git setup may be unreachable, or you haven't created a Lekko account and linked to GitHub. Help @ https://docs.lekko.com", githubRepoURL, repoPath)
 			}
 		}
 	} else {

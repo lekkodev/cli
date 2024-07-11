@@ -63,7 +63,7 @@ func NewOAuth(bff bffv1beta1connect.BFFServiceClient) *OAuth {
 // we will reinitiate oauath with that provider.
 func (a *OAuth) Login(ctx context.Context, ws secrets.WriteSecrets) error {
 	defer a.Status(ctx, true, ws)
-	if err := a.loginLekko(ctx, ws); err != nil {
+	if err := a.LoginLekko(ctx, ws); err != nil {
 		return errors.Wrap(err, "login lekko")
 	}
 	if err := a.loginGithub(ctx, ws); err != nil {
@@ -284,7 +284,7 @@ func (a *OAuth) authStatus(ctx context.Context, skipAuthCheck bool, rs secrets.R
 	return
 }
 
-func (a *OAuth) loginLekko(ctx context.Context, ws secrets.WriteSecrets) error {
+func (a *OAuth) LoginLekko(ctx context.Context, ws secrets.WriteSecrets) error {
 	if ws.HasLekkoToken() {
 		_, err := a.checkLekkoAuth(ctx)
 		if err == nil {
