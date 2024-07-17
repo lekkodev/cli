@@ -44,6 +44,7 @@ import (
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/star/prototypes"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"google.golang.org/protobuf/proto"
@@ -364,14 +365,11 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 	r.ConfigureLogger(&repo.LoggingConfiguration{
 		Writer: io.Discard,
 	})
-	rootMD, _, err := r.ParseMetadata(ctx)
+	st, err := prototypes.RegisterDynamicTypes(nil)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "initialize type registry")
 	}
-	registry, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory)
-	if err != nil {
-		return nil, err
-	}
+	registry := st.Types
 	// Attempt to register duration since it's a well-known type
 	if _, err := registry.FindMessageByName("google.protobuf.Duration"); err == protoregistry.NotFound {
 		d := &durationpb.Duration{}
@@ -759,7 +757,7 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *an
 		case token.AND:
 			switch x := node.X.(type) {
 			case *ast.CompositeLit:
-				a, err := anypb.New(g.compositeLitToProto(x).(protoreflect.ProtoMessage))
+				a, err := anypb.New(g.compositeLitToProto(x).Interface())
 				if err != nil {
 					panic(errors.Wrap(err, "marshal Any"))
 				}
