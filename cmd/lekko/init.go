@@ -326,6 +326,47 @@ func initCmd() *cobra.Command {
 						fmt.Printf("%s Successfully installed @lekko/eslint-plugin.\n", successCheck)
 						nextSteps["ESLint"] = append(nextSteps["ESLint"], "See https://www.npmjs.com/package/@lekko/eslint-plugin to configure the Lekko ESLint plugin")
 						spin.Start()
+					} else if nlProject.HasFramework(native.FwNode) {
+						var installArgs, installDevArgs []string
+						switch nlProject.PackageManager {
+						case native.PmNPM:
+							{
+								installArgs = []string{"install", "@lekko/js-sdk"}
+								installDevArgs = []string{"install", "-D", "@lekko/ts-transformer", "@lekko/eslint-plugin"}
+							}
+						case native.PmYarn:
+							{
+								installArgs = []string{"add", "@lekko/js-sdk"}
+								installDevArgs = []string{"add", "-D", "@lekko/ts-transformer", "@lekko/eslint-plugin"}
+							}
+						default:
+							{
+								return errors.Errorf("unsupported package manager %s", nlProject.PackageManager)
+							}
+						}
+						installCmd := exec.Command(string(nlProject.PackageManager), installArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install deps command")
+						}
+						spin.Stop()
+						fmt.Printf("%s Successfully installed @lekko/js-sdk.\n", successCheck)
+						fmt.Printf("%s Successfully installed @lekko/ts-transformer.\n", successCheck)
+						nextSteps["Node.js SDK"] = append(nextSteps["Node.js SDK"], "See https://docs.lekko.com/sdks/node-sdk to get started")
+						spin.Start()
+						installCmd = exec.Command(string(nlProject.PackageManager), installDevArgs...) // #nosec G204
+						if out, err := installCmd.CombinedOutput(); err != nil {
+							spin.Stop()
+							fmt.Println(installCmd.String())
+							fmt.Println(string(out))
+							return errors.Wrap(err, "failed to run install dev deps command")
+						}
+						spin.Stop()
+						fmt.Printf("%s Successfully installed @lekko/eslint-plugin.\n", successCheck)
+						nextSteps["ESLint"] = append(nextSteps["ESLint"], "See https://www.npmjs.com/package/@lekko/eslint-plugin to configure the Lekko ESLint plugin")
+						spin.Start()
 					}
 				}
 			}
