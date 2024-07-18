@@ -901,6 +901,14 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 		default:
 			panic(fmt.Errorf("unsupported identifier %v", x.Name))
 		}
+	case *ast.CallExpr:
+		if fun, ok := x.Fun.(*ast.Ident); ok {
+			// TODO ensure that the arguments are the same as the main calling function
+			fmt.Printf("Need to create a call expression for: %#v\n", fun)
+			return nil
+		} else {
+			panic(fmt.Errorf("unsupported function call expression %+v", x))
+		}
 	default:
 		panic(fmt.Errorf("expected primitive expression, got %+v", x))
 	}
@@ -1021,7 +1029,10 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 			if intValue, ok := value.(int64); ok && field.Kind() == protoreflect.DoubleKind {
 				value = float64(intValue)
 			}
-			msg.Set(field, protoreflect.ValueOf(value))
+			// TODO - properly do reference shit
+			if value != nil {
+				msg.Set(field, protoreflect.ValueOf(value))
+			}
 		}
 	}
 	return msg
