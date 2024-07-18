@@ -104,6 +104,9 @@ func DetectNativeLang(codeRepoPath string) (*Project, error) {
 		pjString := string(pjBytes)
 		if strings.Contains(pjString, "react-dom") {
 			project.Frameworks = append(project.Frameworks, FwReact)
+		} else {
+			// if it's not React, assume that it's Node.js backend
+			project.Frameworks = append(project.Frameworks, FwNode)
 		}
 		// Vite config file could be js, cjs, mjs, etc.
 		if matches, err := filepath.Glob("vite.config.*"); matches != nil && err == nil {
