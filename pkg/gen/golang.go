@@ -51,7 +51,7 @@ import (
 
 // TODO: this can hold more state to clean up functions a bit, like storing usedVariables, etc.
 type goGenerator struct {
-	moduleRoot   string
+	moduleRoot   string // e.g. github.com/lekkodev/cli
 	outputPath   string // Location for destination file, can be absolute or relative. Its suffix should be the same as lekkoPath. In most cases can be same as lekkoPath.
 	lekkoPath    string // Location relative to project root where Lekko files are stored, e.g. internal/lekko.
 	repoPath     string
