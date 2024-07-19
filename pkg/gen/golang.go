@@ -559,11 +559,11 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			fieldName := fd.Name()
 			fieldType := FieldDescriptorToGoTypeString(fd)
 			protoStructFilling = protoStructFilling + fmt.Sprintf(`
-		case "%[1]s":
-							v, ok := result.ProtoReflect().Get(fd).Interface().(%[2]s)
+		case "%s":
+							v, ok := result.ProtoReflect().Get(fd).Interface().(%s)
 							if (ok) {
-								ret.%[1]s = v
-							}`, strcase.ToCamel(string(fieldName)), fieldType)
+								ret.%s = v
+							}`, string(fieldName), fieldType, strcase.ToCamel(string(fieldName)))
 		}
 		protoStructFilling = protoStructFilling + `
 		}
