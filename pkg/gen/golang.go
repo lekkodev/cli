@@ -419,7 +419,7 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
     if !errors.Is(err, client.ErrNoOpProvider) {
         debug.LogError("Lekko evaluation error", "name", "{{$.Namespace}}/{{$.Key}}", "err", err)
     }
-    debug.LogDebug("Lekko fallback", "name", "{{$.Namespace}}/{{$.Key}}", "result", result)
+    debug.LogDebug("Lekko fallback", "name", "{{$.Namespace}}/{{$.Key}}", "result", ret)
     return ret
 }`,
 		private: `// {{$.Description}}
