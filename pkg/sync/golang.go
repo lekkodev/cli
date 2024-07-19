@@ -53,7 +53,6 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -82,11 +81,11 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 		// Sync and gen - only target <namespace>/<namespace>.go files
 		// Semi-duplicated logic from Syncer initializer
 		if !d.IsDir() && strings.TrimSuffix(d.Name(), ".go") == filepath.Base(filepath.Dir(p)) {
-			syncer, err := NewGoSyncer(ctx, mf.Module.Mod.Path, p, repoPath)
+			syncer, err := NewGoSyncer(mf.Module.Mod.Path, p)
 			if err != nil {
 				return errors.Wrap(err, "initialize code syncer")
 			}
-			if err := syncer.Sync(ctx); err != nil {
+			if _, err := syncer.Sync(ctx, &repoPath); err != nil {
 				return errors.Wrapf(err, "sync %s", p)
 			}
 			namespace := filepath.Base(filepath.Dir(p))
@@ -351,24 +350,6 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File, fset *token
 	return &namespace, nil
 }
 
-func (g *goSyncer) FileLocationToNamespace(ctx context.Context) (*Namespace, error) {
-	src, err := os.ReadFile(g.filePath)
-	if err != nil {
-		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
-	}
-	if bytes.Contains(src, []byte("<<<<<<<")) {
-		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
-	}
-	fset := token.NewFileSet()
-	fset.AddFile(g.filePath, fset.Base(), len(src))
-	pf, err := parser.ParseFile(fset, g.filePath, src, parser.ParseComments)
-	if err != nil {
-		return nil, err
-	}
-
-	return g.AstToNamespace(ctx, pf, fset)
-}
-
 func (g *goSyncer) SourceToNamespace(ctx context.Context, src []byte) (*Namespace, error) {
 	if bytes.Contains(src, []byte("<<<<<<<")) {
 		return nil, fmt.Errorf("%s has unresolved merge conflicts", g.filePath)
@@ -385,10 +366,9 @@ func (g *goSyncer) SourceToNamespace(ctx context.Context, src []byte) (*Namespac
 
 // Translates Go code to Protobuf/Starlark and writes changes to local config repository
 type goSyncer struct {
-	moduleRoot string
+	moduleRoot string // e.g. github.com/lekkodev/cli
 	lekkoPath  string
 	filePath   string // Path to Go source file to sync
-	repository repo.ConfigurationRepository
 
 	FDS           *descriptorpb.FileDescriptorSet
 	typeRegistry  *protoregistry.Types
@@ -396,7 +376,7 @@ type goSyncer struct {
 	Namespace     string
 }
 
-func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*goSyncer, error) {
+func NewGoSyncer(moduleRoot, filePath string) (*goSyncer, error) {
 	// Validate filePath ends with <namespace>/<namespace>.go
 	namespace := filepath.Dir(filePath)
 	if filepath.Base(filepath.Dir(filePath)) != strings.TrimSuffix(filepath.Base(filePath), ".go") {
@@ -407,179 +387,161 @@ func NewGoSyncer(ctx context.Context, moduleRoot, filePath, repoPath string) (*g
 		return nil, fmt.Errorf("files to be synced by Lekko must have lowercase alphabetic names: %s", filePath)
 	}
 
-	r, err := repo.NewLocal(repoPath, nil)
-	if err != nil {
-		return nil, err
-	}
-	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	r.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
-	})
-
-	// Initialize empty file descriptor set and start with well-known types
-	fds := &descriptorpb.FileDescriptorSet{}
-	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(wrapperspb.File_google_protobuf_wrappers_proto))
-	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(structpb.File_google_protobuf_struct_proto))
-	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(durationpb.File_google_protobuf_duration_proto))
-
 	return &goSyncer{
 		moduleRoot: moduleRoot,
 		// Assumes target file is at <lekkoPath>/<namespace>/<file>
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
-		repository:    r,
 		protoPackages: make(map[string]string),
-		FDS:           fds,
+		FDS:           NewDefaultFileDescriptorSet(),
 		Namespace:     namespace,
 	}, nil
 }
 
-func NewGoSyncerLite(moduleRoot string, filePath string, registry *protoregistry.Types) *goSyncer {
+func NewGoSyncerLite(moduleRoot string, filePath string) *goSyncer {
 	return &goSyncer{
 		moduleRoot:    moduleRoot,
 		lekkoPath:     filepath.Clean(filepath.Dir(filepath.Dir(filePath))),
 		filePath:      filepath.Clean(filePath),
 		protoPackages: make(map[string]string),
-		typeRegistry:  registry,
+		FDS:           NewDefaultFileDescriptorSet(),
 	}
 }
 
-// TODO: Cleaner refactor to have 2 modes - sync with or without local repo (and writing to it)
-func (g *goSyncer) Sync(ctx context.Context) error {
-	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	g.repository.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
-	})
-	rootMD, _, err := g.repository.ParseMetadata(ctx)
+// Convert source code to a namespace representation.
+// If `repoPath` is passed, also propagates changes to the local config repository at that path.
+func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, error) {
+	src, err := os.ReadFile(g.filePath)
 	if err != nil {
-		return err
+		return nil, errors.Wrap(err, fmt.Sprintf("open %s", g.filePath))
 	}
-	namespace, err := g.FileLocationToNamespace(ctx)
+	namespace, err := g.SourceToNamespace(ctx, src)
 	if err != nil {
-		return err
-	}
-	nsExists := false
-	// Need to keep track of which configs were synced
-	// Any configs that were already present but not synced should be removed
-	toRemove := make(map[string]struct{}) // Set of config names in existing namespace
-	for _, nsFromMeta := range rootMD.Namespaces {
-		if namespace.Name == nsFromMeta {
-			nsExists = true
-			ffs, err := g.repository.GetFeatureFiles(ctx, namespace.Name)
-			if err != nil {
-				return errors.Wrap(err, "read existing configs")
-			}
-			for _, ff := range ffs {
-				toRemove[ff.Name] = struct{}{}
-			}
-			break
-		}
-	}
-	if !nsExists {
-		if err := g.repository.AddNamespace(ctx, namespace.Name); err != nil {
-			return errors.Wrap(err, "add namespace")
-		}
+		return nil, err
 	}
 
-	typeRegistry, err := g.GetTypeRegistry()
-	if err != nil {
-		return errors.Wrap(err, "get type registry")
-	}
-	typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-		return true
-	})
+	if repoPath != nil {
+		r, err := repo.NewLocal(*repoPath, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Discard logs, mainly for silencing compilation later
+		// TODO: Maybe a verbose flag
+		r.ConfigureLogger(&repo.LoggingConfiguration{
+			Writer: io.Discard,
+		})
+		rootMD, _, err := r.ParseMetadata(ctx)
+		if err != nil {
+			return nil, err
+		}
+		nsExists := false
+		// Need to keep track of which configs were synced
+		// Any configs that were already present but not synced should be removed
+		toRemove := make(map[string]struct{}) // Set of config names in existing namespace
+		for _, nsFromMeta := range rootMD.Namespaces {
+			if namespace.Name == nsFromMeta {
+				nsExists = true
+				ffs, err := r.GetFeatureFiles(ctx, namespace.Name)
+				if err != nil {
+					return nil, errors.Wrap(err, "read existing configs")
+				}
+				for _, ff := range ffs {
+					toRemove[ff.Name] = struct{}{}
+				}
+				break
+			}
+		}
+		if !nsExists {
+			if err := r.AddNamespace(ctx, namespace.Name); err != nil {
+				return nil, errors.Wrap(err, "add namespace")
+			}
+		}
 
-	// TODO - is this where we write the structs to the proto files?
-	for _, configProto := range namespace.Features {
-		// create a new starlark file from a template (based on the config type)
-		var starBytes []byte
-		starImports := make([]*featurev1beta1.ImportStatement, 0)
-		if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-			typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
-			messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
-			if !found {
-				return fmt.Errorf("can't parse type url: %s", typeURL)
-			}
-			starInputs, err := g.repository.BuildProtoStarInputsWithTypes(ctx, messageType, feature.LatestNamespaceVersion(), typeRegistry)
-			if err != nil {
-				return err
-			}
-			starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
-			if err != nil {
-				return err
-			}
-			for importPackage, importAlias := range starInputs.Packages {
-				starImports = append(starImports, &featurev1beta1.ImportStatement{
-					Lhs: &featurev1beta1.IdentExpr{
-						Token: importAlias,
-					},
-					Operator: "=",
-					Rhs: &featurev1beta1.ImportExpr{
-						Dot: &featurev1beta1.DotExpr{
-							X:    "proto",
-							Name: "package",
+		typeRegistry, err := g.GetTypeRegistry()
+		if err != nil {
+			return nil, errors.Wrap(err, "get type registry")
+		}
+
+		for _, configProto := range namespace.Features {
+			// create a new starlark file from a template (based on the config type)
+			var starBytes []byte
+			starImports := make([]*featurev1beta1.ImportStatement, 0)
+			if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
+				typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
+				messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
+				if !found {
+					return nil, fmt.Errorf("can't parse type url: %s", typeURL)
+				}
+				starInputs, err := r.BuildProtoStarInputsWithTypes(ctx, messageType, feature.LatestNamespaceVersion(), typeRegistry)
+				if err != nil {
+					return nil, err
+				}
+				starBytes, err = star.RenderExistingProtoTemplate(*starInputs, feature.LatestNamespaceVersion())
+				if err != nil {
+					return nil, err
+				}
+				for importPackage, importAlias := range starInputs.Packages {
+					starImports = append(starImports, &featurev1beta1.ImportStatement{
+						Lhs: &featurev1beta1.IdentExpr{
+							Token: importAlias,
 						},
-						Args: []string{importPackage},
-					},
-				})
+						Operator: "=",
+						Rhs: &featurev1beta1.ImportExpr{
+							Dot: &featurev1beta1.DotExpr{
+								X:    "proto",
+								Name: "package",
+							},
+							Args: []string{importPackage},
+						},
+					})
+				}
+			} else {
+				starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
+				if err != nil {
+					return nil, err
+				}
 			}
-		} else {
-			starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
+			// mutate starlark with the actual config
+			walker := static.NewWalker("", starBytes, typeRegistry, feature.NamespaceVersionV1Beta7)
+			newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
+				Key:  configProto.Key,
+				Type: configProto.GetType(),
+				Feature: &featurev1beta1.FeatureStruct{
+					Description: configProto.GetDescription(),
+				},
+				FeatureOld: configProto,
+				Imports:    starImports,
+			})
 			if err != nil {
-				return err
+				return nil, errors.Wrap(err, "walker mutate")
+			}
+			configFile := feature.NewFeatureFile(namespace.Name, configProto.Key)
+			// write starlark to disk
+			if err := r.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
+				return nil, errors.Wrap(err, "write after mutation")
+			}
+			delete(toRemove, configProto.Key)
+		}
+		// Remove leftovers
+		for configName := range toRemove {
+			if err := r.RemoveFeature(ctx, namespace.Name, configName); err != nil {
+				return nil, errors.Wrapf(err, "remove %s", configName)
 			}
 		}
-		// mutate starlark with the actual config
-		walker := static.NewWalker("", starBytes, typeRegistry, feature.NamespaceVersionV1Beta7)
-		newBytes, err := walker.Mutate(&featurev1beta1.StaticFeature{
-			Key:  configProto.Key,
-			Type: configProto.GetType(),
-			Feature: &featurev1beta1.FeatureStruct{
-				Description: configProto.GetDescription(),
-			},
-			FeatureOld: configProto,
-			Imports:    starImports,
-		})
-		if err != nil {
-			return errors.Wrap(err, "walker mutate")
+		// Write types to files & rebuild in-repo type registry
+		if err := g.writeTypesToRepo(ctx, r); err != nil {
+			return nil, errors.Wrap(err, "write type files")
 		}
-		configFile := feature.NewFeatureFile(namespace.Name, configProto.Key)
-		// write starlark to disk
-		if err := g.repository.WriteFile(path.Join(namespace.Name, configFile.StarlarkFileName), newBytes, 0600); err != nil {
-			return errors.Wrap(err, "write after mutation")
+		if _, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false); err != nil {
+			return nil, errors.Wrap(err, "final rebuild type registry")
 		}
-		// compile newly generated starlark file
-		_, err = g.repository.Compile(ctx, &repo.CompileRequest{
-			Registry:        typeRegistry,
-			NamespaceFilter: namespace.Name,
-			FeatureFilter:   configProto.Key,
-		})
-		if err != nil {
-			return errors.Wrap(err, "compile after mutation")
+		// Final compile to verify healthy sync
+		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+			return nil, errors.Wrap(err, "final compile")
 		}
-		delete(toRemove, configProto.Key)
-	}
-	// Remove leftovers
-	for configName := range toRemove {
-		if err := g.repository.RemoveFeature(ctx, namespace.Name, configName); err != nil {
-			return errors.Wrapf(err, "remove %s", configName)
-		}
-	}
-	// Write types to files & rebuild in-repo type registry
-	if err := g.writeTypesToRepo(ctx); err != nil {
-		return errors.Wrap(err, "write type files")
-	}
-	if _, err := g.repository.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false); err != nil {
-		return errors.Wrap(err, "final rebuild type registry")
-	}
-	// Final compile to verify healthy sync
-	if _, err := g.repository.Compile(ctx, &repo.CompileRequest{}); err != nil {
-		return errors.Wrap(err, "final compile")
 	}
 
-	return nil
+	return namespace, nil
 }
 
 // Gets the type registry of the syncer, converted from the internal fds.
@@ -595,8 +557,8 @@ func (g *goSyncer) GetTypeRegistry() (*protoregistry.Types, error) {
 	return tr, nil
 }
 
-func (g *goSyncer) writeTypesToRepo(ctx context.Context) error {
-	rootMD, _, err := g.repository.ParseMetadata(ctx)
+func (g *goSyncer) writeTypesToRepo(ctx context.Context, r repo.ConfigurationRepository) error {
+	rootMD, _, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return errors.Wrap(err, "parse repository metadata")
 	}
@@ -616,7 +578,7 @@ func (g *goSyncer) writeTypesToRepo(ctx context.Context) error {
 			return false
 		}
 		path := filepath.Join(rootMD.ProtoDirectory, fd.Path())
-		if err := g.repository.WriteFile(path, []byte(contents), 0600); err != nil {
+		if err := r.WriteFile(path, []byte(contents), 0600); err != nil {
 			writeErr = errors.Wrapf(err, "write to %s", path)
 			return false
 		}

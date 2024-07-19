@@ -10,7 +10,19 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+// Initializes an empty file descriptor set and starts with well-known types
+func NewDefaultFileDescriptorSet() *descriptorpb.FileDescriptorSet {
+	fds := &descriptorpb.FileDescriptorSet{}
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(wrapperspb.File_google_protobuf_wrappers_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(structpb.File_google_protobuf_struct_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(durationpb.File_google_protobuf_duration_proto))
+	return fds
+}
 
 func FileRegistryToTypeRegistry(fr *protoregistry.Files) (*protoregistry.Types, error) {
 	tr := &protoregistry.Types{}

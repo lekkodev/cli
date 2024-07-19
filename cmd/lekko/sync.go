@@ -85,11 +85,11 @@ func syncGoCmd() *cobra.Command {
 				}
 			}
 			f = args[0]
-			syncer, err := sync.NewGoSyncer(ctx, mf.Module.Mod.Path, f, repoPath)
+			syncer, err := sync.NewGoSyncer(mf.Module.Mod.Path, f)
 			if err != nil {
 				return errors.Wrap(err, "initialize code syncer")
 			}
-			err = syncer.Sync(ctx)
+			_, err = syncer.Sync(ctx, &repoPath)
 			if err != nil {
 				return err
 			}
@@ -240,8 +240,8 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 			return false, err
 		}
 		//fmt.Printf("%s\n\n", mf.Module.Mod.Path)
-		g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath, registry)
-		namespace, err := g.FileLocationToNamespace(ctx)
+		g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath)
+		namespace, err := g.Sync(ctx, nil)
 		if err != nil {
 			return false, err
 		}
@@ -506,7 +506,7 @@ func goToGo(ctx context.Context, f []byte) string {
 	if err != nil {
 		panic(err)
 	}
-	syncer := sync.NewGoSyncerLite("", "", registry.Types)
+	syncer := sync.NewGoSyncerLite("", "")
 	namespace, err := syncer.SourceToNamespace(ctx, f)
 	if err != nil {
 		panic(err)
@@ -516,7 +516,11 @@ func goToGo(ctx context.Context, f []byte) string {
 	//fmt.Print("ON TO GENERATION\n")
 	// code gen based off that namespace object
 	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
-	g.TypeRegistry = registry.Types
+	if err != nil {
+		panic(err)
+	}
+	tr, err := syncer.GetTypeRegistry()
+	g.TypeRegistry = tr
 	if err != nil {
 		panic(err)
 	}
