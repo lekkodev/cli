@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"golang.org/x/exp/slices"
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
 )
 
 type DBConfig struct {
@@ -12,18 +11,13 @@ type DBConfig struct {
 	MaxOpenConns int64
 }
 
-type ErrorFilter struct {
+type ErrorFilterConfig struct {
 	LogLevel int64
 }
 
 type MemcachedConfig struct {
 	MaxIdleConns int64
 	TimeoutMs    int64
-}
-
-type MiddlewareConfig struct {
-	TeamExemptProcedures   map[string]bool
-	RequireOauthProcedures map[string]bool
 }
 
 type OAuthDeviceConfig struct {
@@ -38,18 +32,22 @@ type RegistrationConfig struct {
 	EmailSubject           string
 }
 
-type RolloutConfig struct {
-	LockTtl           *durationpb.Duration
+type RolloutConfiguration struct {
+	LockTtl           int64
 	NumRolloutWorkers int64
-	RolloutTimeout    *durationpb.Duration
+	RolloutTimeout    int64
+	Delay             int64
+	Jitter            int64
 	ChanBufferSize    int64
-	Delay             *durationpb.Duration
-	Jitter            *durationpb.Duration
 }
 
 type RolloutContentsConfig struct {
 	Compare        bool
 	UseGitContents bool
+}
+
+type TeamExemptProcedures struct {
+	Procedures []string
 }
 
 // Whether or not the backend returns the statically parsed feature for a feature of type Proto..
@@ -133,9 +131,9 @@ func getContextKeyMetricsLookbackDays() int64 {
 	return 3
 }
 
-// How many hours after creation does a Lekko browser cookie expire
-func getCookieExpirationDuration() *durationpb.Duration {
-	return &durationpb.Duration{Seconds: 86400}
+// How many seconds after creation does a Lekko browser cookie expire
+func getCookieExpirationDuration() int64 {
+	return 86400
 }
 
 // Config options for backend DB client
@@ -177,27 +175,27 @@ func getEnableMembershipsByDomainName(env string, username string) bool {
 }
 
 // Dynamically change error logs' levels. The context key "message" refers to the "error" field while "log" refers to "msg".
-func getErrorFilter(grpcErrorCode float64, log string, message string) *ErrorFilter {
+func getErrorFilterConfig(grpcErrorCode float64, log string, message string) *ErrorFilterConfig {
 	if slices.Contains([]float64{3, 5, 6, 7, 11, 16}, grpcErrorCode) {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "unsupported static parsing") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "Found feature(s) with compilation or formatting diffs") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "deleting invalid in-mem repo") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "context canceled") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "acquire lock") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(log, "unable to get reset_at cache value") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(log, "unable to reset quota") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	} else if strings.Contains(message, "field contextProto not found in type metadata.NamespaceConfigRepoMetadata") {
-		return &ErrorFilter{LogLevel: 3}
+		return &ErrorFilterConfig{LogLevel: 3}
 	}
-	return &ErrorFilter{LogLevel: 1}
+	return &ErrorFilterConfig{LogLevel: 1}
 }
 
 // example bool config pushed from backend
@@ -265,41 +263,6 @@ func getMetricsBatchSize() int64 {
 	return 2000
 }
 
-// Configuration for the backend rpc middleware
-func getMiddleware() *MiddlewareConfig {
-	return &MiddlewareConfig{
-		RequireOauthProcedures: map[string]bool{
-			"AddFeature":       true,
-			"AddNamespace":     true,
-			"CreateBranch":     true,
-			"CreateRepository": true,
-			"DeleteRepository": true,
-			"GetPR":            true,
-			"GetPRInfo":        true,
-			"GetUserOAuth":     true,
-			"Merge":            true,
-			"MergePR":          true,
-			"RemoveFeature":    true,
-			"RemoveNamespace":  true,
-			"Restore":          true,
-			"Review":           true,
-			"Save":             true,
-		},
-		TeamExemptProcedures: map[string]bool{
-			"AuthorizeDevice":            true,
-			"ChangePassword":             true,
-			"CreateTeam":                 true,
-			"DeleteUserOAuth":            true,
-			"GetUserGitHubInstallations": true,
-			"GetUserLoggedInInfo":        true,
-			"GetUserOAuth":               true,
-			"ListUserMemberships":        true,
-			"OAuthUser":                  true,
-			"UseTeam":                    true,
-		},
-	}
-}
-
 func getNewButtonThree(env string) string {
 	if env == "production" {
 		return "prod"
@@ -312,6 +275,11 @@ func getNewFeatureFlag(env string) bool {
 		return true
 	}
 	return false
+}
+
+// Whether to only return the default branch info in the ListBranches endpoint. Switching branches and viewing PRs is disabled on the web UI for now, so this should be a quick temp fix for GitHub rate limit issues.
+func getOnlyListDefaultBranch() bool {
+	return true
 }
 
 // Settings for Lekko registration flow
@@ -468,11 +436,8 @@ func getRegistrationConfig(env string, userExists bool) *RegistrationConfig {
 	}
 }
 
-func getReturnFdsToFe(username string) bool {
-	if username == "jonathan@lekko.com" {
-		return true
-	}
-	return false
+func getReturnFdsToFe() bool {
+	return true
 }
 
 // log level for rockset client, see https://github.com/rs/zerolog/blob/master/globals.go#L35-L48 for supported values
@@ -488,34 +453,34 @@ func getRocksetRetryMaxElapsedTimeSecs() int64 {
 	return 15
 }
 
+// Rollout handler configuration. All durations are in seconds.
+func getRolloutConfiguration(env string) *RolloutConfiguration {
+	if env == "staging" {
+		return &RolloutConfiguration{
+			ChanBufferSize:    100,
+			Delay:             300,
+			Jitter:            30,
+			LockTtl:           60,
+			NumRolloutWorkers: 250,
+			RolloutTimeout:    120,
+		}
+	}
+	return &RolloutConfiguration{
+		ChanBufferSize:    100,
+		Delay:             900,
+		Jitter:            60,
+		LockTtl:           300,
+		NumRolloutWorkers: 250,
+		RolloutTimeout:    480,
+	}
+}
+
 // Controls how config repo contents are derived during rollout. Formerly a JSON config.
 func getRolloutContentsProto(env string) *RolloutContentsConfig {
 	if slices.Contains([]string{"staging", "development"}, env) {
 		return &RolloutContentsConfig{UseGitContents: true}
 	}
 	return &RolloutContentsConfig{UseGitContents: true}
-}
-
-// Rollout handler configuration
-func getRollout(env string) *RolloutConfig {
-	if env == "staging" {
-		return &RolloutConfig{
-			ChanBufferSize:    100,
-			Delay:             &durationpb.Duration{Seconds: 180},
-			Jitter:            &durationpb.Duration{Seconds: 30},
-			LockTtl:           &durationpb.Duration{Seconds: 60},
-			NumRolloutWorkers: 250,
-			RolloutTimeout:    &durationpb.Duration{Seconds: 60},
-		}
-	}
-	return &RolloutConfig{
-		ChanBufferSize:    100,
-		Delay:             &durationpb.Duration{Seconds: 900},
-		Jitter:            &durationpb.Duration{Seconds: 60},
-		LockTtl:           &durationpb.Duration{Seconds: 300},
-		NumRolloutWorkers: 250,
-		RolloutTimeout:    &durationpb.Duration{Seconds: 480},
-	}
 }
 
 // Controls whether we sync with GitHub to fetch updated branch information after saving changes through BFF
@@ -544,8 +509,28 @@ func getShouldValidateTeam(procedure string) bool {
 		return false
 	} else if procedure == "DeleteAPIKey" {
 		return false
+	} else if slices.Contains([]string{"CreateBranch", "Save", "Review", "Merge", "GetRepositoryContents"}, procedure) {
+		return false
 	}
 	return true
+}
+
+// Configuration for BFF procedures that don't need to be checked for team info
+func getTeamExemptProcedures() *TeamExemptProcedures {
+	return &TeamExemptProcedures{
+		Procedures: []string{
+			"AuthorizeDevice",
+			"ChangePassword",
+			"CreateTeam",
+			"DeleteUserOAuth",
+			"GetUserGitHubInstallations",
+			"GetUserLoggedInInfo",
+			"GetUserOAuth",
+			"ListUserMemberships",
+			"OAuthUser",
+			"UseTeam",
+		},
+	}
 }
 
 // Whether or not to rely on lekko's custom Any protobuf definition as source of truth..

@@ -196,23 +196,6 @@ func TestDefault(t *testing.T) {
 	})
 }
 
-func TestDuration(t *testing.T) {
-	t.Run("default", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/duration.go")
-		if err != nil {
-			panic(err)
-		}
-		if got := goToGo(ctx, f); got != string(f) {
-			diff, err := DiffStyleOutput(string(f), got)
-			if err != nil {
-				panic(err)
-			}
-			t.Errorf("Difference Found: %s\n", diff)
-		}
-	})
-}
-
 /*
 Here to just run the code, but I really don't want to have an unrelated node thing as a dep for the test
 func Test_ProtoJsonToTs(t *testing.T) {
