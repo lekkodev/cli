@@ -91,4 +91,20 @@ message Constraint {
 message Any {
   string type_url = 1;
   bytes value = 2;
+  repeated ValueOveride overrides = 3;
+}
+
+// Not sure if this is the format that I want, or if I want more like a pluck location thing..
+message ConfigCall {
+  string type_url = 1;
+  string namespace = 2;
+  string key = 3;
+  uint64 field_number = 4;
+}
+
+message ValueOveride {
+  ConfigCall call = 1;
+  repeated int32 field_path = 2;
+  uint32 position = 3;
+  bool splat = 4;
 }

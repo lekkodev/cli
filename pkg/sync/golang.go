@@ -52,11 +52,31 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
+
+// TODO these will be in the proto def, but fuck fighting with buf right now
+type ConfigCall struct {
+	TypeUrl     string
+	Namespace   string
+	Key         string
+	FieldNumber uint64
+}
+
+type ValueOverride struct {
+	Call      ConfigCall
+	FieldPath []int32
+	Position  uint32
+	Splat     bool
+}
+
+type Any struct {
+	TypeUrl   string
+	Value     []byte
+	Overrides []ValueOverride
+}
 
 func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
 	b, err := os.ReadFile("go.mod")
@@ -286,7 +306,7 @@ func (g *goSyncer) AstToNamespace(ctx context.Context, pf *ast.File) (*Namespace
 							panic("unexpected default value already processed")
 						}
 						// TODO also need to take care of the possibility that the default is in an else
-						feature.Tree.Default = g.exprToAny(n.Results[0], feature.Type) // can this be multiple things?
+						feature.Tree.DefaultNew = g.exprToAny(n.Results[0], feature.Type) // can this be multiple things?
 					case *ast.IfStmt:
 						feature.Tree.Constraints = append(feature.Tree.Constraints, g.ifToConstraints(n, feature.Type, contextKeys)...)
 					default:
@@ -752,18 +772,24 @@ func (g *goSyncer) exprToValue(expr ast.Expr) string {
 }
 
 // TODO -- We know the return type..
-func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *anypb.Any {
+func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *featurev1beta1.Any { // TODO - ditch google ANY
 	switch node := expr.(type) {
 	case *ast.UnaryExpr:
 		switch node.Op {
 		case token.AND:
 			switch x := node.X.(type) {
 			case *ast.CompositeLit:
-				a, err := anypb.New(g.compositeLitToProto(x).(protoreflect.ProtoMessage))
+				// TODO - this is the one place we set the values for return types
+				protoMsg := g.compositeLitToProto(x).(protoreflect.ProtoMessage)
+				value, err := proto.Marshal(protoMsg)
 				if err != nil {
-					panic(errors.Wrap(err, "marshal Any"))
+					panic(err)
 				}
-				return a
+				// TODO - compositeLitToProto -> Value, []ValueOverride
+				return &featurev1beta1.Any{
+					TypeUrl: "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
+					Value:   value,
+				}
 			default:
 				panic(fmt.Errorf("unsupported unary & target %+v", x))
 			}
@@ -774,22 +800,57 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *an
 		value := g.primitiveToProtoValue(expr)
 		switch typedValue := value.(type) {
 		case string:
-			return try.To1(anypb.New(&wrapperspb.StringValue{Value: typedValue}))
+			value, err := proto.MarshalOptions{}.Marshal(&wrapperspb.StringValue{Value: typedValue})
+			if err != nil {
+				panic(err)
+			}
+			return &featurev1beta1.Any{
+				TypeUrl: "type.googleapis.com/google.protobuf.StringValue",
+				Value:   value,
+			}
 		case int64:
 			// A value parsed as an integer might actually be for a float config
 			switch want {
 			case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
-				return try.To1(anypb.New(&wrapperspb.Int64Value{Value: typedValue}))
+				value, err := proto.MarshalOptions{}.Marshal(&wrapperspb.Int64Value{Value: typedValue})
+				if err != nil {
+					panic(err)
+				}
+				return &featurev1beta1.Any{
+					TypeUrl: "type.googleapis.com/google.protobuf.Int64Value",
+					Value:   value,
+				}
 			case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
 				// TODO: handle precision boundaries properly
-				return try.To1(anypb.New(&wrapperspb.DoubleValue{Value: float64(typedValue)}))
+				value, err := proto.MarshalOptions{}.Marshal(&wrapperspb.DoubleValue{Value: float64(typedValue)})
+				if err != nil {
+					panic(err)
+				}
+				return &featurev1beta1.Any{
+					TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
+					Value:   value,
+				}
 			default:
 				panic(fmt.Errorf("unexpected primitive %v for target return type %v", typedValue, want))
 			}
 		case float64:
-			return try.To1(anypb.New(&wrapperspb.DoubleValue{Value: typedValue}))
+			value, err := proto.MarshalOptions{}.Marshal(&wrapperspb.DoubleValue{Value: typedValue})
+			if err != nil {
+				panic(err)
+			}
+			return &featurev1beta1.Any{
+				TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
+				Value:   value,
+			}
 		case bool:
-			return try.To1(anypb.New(&wrapperspb.BoolValue{Value: typedValue}))
+			value, err := proto.MarshalOptions{}.Marshal(&wrapperspb.BoolValue{Value: typedValue})
+			if err != nil {
+				panic(err)
+			}
+			return &featurev1beta1.Any{
+				TypeUrl: "type.googleapis.com/google.protobuf.BoolValue",
+				Value:   value,
+			}
 		default:
 			panic(fmt.Errorf("unsupported value expression %+v", node))
 		}
@@ -904,8 +965,13 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 	case *ast.CallExpr:
 		if fun, ok := x.Fun.(*ast.Ident); ok {
 			// TODO ensure that the arguments are the same as the main calling function
+			// TODO -- do the other stuff...
 			fmt.Printf("Need to create a call expression for: %#v\n", fun)
-			return nil
+			configKey := strcase.ToKebab(fun.Name[3:])
+			return &ConfigCall{
+				Namespace: g.Namespace,
+				Key:       configKey,
+			}
 		} else {
 			panic(fmt.Errorf("unsupported function call expression %+v", x))
 		}
@@ -1029,8 +1095,9 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 			if intValue, ok := value.(int64); ok && field.Kind() == protoreflect.DoubleKind {
 				value = float64(intValue)
 			}
-			// TODO - properly do reference shit
-			if value != nil {
+			if configCall, ok := value.(*ConfigCall); ok {
+				fmt.Printf("%+v\n", configCall)
+			} else if value != nil {
 				msg.Set(field, protoreflect.ValueOf(value))
 			}
 		}
@@ -1222,8 +1289,8 @@ func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.Featu
 	assert.Equal(len(ifStmt.Body.List), 1, "if statements can only contain one return statement")
 	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
 	assert.Equal(ok, true, "if statements can only contain return statements")
-	constraint.Value = g.exprToAny(returnStmt.Results[0], want) // TODO
-	if ifStmt.Else != nil {                                     // TODO bare else?
+	constraint.ValueNew = g.exprToAny(returnStmt.Results[0], want) // TODO
+	if ifStmt.Else != nil {                                        // TODO bare else?
 		elseIfStmt, ok := ifStmt.Else.(*ast.IfStmt)
 		assert.Equal(ok, true, "bare else statements are not supported, must be else if")
 		return append([]*featurev1beta1.Constraint{constraint}, g.ifToConstraints(elseIfStmt, want, contextKeys)...)

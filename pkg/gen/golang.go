@@ -42,9 +42,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/lekkodev/cli/pkg/native"
 )
@@ -211,14 +209,19 @@ import (
 		}
 
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-			msg, err := anypb.UnmarshalNew(f.Tree.Default, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
+			mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.DefaultNew.TypeUrl)
+			if err != nil {
+				panic(err)
+			}
+			msg := mt.New().Interface()
+			err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(f.Tree.DefaultNew.Value, msg)
 			if err != nil {
 				fmt.Printf("%+v\n\n", g.TypeRegistry)
-				panic(errors.Wrapf(err, "%s", f.Tree.Default.TypeUrl))
+				panic(errors.Wrapf(err, "%s", f.Tree.DefaultNew.TypeUrl))
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
 				// This feels bad...
-				StructDefMap[f.Tree.Default.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
+				StructDefMap[f.Tree.DefaultNew.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
 			}
 			importProtoReflect = true
 		}
@@ -237,7 +240,7 @@ import (
 		}
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			// TODO: Return imports from gen methods and collect, this doesn't handle imports for nested
-			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			protoImport := UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.DefaultNew.TypeUrl)
 			if protoImport.PackageAlias != "" {
 				protoImportSet[protoImport.ImportPath] = protoImport
 			}
@@ -534,21 +537,21 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	case featurev1beta1.FeatureType_FEATURE_TYPE_PROTO:
 		getFunction = "GetProto"
 		templateBody = g.getProtoTemplateBody()
-		matched, err := regexp.MatchString(fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.[a-zA-Z0-9]", ns), f.Tree.Default.TypeUrl)
+		matched, err := regexp.MatchString(fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.[a-zA-Z0-9]", ns), f.Tree.DefaultNew.TypeUrl)
 		if err != nil {
 			panic(err)
 		}
 		if matched {
-			parts := strings.Split(f.Tree.Default.TypeUrl, ".")
+			parts := strings.Split(f.Tree.DefaultNew.TypeUrl, ".")
 			retType = parts[len(parts)-1]
-			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.DefaultNew.TypeUrl)
 			protoType.PackageAlias = ""
 			// TODO - dups
 		} else { // For things like returning WKT like Duration
-			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.Default.TypeUrl)
+			protoType = UnpackProtoType(g.moduleRoot, g.lekkoPath, f.Tree.DefaultNew.TypeUrl)
 			retType = fmt.Sprintf("%s.%s", protoType.PackageAlias, protoType.Type)
 		}
-		mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.Default.TypeUrl)
+		mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.DefaultNew.TypeUrl)
 		if err != nil {
 			panic(err)
 		}
@@ -677,12 +680,12 @@ func (g *goGenerator) translateFeature(f *featurev1beta1.Feature, protoType *Pro
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", g.translateAnyValue(constraint.Value, protoType)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", g.translateAnyValue(constraint.ValueNew, protoType)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", g.translateAnyValue(f.GetTree().GetDefault(), protoType)))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", g.translateAnyValue(f.GetTree().GetDefaultNew(), protoType)))
 	return buffer
 }
 
@@ -895,27 +898,62 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 	}
 }
 
-func (g *goGenerator) translateAnyValue(val *anypb.Any, protoType *ProtoImport) string {
-	msg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: g.TypeRegistry})
+func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *ProtoImport) string {
+	mt, err := g.TypeRegistry.FindMessageByURL(val.TypeUrl)
+	if err != nil {
+		panic(err)
+	}
+	msg := mt.New().Interface()
+	err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(val.Value, msg)
 	if err != nil {
 		panic(errors.Wrapf(err, "%s", val.TypeUrl))
 	}
+	if strings.HasPrefix(val.TypeUrl, "type.googleapis.com/google.protobuf") {
+
+	}
+
 	if protoType == nil {
-		// TODO we may need more special casing here for primitive types.
-		// This feels like horrific syntax, but I needed this because
-		// Int64 was somehow serializing to "1" instead of 1, and typechecking
-		// doesn't seem to work since `UnmarshalNew` returns a `dynamicpb.Message` which doesn't work with go's type casing.
-		if val.MessageIs((*wrapperspb.Int64Value)(nil)) {
-			var i64 wrapperspb.Int64Value
-			try.To(val.UnmarshalTo(&i64))
-			return strconv.FormatInt(i64.Value, 10)
+		var ret string
+		msg.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			switch fd.Kind() {
+			case protoreflect.StringKind:
+				ret = g.toQuoted(v.String())
+			case protoreflect.Int64Kind:
+				ret = strconv.FormatInt(v.Int(), 10)
+			case protoreflect.BoolKind:
+				if v.Bool() {
+					ret = "true"
+				} else {
+					ret = "false"
+				}
+			default:
+				ret = fmt.Sprintf("%s", v)
+			}
+			// limit this to just wrappers.. wtf proto libraries
+			return true
+		})
+		if ret == "" {
+			fmt.Printf("%#v\n", msg.ProtoReflect().Descriptor().Fields())
+			println(msg)
 		}
-		if val.MessageIs((*wrapperspb.StringValue)(nil)) {
-			var s wrapperspb.StringValue
-			try.To(val.UnmarshalTo(&s))
-			return g.toQuoted(s.Value)
-		}
-		return string(try.To1(protojson.Marshal(msg)))
+		return ret
+		/*
+			switch w := msg.ProtoReflect().Interface().(type) {
+			case *wrapperspb.StringValue:
+				return g.toQuoted(w.Value)
+			case *wrapperspb.Int64Value:
+				return strconv.FormatInt(w.Value, 10)
+			case *wrapperspb.BoolValue:
+				if w.Value {
+					return "true"
+				}
+				return "false"
+				//default: // This code is being called for Bools, Int64s and Strings :(
+				//fmt.Printf("%s\n", w)
+				//fmt.Println(reflect.TypeOf(w))
+			}
+			return string(try.To1(protojson.Marshal(msg)))
+		*/
 	}
 	return g.translateProtoValue(nil, msg.ProtoReflect(), false)
 }
@@ -990,9 +1028,9 @@ func (g *goGenerator) getStringRetValues(f *featurev1beta1.Feature) []string {
 		return []string{}
 	}
 	valSet := make(map[string]bool)
-	valSet[g.translateAnyValue(f.Tree.Default, nil)] = true
+	valSet[g.translateAnyValue(f.Tree.DefaultNew, nil)] = true
 	for _, constraint := range f.Tree.Constraints {
-		ret := g.translateAnyValue(constraint.Value, nil)
+		ret := g.translateAnyValue(constraint.ValueNew, nil)
 		valSet[ret] = true
 	}
 	var rets []string
