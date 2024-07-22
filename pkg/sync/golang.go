@@ -536,7 +536,9 @@ func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, erro
 			return nil, errors.Wrap(err, "final rebuild type registry")
 		}
 		// Final compile to verify healthy sync
-		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+		if _, err := r.Compile(ctx, &repo.CompileRequest{
+			IgnoreBackwardsCompatibility: true,
+		}); err != nil {
 			return nil, errors.Wrap(err, "final compile")
 		}
 	}
