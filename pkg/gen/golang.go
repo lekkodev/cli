@@ -560,6 +560,10 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			fd := mt.Descriptor().Fields().Get(i)
 			fieldName := fd.Name()
 			fieldType := FieldDescriptorToGoTypeString(fd)
+			if fd.Kind() == protoreflect.MessageKind {
+				// This includes durationpb.Duration
+				return nil, fmt.Errorf("generate code for field %s: nested complex types are currently not supported", fd.FullName())
+			}
 			if fd.IsList() {
 				protoStructFilling = protoStructFilling + fmt.Sprintf(`
 		case "%[1]s":
@@ -575,8 +579,10 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 									return true
 								}
 							}`, string(fieldName), strcase.ToCamel(string(fieldName)), fieldType, fd.Kind().String())
-			} else {
+			} else if fd.IsMap() {
 				// TODO: Maps don't work because the value is a dynamicpb.dynamicMap that can't be cast to map[key]value
+				return nil, fmt.Errorf("generate code for field %s: maps are currently not supported", fd.FullName())
+			} else {
 				protoStructFilling = protoStructFilling + fmt.Sprintf(`
 		case "%s":
 							fv, ok := v.Interface().(%s)
