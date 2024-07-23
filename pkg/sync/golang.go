@@ -56,27 +56,6 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// TODO these will be in the proto def, but fuck fighting with buf right now
-type ConfigCall struct {
-	TypeUrl     string
-	Namespace   string
-	Key         string
-	FieldNumber uint64
-}
-
-type ValueOverride struct {
-	Call      ConfigCall
-	FieldPath []int32
-	Position  uint32
-	Splat     bool
-}
-
-type Any struct {
-	TypeUrl   string
-	Value     []byte
-	Overrides []ValueOverride
-}
-
 func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
@@ -621,7 +600,7 @@ func (g *goSyncer) exprToValue(expr ast.Expr) string {
 }
 
 // TODO -- We know the return type..
-func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *featurev1beta1.Any { // TODO - ditch google ANY
+func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *featurev1beta1.Any {
 	switch node := expr.(type) {
 	case *ast.UnaryExpr:
 		switch node.Op {
@@ -629,15 +608,19 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *fe
 			switch x := node.X.(type) {
 			case *ast.CompositeLit:
 				// TODO - this is the one place we set the values for return types
-				protoMsg := g.compositeLitToProto(x).(protoreflect.ProtoMessage)
+				message, overrides := g.compositeLitToProto(x)
+				protoMsg, ok := message.(protoreflect.ProtoMessage)
+				if !ok {
+					panic("This should never happen")
+				}
 				value, err := proto.Marshal(protoMsg)
 				if err != nil {
 					panic(err)
 				}
-				// TODO - compositeLitToProto -> Value, []ValueOverride
 				return &featurev1beta1.Any{
-					TypeUrl: "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
-					Value:   value,
+					TypeUrl:   "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
+					Value:     value,
+					Overrides: overrides,
 				}
 			default:
 				panic(fmt.Errorf("unsupported unary & target %+v", x))
@@ -645,7 +628,29 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType) *fe
 		default:
 			panic(fmt.Errorf("unsupported unary operator %v", node.Op))
 		}
+	case *ast.CallExpr:
+		if fun, ok := node.Fun.(*ast.Ident); ok {
+			// TODO ensure that the arguments are the same as the main calling function
+			// TODO -- do the other stuff...
+			configKey := strcase.ToKebab(fun.Name[3:])
+			protoMsg := &featurev1beta1.ConfigCall{
+				Namespace: g.Namespace,
+				Key:       configKey,
+				// TODO do we know the location of this?
+			}
+			value, err := proto.Marshal(protoMsg)
+			if err != nil {
+				panic(err)
+			}
+			return &featurev1beta1.Any{
+				TypeUrl: "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
+				Value:   value,
+			}
+		} else {
+			panic(fmt.Errorf("unsupported function call expression %+v", node))
+		}
 	default:
+		// TODO
 		value := g.primitiveToProtoValue(expr)
 		switch typedValue := value.(type) {
 		case string:
@@ -815,11 +820,11 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 		if fun, ok := x.Fun.(*ast.Ident); ok {
 			// TODO ensure that the arguments are the same as the main calling function
 			// TODO -- do the other stuff...
-			fmt.Printf("Need to create a call expression for: %#v\n", fun)
 			configKey := strcase.ToKebab(fun.Name[3:])
-			return &ConfigCall{
+			return &featurev1beta1.ConfigCall{
 				Namespace: g.Namespace,
 				Key:       configKey,
+				// TODO do we know the location of this?
 			}
 		} else {
 			panic(fmt.Errorf("unsupported function call expression %+v", x))
@@ -829,7 +834,8 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr) any {
 	}
 }
 
-func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message {
+func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) (protoreflect.Message, []*featurev1beta1.ValueOveride) {
+	var overrides []*featurev1beta1.ValueOveride
 	mt := g.compositeLitToMessageType(x)
 	msg := mt.New()
 	for _, v := range x.Elts {
@@ -848,7 +854,11 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 			case token.AND:
 				switch ix := node.X.(type) {
 				case *ast.CompositeLit:
-					msg.Set(field, protoreflect.ValueOf(g.compositeLitToProto(ix)))
+					innerMessage, calls := g.compositeLitToProto(ix)
+					if len(calls) > 0 {
+						fmt.Printf("%+v\n", calls)
+					}
+					msg.Set(field, protoreflect.ValueOf(innerMessage))
 				default:
 					panic(fmt.Errorf("unsupported X type for unary & %T", ix))
 				}
@@ -896,7 +906,9 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 						default:
 							panic(fmt.Errorf("unsupported slice element type %+v", elt))
 						}
-						lVal.Append(protoreflect.ValueOf(g.compositeLitToProto(cl)))
+						innerMessage, innerOverrides := g.compositeLitToProto(cl)
+						overrides = append(overrides, innerOverrides...)
+						lVal.Append(protoreflect.ValueOf(innerMessage))
 					}
 				default:
 					panic(fmt.Errorf("unsupported slice element type %+v", eltTypeNode))
@@ -944,14 +956,18 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit) protoreflect.Message
 			if intValue, ok := value.(int64); ok && field.Kind() == protoreflect.DoubleKind {
 				value = float64(intValue)
 			}
-			if configCall, ok := value.(*ConfigCall); ok {
-				fmt.Printf("%+v\n", configCall)
+			if configCall, ok := value.(*featurev1beta1.ConfigCall); ok {
+				override := &featurev1beta1.ValueOveride{
+					Call:      configCall,
+					FieldPath: []int32{int32(field.Number())}, // TODO
+				}
+				overrides = append(overrides, override)
 			} else if value != nil {
 				msg.Set(field, protoreflect.ValueOf(value))
 			}
 		}
 	}
-	return msg
+	return msg, overrides
 }
 
 func (g *goSyncer) exprToComparisonValue(expr ast.Expr) *structpb.Value {

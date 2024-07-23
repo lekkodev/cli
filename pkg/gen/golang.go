@@ -216,7 +216,6 @@ import (
 			msg := mt.New().Interface()
 			err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(f.Tree.DefaultNew.Value, msg)
 			if err != nil {
-				fmt.Printf("%+v\n\n", g.TypeRegistry)
 				panic(errors.Wrapf(err, "%s", f.Tree.DefaultNew.TypeUrl))
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
@@ -892,13 +891,28 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 		return val.String()
 	case protoreflect.MessageKind:
 		// TODO - Maps are a special thing - do they work here?
-		return g.translateProtoValue(parent, val.Message(), omitLiteralType)
+		return g.translateProtoValue(parent, val.Message(), omitLiteralType, make([]*featurev1beta1.ValueOveride, 0)) // TODO - nesting sucks.. need to redo all this shit
 	default:
 		panic(fmt.Errorf("unsupported proto value type: %v", kind))
 	}
 }
 
 func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *ProtoImport) string {
+	if val.TypeUrl == "type.googleapis.com/lekko.feature.v1beta1.ConfigCall" {
+		call := &featurev1beta1.ConfigCall{}
+		err := proto.Unmarshal(val.Value, call)
+		if err != nil {
+			panic(err)
+		}
+		var funcNameBuilder strings.Builder
+		funcNameBuilder.WriteString("Get")
+		for _, word := range regexp.MustCompile("[_-]+").Split(call.Key, -1) {
+			funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
+		}
+		funcName := funcNameBuilder.String()
+		privateFunc := strcase.ToLowerCamel(funcName)
+		return privateFunc + "()"
+	}
 	mt, err := g.TypeRegistry.FindMessageByURL(val.TypeUrl)
 	if err != nil {
 		panic(err)
@@ -908,12 +922,22 @@ func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *Prot
 	if err != nil {
 		panic(errors.Wrapf(err, "%s", val.TypeUrl))
 	}
-	if strings.HasPrefix(val.TypeUrl, "type.googleapis.com/google.protobuf") {
 
-	}
-
-	if protoType == nil {
+	if protoType == nil { // This is a jank way of handling google WKT
 		var ret string
+		switch val.TypeUrl {
+		case "type.googleapis.com/google.protobuf.BoolValue":
+			ret = "false"
+		case "type.googleapis.com/google.protobuf.StringValue":
+			ret = ""
+		case "type.googleapis.com/google.protobuf.DoubleValue":
+			ret = "0.0"
+		case "type.googleapis.com/google.protobuf.Int32Value":
+			ret = "0"
+		case "type.googleapis.com/google.protobuf.Int64Value":
+			ret = "0"
+		}
+
 		msg.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 			switch fd.Kind() {
 			case protoreflect.StringKind:
@@ -927,42 +951,39 @@ func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *Prot
 					ret = "false"
 				}
 			default:
+				//lint:ignore S1025 Reason for ignoring this warning
 				ret = fmt.Sprintf("%s", v)
 			}
 			// limit this to just wrappers.. wtf proto libraries
 			return true
 		})
-		if ret == "" {
-			fmt.Printf("%#v\n", msg.ProtoReflect().Descriptor().Fields())
-			println(msg)
-		}
 		return ret
-		/*
-			switch w := msg.ProtoReflect().Interface().(type) {
-			case *wrapperspb.StringValue:
-				return g.toQuoted(w.Value)
-			case *wrapperspb.Int64Value:
-				return strconv.FormatInt(w.Value, 10)
-			case *wrapperspb.BoolValue:
-				if w.Value {
-					return "true"
-				}
-				return "false"
-				//default: // This code is being called for Bools, Int64s and Strings :(
-				//fmt.Printf("%s\n", w)
-				//fmt.Println(reflect.TypeOf(w))
-			}
-			return string(try.To1(protojson.Marshal(msg)))
-		*/
 	}
-	return g.translateProtoValue(nil, msg.ProtoReflect(), false)
+	return g.translateProtoValue(nil, msg.ProtoReflect(), false, val.Overrides)
 }
 
-func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val protoreflect.Message, omitLiteralType bool) string {
+func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val protoreflect.Message, omitLiteralType bool, overrides []*featurev1beta1.ValueOveride) string {
 	protoType := g.getProtoImportFromValue(parent, val)
+	fields := make(map[int]string)
+	for _, override := range overrides {
+		fieldNumber := override.FieldPath[0]
+		fd := val.Type().Descriptor().Fields().ByNumber(protoreflect.FieldNumber(fieldNumber))
+		if fd == nil {
+			panic(fmt.Errorf("field number %d not found in message", fieldNumber))
+		}
+		var funcNameBuilder strings.Builder
+		funcNameBuilder.WriteString("Get")
+		for _, word := range regexp.MustCompile("[_-]+").Split(override.Call.Key, -1) {
+			funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
+		}
+		funcName := funcNameBuilder.String()
+		privateFunc := strcase.ToLowerCamel(funcName)
+		fields[int(fieldNumber)] = fmt.Sprintf("%s: %s()", strcase.ToCamel(fd.TextName()), privateFunc)
+	}
+
 	var lines []string
 	val.Range(func(fd protoreflect.FieldDescriptor, fv protoreflect.Value) bool {
-		lines = append(lines, fmt.Sprintf("%s: %s", strcase.ToCamel(fd.TextName()), g.translateProtoFieldValue(val, fd, fv)))
+		fields[int(fd.Number())] = fmt.Sprintf("%s: %s", strcase.ToCamel(fd.TextName()), g.translateProtoFieldValue(val, fd, fv))
 		return true
 	})
 	literalType := ""
@@ -973,6 +994,17 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 			literalType = fmt.Sprintf("&%s.%s", protoType.PackageAlias, protoType.Type)
 		}
 	}
+
+	keys := []int{}
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Ints(keys)
+
+	for _, key := range keys {
+		lines = append(lines, fields[key])
+	}
+
 	if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
 		slices.Sort(lines)
 		// Replace this with interface pointing stuff

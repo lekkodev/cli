@@ -103,7 +103,11 @@ func Test_goToGo(t *testing.T) {
 			panic(err)
 		}
 		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = %v, want %v", got, string(f))
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
 		}
 	})
 	t.Run("withcontext", func(t *testing.T) {

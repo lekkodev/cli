@@ -15,3 +15,7 @@ func getWidget() *Widget {
 func getSize() float64 {
 	return 43.1
 }
+
+func getDirect() float64 {
+	return getSize()
+}
