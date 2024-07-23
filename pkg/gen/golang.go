@@ -929,7 +929,7 @@ func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *Prot
 		case "type.googleapis.com/google.protobuf.BoolValue":
 			ret = "false"
 		case "type.googleapis.com/google.protobuf.StringValue":
-			ret = ""
+			ret = "\"\""
 		case "type.googleapis.com/google.protobuf.DoubleValue":
 			ret = "0.0"
 		case "type.googleapis.com/google.protobuf.Int32Value":
