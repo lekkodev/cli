@@ -42,6 +42,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/lekkodev/cli/pkg/native"
@@ -189,6 +190,9 @@ import (
 	StructDefMap := make(map[string]string)
 	importProtoReflect := false
 	for _, f := range features {
+		if f.GetTree().GetDefaultNew() == nil {
+			f.GetTree().DefaultNew = anyToLekkoAny(f.GetTree().Default)
+		}
 		var ctxType *ProtoImport
 		if f.SignatureTypeUrl != "" {
 			mt, err := g.TypeRegistry.FindMessageByURL(f.SignatureTypeUrl)
@@ -668,6 +672,13 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	return generated, nil
 }
 
+func anyToLekkoAny(a *anypb.Any) *featurev1beta1.Any {
+	return &featurev1beta1.Any{
+		TypeUrl: a.GetTypeUrl(),
+		Value:   a.GetValue(),
+	}
+}
+
 func (g *goGenerator) translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
@@ -679,6 +690,9 @@ func (g *goGenerator) translateFeature(f *featurev1beta1.Feature, protoType *Pro
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
+		if constraint.ValueNew == nil {
+			constraint.ValueNew = anyToLekkoAny(constraint.Value)
+		}
 		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", g.translateAnyValue(constraint.ValueNew, protoType)))
 	}
 	if len(f.Tree.Constraints) > 0 {
