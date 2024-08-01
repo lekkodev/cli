@@ -52,6 +52,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -466,7 +467,7 @@ func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, erro
 			var starBytes []byte
 			starImports := make([]*featurev1beta1.ImportStatement, 0)
 			if configProto.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
-				typeURL := configProto.GetTree().GetDefault().GetTypeUrl()
+				typeURL := configProto.GetTree().GetDefaultNew().GetTypeUrl()
 				messageType, found := strings.CutPrefix(typeURL, "type.googleapis.com/")
 				if !found {
 					return nil, fmt.Errorf("can't parse type url: %s", typeURL)
@@ -498,6 +499,12 @@ func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, erro
 				starBytes, err = star.GetTemplate(eval.ConfigTypeFromProto(configProto.Type), feature.LatestNamespaceVersion(), nil)
 				if err != nil {
 					return nil, err
+				}
+			}
+			if configProto.Tree.Default == nil {
+				configProto.Tree.Default = &anypb.Any{
+					TypeUrl: configProto.Tree.DefaultNew.GetTypeUrl(),
+					Value:   configProto.Tree.DefaultNew.GetValue(),
 				}
 			}
 			// mutate starlark with the actual config
