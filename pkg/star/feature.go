@@ -17,6 +17,7 @@ package star
 import (
 	"fmt"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/lekkodev/cli/pkg/feature"
 	"github.com/lekkodev/go-sdk/pkg/eval"
@@ -36,6 +37,7 @@ const (
 	FeatureConstructor   starlark.String = "feature"
 	ExportConstructor    starlark.String = "export"
 	ConfigConstructor    starlark.String = "Config"
+	CallConstructor      starlark.String = "Call"
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
@@ -84,6 +86,13 @@ func makeConfig(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kw
 		return nil, fmt.Errorf("config: unexpected positional arguments")
 	}
 	return starlarkstruct.FromKeywords(ConfigConstructor, kwargs), nil
+}
+
+func makeCall(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) > 0 {
+		return nil, fmt.Errorf("config: unexpected positional arguments")
+	}
+	return starlarkstruct.FromKeywords(CallConstructor, kwargs), nil
 }
 
 func makeExport(lekkoGlobals starlark.StringDict) func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -265,6 +274,23 @@ func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, err
 			return nil, errors.Wrap(err, "extract json list")
 		}
 		return feature.NewEncodedJSONFeature(encoded)
+	case *starlarkstruct.Struct:
+		key, err := typedVal.Attr("key")
+		if err != nil {
+			return nil, err
+		}
+		namespace, err := typedVal.Attr("namespace")
+		if err != nil {
+			return nil, err
+		}
+		value := &featurev1beta1.ConfigCall{
+			Key:       key.(starlark.String).GoString(),
+			Namespace: namespace.(starlark.String).GoString(),
+		}
+		return &feature.Feature{
+			Value:       value,
+			FeatureType: eval.ConfigTypeProto,
+		}, nil
 	default:
 		return nil, fmt.Errorf("received default value with unsupported type %T", typedVal)
 	}

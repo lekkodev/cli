@@ -538,11 +538,19 @@ func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, erro
 		if err := g.writeTypesToRepo(ctx, r); err != nil {
 			return nil, errors.Wrap(err, "write type files")
 		}
-		if _, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false); err != nil {
+		repoReg, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false)
+		if err != nil {
 			return nil, errors.Wrap(err, "final rebuild type registry")
 		}
+		repoReg.RangeMessages(func(mt protoreflect.MessageType) bool {
+			g.typeRegistry.RegisterMessage(mt)
+			return true
+		})
+
 		// Final compile to verify healthy sync
-		if _, err := r.Compile(ctx, &repo.CompileRequest{}); err != nil {
+		if _, err := r.Compile(ctx, &repo.CompileRequest{
+			Registry: g.typeRegistry,
+		}); err != nil {
 			return nil, errors.Wrap(err, "final compile")
 		}
 	}
@@ -576,6 +584,10 @@ func (g *goSyncer) writeTypesToRepo(ctx context.Context, r repo.ConfigurationRep
 	fr.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		// Ignore well-known types since they shouldn't be written as files
 		if strings.HasPrefix(string(fd.FullName()), "google.protobuf") {
+			return true
+		}
+		// Ignore our types since they shouldn't be written as files
+		if strings.HasPrefix(string(fd.FullName()), "lekko.") {
 			return true
 		}
 		contents, err := FileDescriptorToProtoString(fd)

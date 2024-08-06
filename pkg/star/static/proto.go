@@ -33,17 +33,23 @@ import (
 // Given a proto message and the import statement that the type of the message is provided by,
 // constructs a starlark expression defining the proto message.
 func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.Message, meta *featurev1beta1.StarMeta) (*build.CallExpr, error) {
-	imp, err := findImport(imports, msg.Descriptor().FullName())
-	if err != nil {
-		return nil, err
-	}
-	suffix := strings.TrimPrefix(strings.TrimPrefix(string(msg.Descriptor().FullName()), imp.Rhs.GetArgs()[0]), ".")
-	res := &build.CallExpr{
-		X: &build.DotExpr{
+	var imp *featurev1beta1.ImportStatement
+	res := &build.CallExpr{}
+	if msg.Descriptor().FullName() == "lekko.feature.v1beta1.ConfigCall" {
+		res.X = &build.Ident{Name: "Call"}
+	} else {
+		var err error
+		imp, err = findImport(imports, msg.Descriptor().FullName())
+		if err != nil {
+			return nil, err
+		}
+		suffix := strings.TrimPrefix(strings.TrimPrefix(string(msg.Descriptor().FullName()), imp.Rhs.GetArgs()[0]), ".")
+		res.X = &build.DotExpr{
 			X:    &build.Ident{Name: imp.GetLhs().Token},
 			Name: suffix,
-		},
+		}
 	}
+
 	type starListElem struct {
 		protoFieldNum int
 		starElem      build.Expr

@@ -62,6 +62,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
+		Load: load,
 	}
 	moduleSource, err := c.cw.GetFileContents(ctx, c.ff.RootPath(c.ff.StarlarkFileName))
 	if err != nil {
@@ -85,11 +86,13 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 		"feature": starlark.NewBuiltin("feature", makeFeature),
 		"export":  starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
 		"Config":  starlark.NewBuiltin("Config", makeConfig),
+		"Call":    starlark.NewBuiltin("Call", makeCall),
 		"proto":   protoModule,
 		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"math":    math.Module,
 	})
 	if err != nil {
+		fmt.Printf("%s\n\n", moduleSource)
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
 	lekkoGlobals.Freeze()

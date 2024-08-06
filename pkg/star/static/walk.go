@@ -406,7 +406,36 @@ func (w *walker) buildDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 /** Methods helpful for mutating the underlying AST. **/
 // TODO: this method should take a feature type and switch on the feature type.
 // And then cast the proto val to that wrapper type.
-func (w *walker) genValue(a *anypb.Any, sf *featurev1beta1.StaticFeature, meta *featurev1beta1.StarMeta) (build.Expr, error) {
+// TODO switch to lekko any
+func (w *walker) genValue(la *featurev1beta1.Any, sf *featurev1beta1.StaticFeature, meta *featurev1beta1.StarMeta) (build.Expr, error) {
+	if la == nil {
+		panic(la)
+	}
+	if la.TypeUrl == "type.googleapis.com/lekko.feature.v1beta1.ConfigCall" {
+		protoVal := &featurev1beta1.ConfigCall{}
+		err := proto.Unmarshal(la.Value, protoVal)
+		if err != nil {
+			return nil, err
+		}
+		// TODO: force sub multiline as well
+		callExpr, err := ProtoToStatic(sf.GetImports(), protoVal.ProtoReflect(), meta)
+		if err != nil {
+			return nil, err
+		}
+		return callExpr, nil
+		/*
+
+			return &build.CallExpr{
+				X: &build.Ident{
+					Name: "useCustomAny",
+				},
+			}, nil
+		*/
+	}
+	a := &anypb.Any{
+		TypeUrl: la.TypeUrl,
+		Value:   la.Value,
+	}
 	switch sf.FeatureOld.Type {
 	case featurev1beta1.FeatureType_FEATURE_TYPE_BOOL:
 		bv := &wrapperspb.BoolValue{}
@@ -526,7 +555,10 @@ func (w *walker) mutateDefaultFn(f *featurev1beta1.StaticFeature) defaultFn {
 		if featureType != f.Type {
 			return errors.Wrapf(err, "cannot mutate star config type %v with arg config type %v", featureType, f.Type)
 		}
-		gen, err := w.genValue(f.FeatureOld.Tree.Default, f, f.GetFeature().GetDefault().GetMeta())
+		if f.FeatureOld.Tree.DefaultNew == nil {
+			f.FeatureOld.Tree.DefaultNew = &featurev1beta1.Any{TypeUrl: f.FeatureOld.Tree.Default.TypeUrl, Value: f.FeatureOld.Tree.Default.Value}
+		}
+		gen, err := w.genValue(f.FeatureOld.Tree.DefaultNew, f, f.GetFeature().GetDefault().GetMeta())
 		if err != nil {
 			return errors.Wrap(err, "gen value")
 		}
@@ -573,7 +605,13 @@ func (w *walker) mutateOverridesFn(f *featurev1beta1.StaticFeature) overridesFn 
 					Value:   r.GetValueNew().GetValue(),
 				}
 			}
-			gen, err := w.genValue(r.Value, f, meta)
+			if r.ValueNew == nil {
+				r.ValueNew = &featurev1beta1.Any{
+					TypeUrl: r.Value.TypeUrl,
+					Value:   r.Value.Value,
+				}
+			}
+			gen, err := w.genValue(r.ValueNew, f, meta)
 			if err != nil {
 				return errors.Wrapf(err, "override %d: gen value", i)
 			}
