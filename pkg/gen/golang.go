@@ -558,18 +558,44 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		if err != nil {
 			panic(err)
 		}
+		// TODO: In case of type changes that result in only some of the fields being unpacked correctly, is it better to
+		// succeed partially or defer to static fallback?
 		protoStructFilling = `result.ProtoReflect().Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 						switch fd.Name() {`
 		for i := 0; i < mt.Descriptor().Fields().Len(); i++ {
 			fd := mt.Descriptor().Fields().Get(i)
 			fieldName := fd.Name()
 			fieldType := FieldDescriptorToGoTypeString(fd)
-			protoStructFilling = protoStructFilling + fmt.Sprintf(`
+			if fd.Kind() == protoreflect.MessageKind {
+				// This includes durationpb.Duration
+				return nil, fmt.Errorf("generate code for field %s: nested complex types are currently not supported", fd.FullName())
+			}
+			if fd.IsList() {
+				protoStructFilling = protoStructFilling + fmt.Sprintf(`
+		case "%[1]s":
+							if !fd.IsList() {
+								return true
+							}
+							l := v.List()
+							ret.%[2]s = make(%[3]s, l.Len())
+							for i := range l.Len() {
+								if iv, ok := l.Get(i).Interface().(%[4]s); ok {
+									ret.%[2]s[i] = iv
+								} else {
+									return true
+								}
+							}`, string(fieldName), strcase.ToCamel(string(fieldName)), fieldType, fd.Kind().String())
+			} else if fd.IsMap() {
+				// TODO: Maps don't work because the value is a dynamicpb.dynamicMap that can't be cast to map[key]value
+				return nil, fmt.Errorf("generate code for field %s: maps are currently not supported", fd.FullName())
+			} else {
+				protoStructFilling = protoStructFilling + fmt.Sprintf(`
 		case "%s":
-							v, ok := result.ProtoReflect().Get(fd).Interface().(%s)
+							fv, ok := v.Interface().(%s)
 							if (ok) {
-								ret.%s = v
+								ret.%s = fv
 							}`, string(fieldName), fieldType, strcase.ToCamel(string(fieldName)))
+			}
 		}
 		protoStructFilling = protoStructFilling + `
 		}
