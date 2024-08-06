@@ -36,7 +36,7 @@ func ProtoToStatic(imports []*featurev1beta1.ImportStatement, msg protoreflect.M
 	var imp *featurev1beta1.ImportStatement
 	res := &build.CallExpr{}
 	if msg.Descriptor().FullName() == "lekko.feature.v1beta1.ConfigCall" {
-		res.X = &build.Ident{Name: "Call"}
+		res.X = &build.Ident{Name: "CallBoolean"}
 	} else {
 		var err error
 		imp, err = findImport(imports, msg.Descriptor().FullName())

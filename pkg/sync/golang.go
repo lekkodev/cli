@@ -543,7 +543,7 @@ func (g *goSyncer) Sync(ctx context.Context, repoPath *string) (*Namespace, erro
 			return nil, errors.Wrap(err, "final rebuild type registry")
 		}
 		repoReg.RangeMessages(func(mt protoreflect.MessageType) bool {
-			g.typeRegistry.RegisterMessage(mt)
+			_ = g.typeRegistry.RegisterMessage(mt)
 			return true
 		})
 

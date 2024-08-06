@@ -426,7 +426,11 @@ func NewJSONFeature(value *structpb.Value) *Feature {
 
 // Takes a go value and an associated type, and converts the
 // value to a language-agnostic protobuf any type.
-func ValToAny(value interface{}, ft eval.ConfigType) (*anypb.Any, error) {
+func ValToAny(value interface{}, ft eval.ConfigType) (*anypb.Any, error) { // TODO kill Any
+	v, ok := value.(*featurev1beta1.ConfigCall)
+	if ok {
+		return newAny(v)
+	}
 	switch ft {
 	case eval.ConfigTypeBool:
 		v, ok := value.(bool)

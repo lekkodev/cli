@@ -37,7 +37,6 @@ const (
 	FeatureConstructor   starlark.String = "feature"
 	ExportConstructor    starlark.String = "export"
 	ConfigConstructor    starlark.String = "Config"
-	CallConstructor      starlark.String = "Call"
 	ResultVariableName   string          = "result"
 	DefaultValueAttrName string          = "default"
 	DescriptionAttrName  string          = "description"
@@ -88,11 +87,11 @@ func makeConfig(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kw
 	return starlarkstruct.FromKeywords(ConfigConstructor, kwargs), nil
 }
 
-func makeCall(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func makeCallBoolean(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 0 {
 		return nil, fmt.Errorf("config: unexpected positional arguments")
 	}
-	return starlarkstruct.FromKeywords(CallConstructor, kwargs), nil
+	return starlarkstruct.FromKeywords(starlark.String("CallBoolean"), kwargs), nil
 }
 
 func makeExport(lekkoGlobals starlark.StringDict) func(thread *starlark.Thread, fn *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -154,7 +153,7 @@ func (fb *featureBuilder) Build() (*feature.CompiledFeature, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "default attribute")
 	}
-	f, err := fb.init(defaultVal)
+	f, err := fb.init(defaultVal) // probably where we reverse the config call
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize config")
 	}
@@ -289,7 +288,7 @@ func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, err
 		}
 		return &feature.Feature{
 			Value:       value,
-			FeatureType: eval.ConfigTypeProto,
+			FeatureType: eval.ConfigTypeBool, // TODO set proper return type
 		}, nil
 	default:
 		return nil, fmt.Errorf("received default value with unsupported type %T", typedVal)
