@@ -282,9 +282,17 @@ func (fb *featureBuilder) init(defaultVal starlark.Value) (*feature.Feature, err
 		if err != nil {
 			return nil, err
 		}
+		key_, ok := key.(starlark.String)
+		if !ok {
+			panic("")
+		}
+		namespace_, ok := namespace.(starlark.String)
+		if !ok {
+			panic("")
+		}
 		value := &featurev1beta1.ConfigCall{
-			Key:       key.(starlark.String).GoString(),
-			Namespace: namespace.(starlark.String).GoString(),
+			Key:       key_.GoString(),
+			Namespace: namespace_.GoString(),
 		}
 		return &feature.Feature{
 			Value:       value,
