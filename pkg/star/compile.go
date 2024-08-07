@@ -62,6 +62,7 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 	// Execute the starlark file to retrieve its contents (globals)
 	thread := &starlark.Thread{
 		Name: "compile",
+		Load: load,
 	}
 	moduleSource, err := c.cw.GetFileContents(ctx, c.ff.RootPath(c.ff.StarlarkFileName))
 	if err != nil {
@@ -81,15 +82,17 @@ func (c *compiler) Compile(ctx context.Context, nv feature.NamespaceVersion) (*f
 		Recursion: true,
 	}
 	starlarkGlobals, err := starlark.ExecFileOptions(fileOptions, thread, c.ff.RootPath(c.ff.StarlarkFileName), moduleSource, starlark.StringDict{
-		"assert":  assertModule,
-		"feature": starlark.NewBuiltin("feature", makeFeature),
-		"export":  starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
-		"Config":  starlark.NewBuiltin("Config", makeConfig),
-		"proto":   protoModule,
-		"struct":  starlark.NewBuiltin("struct", starlarkstruct.Make),
-		"math":    math.Module,
+		"assert":      assertModule,
+		"feature":     starlark.NewBuiltin("feature", makeFeature),
+		"export":      starlark.NewBuiltin("export", makeExport(lekkoGlobals)),
+		"Config":      starlark.NewBuiltin("Config", makeConfig),
+		"CallBoolean": starlark.NewBuiltin("CallBoolean", makeCallBoolean),
+		"proto":       protoModule,
+		"struct":      starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"math":        math.Module,
 	})
 	if err != nil {
+		fmt.Printf("%s\n\n", moduleSource)
 		return nil, errors.Wrap(err, "starlark execfile")
 	}
 	lekkoGlobals.Freeze()

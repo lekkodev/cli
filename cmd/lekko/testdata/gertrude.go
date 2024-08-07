@@ -8,6 +8,14 @@ type Widget struct {
 func getWidget() *Widget {
 	return &Widget{
 		Name: "Terry",
-		Size: 42.8,
+		Size: getSize(),
 	}
+}
+
+func getSize() float64 {
+	return 43.1
+}
+
+func getDirect() float64 {
+	return getSize()
 }

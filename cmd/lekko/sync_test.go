@@ -103,7 +103,11 @@ func Test_goToGo(t *testing.T) {
 			panic(err)
 		}
 		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = %v, want %v", got, string(f))
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
 		}
 	})
 	t.Run("withcontext", func(t *testing.T) {
@@ -127,7 +131,9 @@ func Test_goToGo(t *testing.T) {
 			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
 		}
 	})
+}
 
+func Test_Gertrude(t *testing.T) {
 	t.Run("gertrude", func(t *testing.T) {
 		ctx := context.Background()
 		f, err := os.ReadFile("./testdata/gertrude.go")
@@ -135,7 +141,11 @@ func Test_goToGo(t *testing.T) {
 			panic(err)
 		}
 		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
+			diff, err := DiffStyleOutput(string(f), got)
+			if err != nil {
+				panic(err)
+			}
+			t.Errorf("Difference Found: %s\n", diff)
 		}
 	})
 }

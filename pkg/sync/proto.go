@@ -18,12 +18,17 @@ import (
 	"fmt"
 	"strings"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
+
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -35,6 +40,10 @@ func NewDefaultFileDescriptorSet() *descriptorpb.FileDescriptorSet {
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(wrapperspb.File_google_protobuf_wrappers_proto))
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(structpb.File_google_protobuf_struct_proto))
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(durationpb.File_google_protobuf_duration_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(anypb.File_google_protobuf_any_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(rulesv1beta2.File_lekko_rules_v1beta2_rules_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(rulesv1beta3.File_lekko_rules_v1beta3_rules_proto))
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(featurev1beta1.File_lekko_feature_v1beta1_feature_proto))
 	return fds
 }
 
