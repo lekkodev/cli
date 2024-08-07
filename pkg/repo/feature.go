@@ -688,6 +688,11 @@ func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPat
 	if err != nil {
 		return nil, err
 	}
+	var configCall featurev1beta1.ConfigCall
+	err = sTypes.Types.RegisterMessage((&configCall).ProtoReflect().Type())
+	if err != nil {
+		return nil, err
+	}
 	return sTypes.Types, err
 }
 
