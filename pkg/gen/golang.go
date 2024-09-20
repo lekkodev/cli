@@ -389,8 +389,11 @@ type configCodeTemplate struct {
 func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 	return &configCodeTemplate{
 		public: `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
-  	{{ $.CtxStuff }}
+func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) {{$.RetType}} {
+	{{- if not $.PassCtx}}
+	ctx := context.Background()
+	{{ else -}}{{- end -}}
+  	{{$.CtxStuff }}
   	result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 	  	return result
@@ -401,11 +404,13 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
     }
     debug.LogDebug("Lekko fallback", "name", "{{$.Namespace}}/{{$.Key}}", "result", result)
   	return result
-}`,
+}
+`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
-{{end}}}`,
+{{end}}}
+`,
 	}
 }
 
@@ -413,7 +418,10 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
 	return &configCodeTemplate{
 		public: `// {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
+func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) *{{$.RetType}} {
+	{{- if not $.PassCtx}}
+	ctx := context.Background()
+	{{ else -}}{{- end -}}
 	{{ $.CtxStuff }}
     ret := &{{$.RetType}}{}
 	result, err := c.GetAny(ctx, "{{$.Namespace}}", "{{$.Key}}")
@@ -427,11 +435,13 @@ func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) *{{$.RetType}} {
     }
     debug.LogDebug("Lekko fallback", "name", "{{$.Namespace}}/{{$.Key}}", "result", ret)
     return ret
-}`,
+}
+`,
 		private: `// {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
-{{end}}}`,
+{{end}}}
+`,
 	}
 }
 
@@ -447,14 +457,18 @@ const (
 )
 
 // {{$.Description}}
-func (c *LekkoClient) {{$.FuncName}}({{$.ArgumentString}}) {{$.RetType}} {
+func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) {{$.RetType}} {
+		{{- if not $.PassCtx}}
+		ctx := context.Background()
+		{{ else -}}{{- end -}}
 		{{ $.CtxStuff }}
 		result, err := c.{{$.GetFunction}}(ctx, "{{$.Namespace}}", "{{$.Key}}")
 	if err == nil {
 			return result
 		}
 		return {{$.PrivateFunc}}({{$.CallString}})
-}`,
+}
+`,
 		private: `type {{$.EnumTypeName}} string
 const (
 	{{range $index, $field := $.EnumFields}}{{$field.Name}} {{$.EnumTypeName}} = "{{$field.Value}}"
@@ -464,7 +478,8 @@ const (
 // {{$.Description}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
-{{end}}}`,
+{{end}}}
+`,
 	}
 }
 
@@ -616,6 +631,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		CallString         string
 		EnumTypeName       string
 		EnumFields         []EnumField
+		PassCtx            bool // whether the public function will accept the context or create it
 		CtxStuff           string
 		ProtoStructFilling string
 	}{
@@ -631,6 +647,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		"",
 		enumTypeName,
 		enumFields,
+		false,
 		"",
 		protoStructFilling,
 	}
@@ -644,7 +661,6 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			data.ArgumentString = fmt.Sprintf("args *%s", staticCtxType.Type)
 		}
 		data.CallString = "args"
-		data.CtxStuff = "ctx := context.Background()\n"
 		mt, err := g.TypeRegistry.FindMessageByURL(staticCtxType.TypeUrl)
 		if err != nil {
 			panic(err)
@@ -655,7 +671,6 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			data.CtxStuff = data.CtxStuff + fmt.Sprintf("ctx = client.Add(ctx, \"%s\", args.%s)\n", fieldName, strcase.ToCamel(fieldName))
 		}
 	} else {
-		data.CtxStuff = "ctx := context.Background()\n"
 		data.NativeLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
 		var arguments []string
 		var ctxAddLines []string
@@ -681,6 +696,11 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		return nil, err
 	} else {
 		var ret bytes.Buffer
+		if err := templ.Execute(&ret, data); err != nil {
+			return nil, err
+		}
+		// generate context-aware variant, e.g. GetFooCtx(ctx context.Context, ...)
+		data.PassCtx = true
 		if err := templ.Execute(&ret, data); err != nil {
 			return nil, err
 		}
