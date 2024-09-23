@@ -17,9 +17,24 @@ syntax = "proto3";
 package lekko.feature.v1beta1;
 
 import "google/protobuf/any.proto";
+import "google/protobuf/descriptor.proto";
 import "google/protobuf/struct.proto";
 import "lekko/rules/v1beta2/rules.proto";
 import "lekko/rules/v1beta3/rules.proto";
+
+// A config repository's contents are made up of namespaces/features and the types
+// required to describe them.
+// Lekkos written in all languages should be able to have 1:1 mappings with this
+// structure.
+message RepositoryContents {
+  repeated Namespace namespaces = 1;
+  google.protobuf.FileDescriptorSet file_descriptor_set = 2;
+}
+
+message Namespace {
+  string name = 1;
+  repeated Feature features = 2;
+}
 
 // A prototype of the wrapper type that will be used to house all feature flags for
 // the 'homegrown' feature flagging solution:
