@@ -167,6 +167,7 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			return err
 		}
 	}
+	// TODO: generate from contents, maybe split repo/repoless
 	r, err := repo.NewLocal(repoPath, nil)
 	if err != nil {
 		return errors.Wrap(err, "new repo")

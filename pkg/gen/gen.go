@@ -18,8 +18,11 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 	"golang.org/x/mod/modfile"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
@@ -88,6 +91,7 @@ func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath
 	}
 }
 
+// TODO: move to golang and split repo/repoless
 func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekkoPath string, opts GenOptions) (err error) {
 	defer err2.Handle(&err)
 	var moduleRoot string
@@ -100,13 +104,49 @@ func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekk
 		moduleRoot = mf.Module.Mod.Path
 	}
 	outputPath := filepath.Join(opts.CodeRepoPath, lekkoPath)
+	generator := try.To1(NewGoGeneratorFromLocal(ctx, moduleRoot, outputPath, lekkoPath, repoPath))
 	for _, namespace := range opts.Namespaces {
-		generator := try.To1(NewGoGenerator(moduleRoot, outputPath, lekkoPath, repoPath, namespace))
 		if opts.InitMode {
-			try.To(generator.Init(ctx))
+			try.To(generator.Init(ctx, namespace))
 		} else {
-			try.To(generator.Gen(ctx))
+			try.To(generator.Gen(ctx, namespace))
 		}
 	}
 	return nil
+}
+
+// Reads repository contents from a local config repository.
+func ReadRepoContents(ctx context.Context, repoPath string) (repoContents *featurev1beta1.RepositoryContents, err error) {
+	defer err2.Handle(&err)
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "read config repository")
+	}
+	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
+	repoContents = &featurev1beta1.RepositoryContents{}
+	repoContents.FileDescriptorSet = try.To1(r.GetFileDescriptorSet(ctx, rootMD.ProtoDirectory))
+	for nsName := range nsMDs {
+		ns := &featurev1beta1.Namespace{Name: nsName}
+		ffs, err := r.GetFeatureFiles(ctx, nsName)
+		if err != nil {
+			return nil, errors.Wrapf(err, "read files for ns %s", nsName)
+		}
+		// Sort configs in alphabetical order
+		sort.SliceStable(ffs, func(i, j int) bool {
+			return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
+		})
+		for _, ff := range ffs {
+			fc, err := r.GetFeatureContents(ctx, nsName, ff.Name)
+			if err != nil {
+				return nil, errors.Wrapf(err, "read contents for %s/%s", nsName, ff.Name)
+			}
+			f := &featurev1beta1.Feature{}
+			if err := proto.Unmarshal(fc.Proto, f); err != nil {
+				return nil, errors.Wrapf(err, "unmarshal %s/%s", nsName, ff.Name)
+			}
+			ns.Features = append(ns.Features, f)
+		}
+		repoContents.Namespaces = append(repoContents.Namespaces, ns)
+	}
+	return repoContents, nil
 }

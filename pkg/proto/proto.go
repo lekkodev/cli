@@ -12,15 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sync
+package proto
 
 import (
 	"fmt"
 	"strings"
-
-	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
-	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
-	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -32,11 +28,17 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
+	rulesv1beta2 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta2"
+	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 )
 
-// Initializes an empty file descriptor set and starts with well-known types
+// Initializes an empty file descriptor set and starts with well-known types.
+// TODO: currently used for sync, but consider if this should be used in all other places (e.g. repo init, compile, etc.)
 func NewDefaultFileDescriptorSet() *descriptorpb.FileDescriptorSet {
 	fds := &descriptorpb.FileDescriptorSet{}
+	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(descriptorpb.File_google_protobuf_descriptor_proto))
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(wrapperspb.File_google_protobuf_wrappers_proto))
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(structpb.File_google_protobuf_struct_proto))
 	fds.File = append(fds.File, protodesc.ToFileDescriptorProto(durationpb.File_google_protobuf_duration_proto))
@@ -86,9 +88,19 @@ func FileRegistryToFileDescriptorSet(registry *protoregistry.Files) *descriptorp
 	return fds
 }
 
+func FileDescriptorSetToTypeRegistry(fds *descriptorpb.FileDescriptorSet) (*protoregistry.Types, error) {
+	fr, err := protodesc.NewFiles(fds)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert to file registry")
+	}
+	tr, err := FileRegistryToTypeRegistry(fr)
+	return tr, errors.Wrap(err, "get type registry from file registry")
+}
+
 // TODO: Canonical proto formatter that doesn't rely on `buf format`, which we should use for all languages
 
-func FileDescriptorToProtoString(fd protoreflect.FileDescriptor) (string, error) {
+// Print the contents of a file descriptor in a format suitable for e.g. writing to a .proto file
+func PrintFileDescriptor(fd protoreflect.FileDescriptor) (string, error) {
 	var sb strings.Builder
 	// Preamble
 	sb.WriteString("syntax = \"proto3\";\n\n")
@@ -101,7 +113,7 @@ func FileDescriptorToProtoString(fd protoreflect.FileDescriptor) (string, error)
 	// Messages
 	for i := range fd.Messages().Len() {
 		md := fd.Messages().Get(i)
-		mds, err := MessageDescriptorToProtoString(md, 0)
+		mds, err := PrintMessageDescriptor(md, 0)
 		if err != nil {
 			return "", errors.Wrapf(err, "stringify message descriptor %s", md.FullName())
 		}
@@ -111,7 +123,7 @@ func FileDescriptorToProtoString(fd protoreflect.FileDescriptor) (string, error)
 	return sb.String(), nil
 }
 
-func MessageDescriptorToProtoString(md protoreflect.MessageDescriptor, indentLevel int) (string, error) {
+func PrintMessageDescriptor(md protoreflect.MessageDescriptor, indentLevel int) (string, error) {
 	indent := strings.Repeat("  ", indentLevel)
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("%smessage %s {\n", indent, md.Name()))
@@ -147,7 +159,7 @@ func MessageDescriptorToProtoString(md protoreflect.MessageDescriptor, indentLev
 		if _, ok := mapFieldTypes[string(nestedMds.Get(i).FullName())]; ok {
 			continue
 		}
-		s, err := MessageDescriptorToProtoString(nestedMds.Get(i), indentLevel+1)
+		s, err := PrintMessageDescriptor(nestedMds.Get(i), indentLevel+1)
 		if err != nil {
 			return "", errors.Wrapf(err, "stringify nested message %s", nestedMds.Get(i).FullName())
 		}

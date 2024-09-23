@@ -24,8 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/mod/modfile"
-
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/try"
@@ -39,7 +37,6 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/durationpb"
 
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -69,15 +66,7 @@ func syncGoCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			b, err := os.ReadFile("go.mod")
-			if err != nil {
-				return errors.Wrap(err, "find go.mod in working directory")
-			}
-			mf, err := modfile.ParseLax("go.mod", b, nil)
-			if err != nil {
-				return err
-			}
-
+			var err error
 			if len(repoPath) == 0 {
 				repoPath, err = repo.PrepareGithubRepo()
 				if err != nil {
@@ -85,11 +74,12 @@ func syncGoCmd() *cobra.Command {
 				}
 			}
 			f = args[0]
-			syncer, err := sync.NewGoSyncer(mf.Module.Mod.Path, f)
+			syncer := sync.NewGoSyncer()
+			repoContents, err := syncer.Sync(f)
 			if err != nil {
-				return errors.Wrap(err, "initialize code syncer")
+				return err
 			}
-			_, err = syncer.Sync(ctx, &repoPath)
+			err = sync.WriteContentsToLocalRepo(ctx, repoContents, repoPath)
 			if err != nil {
 				return err
 			}
@@ -222,30 +212,24 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 	if err != nil {
 		return false, err
 	}
-	b, err := os.ReadFile("go.mod")
-	if err != nil {
-		return false, err
-	}
-	mf, err := modfile.ParseLax("go.mod", b, nil)
-	if err != nil {
-		return false, err
-	}
 	dot := try.To1(dotlekko.ReadDotLekko(""))
 	nlProject := try.To1(native.DetectNativeLang(""))
 	files := try.To1(native.ListNativeConfigFiles(dot.LekkoPath, nlProject.Language))
 	var notEqual bool
+	var relPaths []string
 	for _, f := range files {
-		relativePath, err := filepath.Rel(wd, f)
+		relPath, err := filepath.Rel(wd, f)
 		if err != nil {
 			return false, err
 		}
-		//fmt.Printf("%s\n\n", mf.Module.Mod.Path)
-		g := sync.NewGoSyncerLite(mf.Module.Mod.Path, relativePath)
-		namespace, err := g.Sync(ctx, nil)
-		if err != nil {
-			return false, err
-		}
-		//fmt.Printf("%#v\n", namespace)
+		relPaths = append(relPaths, relPath)
+	}
+	g := sync.NewGoSyncer()
+	repoContents, err := g.Sync(relPaths...)
+	if err != nil {
+		return false, err
+	}
+	for _, namespace := range repoContents.Namespaces {
 		existingNs, ok := existing[namespace.Name]
 		if !ok {
 			// New namespace not in existing
@@ -485,7 +469,7 @@ func convertLangCmd() *cobra.Command {
 				}
 				fmt.Println(out)
 			} else {
-				privateFile := goToGo(ctx, f)
+				privateFile := goToGo(ctx, inputFile)
 				fmt.Println(privateFile)
 			}
 			return nil
@@ -497,34 +481,25 @@ func convertLangCmd() *cobra.Command {
 	return cmd
 }
 
-func goToGo(ctx context.Context, f []byte) string {
-	registry, err := prototypes.RegisterDynamicTypes(nil)
+func goToGo(ctx context.Context, filePath string) string {
+	syncer := sync.NewGoSyncer()
+	repoContents, err := syncer.Sync(filePath)
 	if err != nil {
-		panic(err)
+		panic(errors.Wrap(err, "sync"))
 	}
-	err = registry.AddFileDescriptor(durationpb.File_google_protobuf_duration_proto, false)
-	if err != nil {
-		panic(err)
+	if len(repoContents.Namespaces) != 1 {
+		panic("expected 1 namespace")
 	}
-	syncer := sync.NewGoSyncerLite("", "")
-	namespace, err := syncer.SourceToNamespace(ctx, f)
-	if err != nil {
-		panic(err)
-	}
+	namespace := repoContents.Namespaces[0]
 	//fmt.Printf("%+v\n", namespace)
 	//fmt.Printf("%+v\n", registry.Types)
 	//fmt.Print("ON TO GENERATION\n")
 	// code gen based off that namespace object
-	g, err := gen.NewGoGenerator("", "/tmp", "", "", namespace.Name) // type registry?
+	g, err := gen.NewGoGenerator("", "/tmp", "", repoContents)
 	if err != nil {
 		panic(err)
 	}
-	tr, err := syncer.GetTypeRegistry()
-	g.TypeRegistry = tr
-	if err != nil {
-		panic(err)
-	}
-	_, privateFile, err := g.GenNamespaceFiles(ctx, namespace.Features, nil)
+	_, privateFile, err := g.GenNamespaceFiles(ctx, namespace.Name, namespace.Features, nil)
 	if err != nil {
 		panic(err)
 	}

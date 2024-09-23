@@ -36,6 +36,7 @@ import (
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
 	"github.com/lekkodev/cli/pkg/dotlekko"
+	protoutils "github.com/lekkodev/cli/pkg/proto"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -48,31 +49,45 @@ import (
 	"github.com/lekkodev/cli/pkg/native"
 )
 
-// TODO: this can hold more state to clean up functions a bit, like storing usedVariables, etc.
 type goGenerator struct {
 	moduleRoot   string // e.g. github.com/lekkodev/cli
 	outputPath   string // Location for destination file, can be absolute or relative. Its suffix should be the same as lekkoPath. In most cases can be same as lekkoPath.
 	lekkoPath    string // Location relative to project root where Lekko files are stored, e.g. internal/lekko.
-	repoPath     string
-	namespace    string
+	repoContents *featurev1beta1.RepositoryContents
 	TypeRegistry *protoregistry.Types
 }
 
-func NewGoGenerator(moduleRoot, outputPath, lekkoPath, repoPath, namespace string) (*goGenerator, error) {
-	// Validate namespace
-	if !regexp.MustCompile("[a-z]+").MatchString(namespace) {
-		return nil, fmt.Errorf("namespace must be a lowercase alphabetic string: %s", namespace)
+// Initializes a new generator from config repository contents.
+func NewGoGenerator(moduleRoot, outputPath, lekkoPath string, repoContents *featurev1beta1.RepositoryContents) (*goGenerator, error) {
+	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(repoContents.FileDescriptorSet)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert fds to type registry")
 	}
-	if namespace == "proto" {
-		return nil, errors.New("'proto' is a reserved name")
-	}
-
 	return &goGenerator{
-		moduleRoot: moduleRoot,
-		outputPath: outputPath,
-		lekkoPath:  filepath.Clean(lekkoPath),
-		repoPath:   repoPath,
-		namespace:  namespace,
+		moduleRoot:   moduleRoot,
+		outputPath:   outputPath,
+		lekkoPath:    filepath.Clean(lekkoPath),
+		repoContents: repoContents,
+		TypeRegistry: typeRegistry,
+	}, nil
+}
+
+// Initializes a new generator, parsing config repository contents from a local repository.
+func NewGoGeneratorFromLocal(ctx context.Context, moduleRoot, outputPath, lekkoPath string, repoPath string) (*goGenerator, error) {
+	repoContents, err := ReadRepoContents(ctx, repoPath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "read contents from %s", repoContents)
+	}
+	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(repoContents.FileDescriptorSet)
+	if err != nil {
+		return nil, errors.Wrap(err, "convert fds to type registry")
+	}
+	return &goGenerator{
+		moduleRoot:   moduleRoot,
+		outputPath:   outputPath,
+		lekkoPath:    lekkoPath,
+		repoContents: repoContents,
+		TypeRegistry: typeRegistry,
 	}, nil
 }
 
@@ -91,14 +106,14 @@ func structpbValueToKindStringGo(v *structpb.Value) string {
 }
 
 // Initialize a blank Lekko config function file
-func (g *goGenerator) Init(ctx context.Context) error {
+func (g *goGenerator) Init(ctx context.Context, namespaceName string) error {
 	const templateBody = `package lekko{{$.Namespace}}
 
 // This is an example description for an example config
 func getExample() bool {
 	return true
 }`
-	fullOutputPath := path.Join(g.outputPath, g.namespace, fmt.Sprintf("%s.go", g.namespace))
+	fullOutputPath := path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s.go", namespaceName))
 	if _, err := os.Stat(fullOutputPath); err == nil {
 		return fmt.Errorf("file %s already exists", fullOutputPath)
 	}
@@ -106,7 +121,7 @@ func getExample() bool {
 	data := struct {
 		Namespace string
 	}{
-		Namespace: g.namespace,
+		Namespace: namespaceName,
 	}
 	var contents bytes.Buffer
 	templ := template.Must(template.New(fullOutputPath).Parse(templateBody))
@@ -117,7 +132,7 @@ func getExample() bool {
 	if err != nil {
 		return errors.Wrapf(err, "format %s", fullOutputPath)
 	}
-	try.To(os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770))
+	try.To(os.MkdirAll(path.Join(g.outputPath, namespaceName), 0770))
 	f, err := os.Create(fullOutputPath)
 	if err != nil {
 		return errors.Wrapf(err, "create %s", fullOutputPath)
@@ -130,7 +145,7 @@ func getExample() bool {
 
 // This is an attempt to pull out a simpler component that is more re-usable - the other one should probably be removed/changed, but that depends on
 // how far this change goes
-func (g *goGenerator) GenNamespaceFiles(ctx context.Context, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (string, string, error) {
+func (g *goGenerator) GenNamespaceFiles(ctx context.Context, namespaceName string, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (string, string, error) {
 	// For each namespace, we want to generate under lekko/:
 	// lekko/
 	//   <namespace>/
@@ -202,7 +217,7 @@ import (
 			}
 		}
 		if ctxType == nil {
-			messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", g.namespace, strcase.ToCamel(f.Key))
+			messagePath := fmt.Sprintf("%s.config.v1beta1.%sArgs", namespaceName, strcase.ToCamel(f.Key))
 			mt, err := g.TypeRegistry.FindMessageByName(protoreflect.FullName(messagePath))
 			if err == nil {
 				privateFuncStrings = append(privateFuncStrings, DescriptorToStructDeclaration(mt.Descriptor()))
@@ -229,9 +244,9 @@ import (
 			importProtoReflect = true
 		}
 
-		generated, err := g.genGoForFeature(ctx, nil, f, g.namespace, ctxType)
+		generated, err := g.genGoForFeature(ctx, nil, f, namespaceName, ctxType)
 		if err != nil {
-			return "", "", errors.Wrapf(err, "generate code for %s/%s", g.namespace, f.Key)
+			return "", "", errors.Wrapf(err, "generate code for %s/%s", namespaceName, f.Key)
 		}
 		publicFuncStrings = append(publicFuncStrings, generated.public)
 		privateFuncStrings = append(privateFuncStrings, generated.private)
@@ -272,7 +287,7 @@ import (
 		ImportProtoReflect bool
 	}{
 		protoImports,
-		g.namespace,
+		namespaceName,
 		publicFuncStrings,
 		privateFuncStrings,
 		addStringsImport,
@@ -281,11 +296,11 @@ import (
 		importProtoReflect,
 	}
 
-	public, err := getContents(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", g.namespace), data)
+	public, err := renderGoTemplate(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", namespaceName), data)
 	if err != nil {
 		return "", "", err
 	}
-	private, err := getContents(privateFileTemplateBody, fmt.Sprintf("%s.go", g.namespace), data)
+	private, err := renderGoTemplate(privateFileTemplateBody, fmt.Sprintf("%s.go", namespaceName), data)
 	if err != nil {
 		return "", "", err
 	}
@@ -293,7 +308,7 @@ import (
 	return public, private, nil
 }
 
-func getContents(templateBody string, fileName string, data any) (string, error) {
+func renderGoTemplate(templateBody string, fileName string, data any) (string, error) {
 	var contents bytes.Buffer
 	templ := template.Must(template.New(fileName).Parse(templateBody))
 	if err := templ.Execute(&contents, data); err != nil {
@@ -308,58 +323,43 @@ func getContents(templateBody string, fileName string, data any) (string, error)
 	return string(formatted), nil
 }
 
-func (g *goGenerator) Gen(ctx context.Context) (err error) {
+// Generates public and private function files for the namespace as well as the overall client file.
+// Writes outputs to the output paths specified in the
+// TODO: since generator takes in whole repo contents now, could generate for all/filtered namespaces
+func (g *goGenerator) Gen(ctx context.Context, namespaceName string) (err error) {
 	defer err2.Handle(&err)
-	r, err := repo.NewLocal(g.repoPath, nil)
-	if err != nil {
-		return errors.Wrap(err, "read config repository")
+	// Validate namespace
+	if !regexp.MustCompile("[a-z]+").MatchString(namespaceName) {
+		return errors.Errorf("namespace must be a lowercase alphabetic string: %s", namespaceName)
 	}
-	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
-	if g.TypeRegistry == nil {
-		// TODO this feels weird and there is a global set we should be able to add to but I'll worrry about it later?
-		g.TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
+	if namespaceName == "proto" {
+		return errors.Errorf("'%s' is a reserved name", namespaceName)
 	}
-	nsMD, ok := nsMDs[g.namespace]
-	if !ok {
-		return fmt.Errorf("%s is not a namespace in the config repository", g.namespace)
-	}
-	staticCtxType := UnpackProtoType(g.moduleRoot, g.lekkoPath, nsMD.ContextProto)
-	ffs, err := r.GetFeatureFiles(ctx, g.namespace)
-	if err != nil {
-		return err
-	}
-	// Sort configs in alphabetical order
-	sort.SliceStable(ffs, func(i, j int) bool {
-		return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
-	})
-	var features []*featurev1beta1.Feature
-	for _, ff := range ffs {
-		fff, err := os.ReadFile(path.Join(g.repoPath, g.namespace, ff.CompiledProtoBinFileName))
-		if err != nil {
-			return err
+	var namespace *featurev1beta1.Namespace
+	for _, ns := range g.repoContents.Namespaces {
+		if ns.Name == namespaceName {
+			namespace = ns
 		}
-		f := &featurev1beta1.Feature{}
-		if err := proto.Unmarshal(fff, f); err != nil {
-			return err
-		}
-		features = append(features, f)
+	}
+	if namespace == nil {
+		return errors.Errorf("namespace '%s' not found", namespaceName)
 	}
 	// Create intermediate directories for output
-	if err := os.MkdirAll(path.Join(g.outputPath, g.namespace), 0770); err != nil {
+	if err := os.MkdirAll(path.Join(g.outputPath, namespaceName), 0770); err != nil {
 		return err
 	}
-	public, private, err := g.GenNamespaceFiles(ctx, features, staticCtxType)
+	public, private, err := g.GenNamespaceFiles(ctx, namespaceName, namespace.Features, nil)
 	if err != nil {
 		return err
 	}
-	if f, err := os.Create(path.Join(g.outputPath, g.namespace, fmt.Sprintf("%s_gen.go", g.namespace))); err != nil {
+	if f, err := os.Create(path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s_gen.go", namespaceName))); err != nil {
 		return err
 	} else {
 		if _, err := f.WriteString(public); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
 		}
 	}
-	if f, err := os.Create(path.Join(g.outputPath, g.namespace, fmt.Sprintf("%s.go", g.namespace))); err != nil {
+	if f, err := os.Create(path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s.go", namespaceName))); err != nil {
 		return err
 	} else {
 		if _, err := f.WriteString(private); err != nil {
