@@ -17,11 +17,20 @@ package main
 import (
 	//"bytes"
 	"context"
+	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 
 	//"os/exec"
 	"testing"
+
+	"github.com/lekkodev/cli/pkg/gen"
+	"github.com/lekkodev/cli/pkg/sync"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	//"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -95,61 +104,6 @@ func Test_writeProtoFiles(t *testing.T) {
 }
 */
 
-func Test_goToGo(t *testing.T) {
-	t.Run("simple", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/simple.go")
-		if err != nil {
-			panic(err)
-		}
-		if got := goToGo(ctx, f); got != string(f) {
-			diff, err := DiffStyleOutput(string(f), got)
-			if err != nil {
-				panic(err)
-			}
-			t.Errorf("Difference Found: %s\n", diff)
-		}
-	})
-	t.Run("withcontext", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/withcontext.go")
-		if err != nil {
-			panic(err)
-		}
-		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
-		}
-	})
-
-	t.Run("one_two", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/twostructs.go")
-		if err != nil {
-			panic(err)
-		}
-		if got := goToGo(ctx, f); got != string(f) {
-			t.Errorf("goToGo() = \n===\n%v+++, want \n===\n%v+++", got, string(f))
-		}
-	})
-}
-
-func Test_Gertrude(t *testing.T) {
-	t.Run("gertrude", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/gertrude.go")
-		if err != nil {
-			panic(err)
-		}
-		if got := goToGo(ctx, f); got != string(f) {
-			diff, err := DiffStyleOutput(string(f), got)
-			if err != nil {
-				panic(err)
-			}
-			t.Errorf("Difference Found: %s\n", diff)
-		}
-	})
-}
-
 func DiffStyleOutput(a, b string) (string, error) {
 	// Create temporary files to hold the input strings
 	fileA, err := os.CreateTemp("", "fileA")
@@ -189,21 +143,72 @@ func DiffStyleOutput(a, b string) (string, error) {
 	return string(output), nil
 }
 
-func TestDefault(t *testing.T) {
-	t.Run("default", func(t *testing.T) {
-		ctx := context.Background()
-		f, err := os.ReadFile("./testdata/default.go")
-		if err != nil {
-			panic(err)
+// Test code -> repo -> code (compare) -> repo (compare)
+func TestGoSyncToGenToSync(t *testing.T) {
+	if err := filepath.WalkDir("./testdata", func(path string, d fs.DirEntry, err error) error {
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".go") {
+			t.Run(strings.TrimSuffix(d.Name(), ".go"), func(t *testing.T) {
+				ctx := context.Background()
+				orig, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatalf("read test file %s: %v", path, err)
+				}
+
+				s1 := sync.NewGoSyncer()
+				r1, err := s1.Sync(path)
+				if err != nil {
+					t.Fatalf("sync 1: %v", err)
+				}
+
+				tmpd, err := os.MkdirTemp("", "test")
+				if err != nil {
+					t.Fatalf("tmp dir: %v", err)
+				}
+				defer os.RemoveAll(tmpd)
+
+				g, err := gen.NewGoGenerator("test", tmpd, "", r1)
+				if err != nil {
+					t.Fatalf("initialize gen: %v", err)
+				}
+				namespace := r1.Namespaces[0]
+				_, private, err := g.GenNamespaceFiles(ctx, namespace.Name, namespace.Features, nil)
+				if err != nil {
+					t.Fatalf("gen: %v", err)
+				}
+				privatePath := filepath.Join(tmpd, fmt.Sprintf("%s.go", namespace.Name))
+				if err := os.WriteFile(privatePath, []byte(private), 0600); err != nil {
+					t.Fatalf("write private %s: %v", privatePath, err)
+				}
+
+				if string(orig) != private {
+					diff, err := DiffStyleOutput(string(orig), private)
+					if err != nil {
+						t.Fatalf("diff: %v", err)
+					}
+					t.Fatalf("mismatch in generated code: %s", diff)
+				}
+
+				s2 := sync.NewGoSyncer()
+				r2, err := s2.Sync(privatePath)
+				if err != nil {
+					t.Fatalf("sync 2: %v", err)
+				}
+				// NOTE: Because Anys contained serialized values, their serialization needs to be
+				// deterministic for this check to always pass even if their deserialized values are equal.
+				// The problem is that the determinism is not canonical across languages.
+				// We should keep this in mind.
+				if !proto.Equal(r1, r2) {
+					r1json := protojson.Format(r1)
+					r2json := protojson.Format(r2)
+					diff, _ := DiffStyleOutput(r1json, r2json)
+					t.Fatalf("mismatch in repo contents: %s", diff)
+				}
+			})
 		}
-		if got := goToGo(ctx, f); got != string(f) {
-			diff, err := DiffStyleOutput(string(f), got)
-			if err != nil {
-				panic(err)
-			}
-			t.Errorf("Difference Found: %s\n", diff)
-		}
-	})
+		return nil
+	}); err != nil {
+		t.Fatalf("walk: %v", err)
+	}
 }
 
 /*
