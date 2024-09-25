@@ -138,7 +138,7 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 }
 
 // Pipe `GenTS` to prettier
-func genFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error {
+func GenFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error {
 	prettierCmd := exec.Command("npx", "prettier", "--parser", "typescript")
 	stdinPipe, err := prettierCmd.StdinPipe()
 	if err != nil {

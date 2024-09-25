@@ -59,7 +59,7 @@ func bisync(ctx context.Context, project *native.Project, lekkoPath, repoPath st
 	case native.LangGo:
 		_ = try.To1(sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath))
 	case native.LangTypeScript:
-		try.To(sync.BisyncTS(lekkoPath, repoPath))
+		try.To(sync.BisyncTS(ctx, lekkoPath, repoPath))
 	default:
 		return errors.New("unsupported language")
 	}

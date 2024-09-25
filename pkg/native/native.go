@@ -137,8 +137,8 @@ func NativeLangFromExt(filename string) (Language, error) {
 	return "", fmt.Errorf("unsupported file extension: %v", ext)
 }
 
-func (l *Language) Ext() string {
-	switch *l {
+func (l Language) Ext() string {
+	switch l {
 	case LangGo:
 		return ".go"
 	case LangTypeScript:

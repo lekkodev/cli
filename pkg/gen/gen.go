@@ -81,7 +81,7 @@ func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath
 		}
 		for _, ns := range opts.Namespaces {
 			outFilename := filepath.Join(absLekkoPath, ns+project.Language.Ext())
-			try.To(genFormattedTS(ctx, repoPath, ns, outFilename))
+			try.To(GenFormattedTS(ctx, repoPath, ns, outFilename))
 		}
 		return nil
 	case native.LangGo:

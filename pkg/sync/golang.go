@@ -55,9 +55,7 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 	if err != nil {
 		return nil, err
 	}
-
 	// Traverse target path, finding namespaces
-	// TODO: consider making this more efficient for batch gen/sync
 	files := make([]string, 0)
 	if err := filepath.WalkDir(lekkoPath, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -67,7 +65,7 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 		if d.IsDir() && d.Name() == "proto" {
 			return filepath.SkipDir
 		}
-		// Sync and gen - only target <namespace>/<namespace>.go files
+		// Only target <namespace>/<namespace>.go files
 		if !d.IsDir() && strings.TrimSuffix(d.Name(), ".go") == filepath.Base(filepath.Dir(p)) {
 			files = append(files, p)
 			fmt.Printf("Successfully bisynced %s\n", logging.Bold(p))
@@ -83,7 +81,7 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 		return nil, errors.Wrap(err, "sync")
 	}
 	if err := WriteContentsToLocalRepo(ctx, repoContents, repoPath); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "write to repository")
 	}
 	generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoContents)
 	if err != nil {
@@ -324,7 +322,6 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 
 // Translate a collection of Go files to a representation of repository contents.
 // Files -> repo instead of file -> namespace because FDS is shared repo-wide.
-// Takes file paths instead of contents for more helpful error reporting.
 func (g *goSyncer) Sync(filePaths ...string) (*featurev1beta1.RepositoryContents, error) {
 	ret := &featurev1beta1.RepositoryContents{FileDescriptorSet: protoutils.NewDefaultFileDescriptorSet()}
 	for _, filePath := range filePaths {
@@ -335,6 +332,23 @@ func (g *goSyncer) Sync(filePaths ...string) (*featurev1beta1.RepositoryContents
 		ns, err := g.AstToNamespace(astf, ret.FileDescriptorSet)
 		if err != nil {
 			return nil, errors.Wrapf(err, "translate %s", filePath)
+		}
+		ret.Namespaces = append(ret.Namespaces, ns)
+	}
+
+	return ret, nil
+}
+
+func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.RepositoryContents, error) {
+	ret := &featurev1beta1.RepositoryContents{FileDescriptorSet: protoutils.NewDefaultFileDescriptorSet()}
+	for namespace, contents := range contentMap {
+		astf, err := parser.ParseFile(g.fset, namespace, contents, parser.ParseComments|parser.AllErrors|parser.SkipObjectResolution)
+		if err != nil {
+			return nil, errors.Wrapf(err, "parse %s", namespace)
+		}
+		ns, err := g.AstToNamespace(astf, ret.FileDescriptorSet)
+		if err != nil {
+			return nil, errors.Wrapf(err, "translate %s", namespace)
 		}
 		ret.Namespaces = append(ret.Namespaces, ns)
 	}

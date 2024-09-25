@@ -34,6 +34,10 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 )
 
+// Writes contents to a local repository at the specified path.
+// Conflicting namespaces are essentially completely overwritten.
+// Namespaces in the local repository but not in the passed contents are untouched.
+// New namespaces are created.
 func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.RepositoryContents, repoPath string) error {
 	// NOTE: For now, this function still needs a proper Lekko repository as a prereq,
 	// because it's uncertain if we'll ever need functionality to create a local repository
