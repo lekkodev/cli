@@ -26,6 +26,7 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
@@ -171,4 +172,35 @@ func PrintMessageDescriptor(md protoreflect.MessageDescriptor, indentLevel int) 
 	sb.WriteString(fieldSb.String())
 	sb.WriteString(fmt.Sprintf("%s}\n", indent))
 	return sb.String(), nil
+}
+
+// A custom resolver for unmarshalling that will replace unresolvable Anys with emptypb.Empty messages
+type IgnoreAnyResolver struct{}
+
+func (r *IgnoreAnyResolver) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByName(message)
+	if err != nil {
+		return nil, errors.Wrap(err, "name?")
+	}
+	return mt, nil
+}
+
+func (r *IgnoreAnyResolver) FindMessageByURL(url string) (protoreflect.MessageType, error) {
+	mt, err := protoregistry.GlobalTypes.FindMessageByURL(url)
+	if errors.Is(err, protoregistry.NotFound) {
+		e := &emptypb.Empty{}
+		return e.ProtoReflect().Type(), nil
+	}
+	if err != nil {
+		return nil, errors.Wrap(err, "url?")
+	}
+	return mt, nil
+}
+
+func (r *IgnoreAnyResolver) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
+	return protoregistry.GlobalTypes.FindExtensionByName(field)
+}
+
+func (r *IgnoreAnyResolver) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
+	return protoregistry.GlobalTypes.FindExtensionByNumber(message, field)
 }

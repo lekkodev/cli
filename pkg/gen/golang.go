@@ -324,7 +324,7 @@ func renderGoTemplate(templateBody string, fileName string, data any) (string, e
 }
 
 // Generates public and private function files for the namespace as well as the overall client file.
-// Writes outputs to the output paths specified in the
+// Writes outputs to the output paths specified in the construction args.
 // TODO: since generator takes in whole repo contents now, could generate for all/filtered namespaces
 func (g *goGenerator) Gen(ctx context.Context, namespaceName string) (err error) {
 	defer err2.Handle(&err)

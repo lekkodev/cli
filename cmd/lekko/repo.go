@@ -490,6 +490,7 @@ func pullCmd() *cobra.Command {
 
 			switch nlProject.Language {
 			case native.LangTypeScript:
+				// TODO: Fix pull for TS, this command no longer exists and we have repoless sync/gen now
 				tsPullCmd := exec.Command("npx", "lekko-repo-pull", "--lekko-dir", lekkoPath)
 				output, err := tsPullCmd.CombinedOutput()
 				fmt.Println(string(output))

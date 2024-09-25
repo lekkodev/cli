@@ -54,6 +54,7 @@ func syncCmd() *cobra.Command {
 		Short: "sync code to config",
 	}
 	cmd.AddCommand(syncGoCmd())
+	cmd.AddCommand(syncTSCmd())
 	return cmd
 }
 
@@ -76,6 +77,44 @@ func syncGoCmd() *cobra.Command {
 			f = args[0]
 			syncer := sync.NewGoSyncer()
 			repoContents, err := syncer.Sync(f)
+			if err != nil {
+				return err
+			}
+			err = sync.WriteContentsToLocalRepo(ctx, repoContents, repoPath)
+			if err != nil {
+				return err
+			}
+			return nil
+		},
+	}
+	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	return cmd
+}
+
+func syncTSCmd() *cobra.Command {
+	var repoPath string
+	cmd := &cobra.Command{
+		Use:   "ts filepath1 filepath2 ...",
+		Short: "parse TypeScript files with lekkos to a local config repository",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			var err error
+			if len(repoPath) == 0 {
+				repoPath, err = repo.PrepareGithubRepo()
+				if err != nil {
+					return err
+				}
+			}
+			var repoContents *featurev1beta1.RepositoryContents
+			if len(args) > 0 {
+				repoContents, err = sync.SyncTSFiles(args...)
+			} else {
+				dot, doterr := dotlekko.ReadDotLekko("")
+				if doterr != nil {
+					return doterr
+				}
+				repoContents, err = sync.SyncTS(dot.LekkoPath)
+			}
 			if err != nil {
 				return err
 			}

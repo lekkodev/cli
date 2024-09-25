@@ -82,7 +82,7 @@ func genGoCmd() *cobra.Command {
 	var initMode bool
 	cmd := &cobra.Command{
 		Use:   "go",
-		Short: "generate Go library code from configs",
+		Short: "generate Go library code from lekkos",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nlProject := try.To1(native.DetectNativeLang(""))
 			if nlProject.Language != native.LangGo {
@@ -104,11 +104,11 @@ func genTSCmd() *cobra.Command {
 	var lekkoPath string
 	cmd := &cobra.Command{
 		Use:   "ts",
-		Short: "generate typescript library code from configs",
+		Short: "generate TypeScript library code from lekkos",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nlProject := try.To1(native.DetectNativeLang(""))
 			if nlProject.Language != native.LangTypeScript {
-				return errors.Errorf("not a Go project, detected %v instead", nlProject.Language)
+				return errors.Errorf("not a TypeScript project, detected %v instead", nlProject.Language)
 			}
 			return genNative(cmd.Context(), nlProject, lekkoPath, repoPath, ns, false)
 		},
