@@ -5,13 +5,13 @@ go 1.22
 replace github.com/bazelbuild/buildtools => github.com/lekkodev/buildtools v0.0.0-20240325231538-96eefd799042
 
 require (
-	buf.build/gen/go/lekkodev/cli/bufbuild/connect-go v1.10.0-20240528213244-5fdc18b47eea.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.2-20240923164736-6b09ba83efbf.2
+	buf.build/gen/go/lekkodev/cli/connectrpc/go v1.17.0-20240926040046-3e1042256cdf.1
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.2-20240926040046-3e1042256cdf.2
+	connectrpc.com/connect v1.17.0
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/atotto/clipboard v0.1.4
 	github.com/bazelbuild/buildtools v0.0.0-20220907133145-b9bfff5d7f91
 	github.com/briandowns/spinner v1.23.0
-	github.com/bufbuild/connect-go v1.10.0
 	github.com/cli/browser v1.0.0
 	github.com/go-git/go-billy/v5 v5.5.0
 	github.com/go-git/go-git/v5 v5.12.0

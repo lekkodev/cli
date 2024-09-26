@@ -7,13 +7,16 @@ $(call _assert_var,CACHE_VERSIONS)
 $(call _assert_var,CACHE_BIN)
 
 # Settable
-# https://github.com/bufbuild/connect-go 20220531 checked 20220601
-CONNECT_VERSION ?= v0.1.0
+# https://github.com/connectrpc/connect-go 20240920 checked 20240920
+CONNECT_VERSION ?= v1.17.0
+
+GO_GET_PKGS := $(GO_GET_PKGS) \
+	connectrpc.com/connect@$(CONNECT_VERSION)
 
 PROTOC_GEN_CONNECT_GO := $(CACHE_VERSIONS)/connect-go/$(CONNECT_VERSION)
 $(PROTOC_GEN_CONNECT_GO):
-	@rm -f $(CACHE_BIN)/connect-go
-	GOBIN=$(CACHE_BIN) go install github.com/bufbuild/connect-go/cmd/protoc-gen-connect-go@$(CONNECT_VERSION)
+	@rm -f $(CACHE_BIN)/protoc-gen-connect-go
+	GOBIN=$(CACHE_BIN) go install connectrpc.com/connect/cmd/protoc-gen-connect-go@$(CONNECT_VERSION)
 	@rm -rf $(dir $(PROTOC_GEN_CONNECT_GO))
 	@mkdir -p $(dir $(PROTOC_GEN_CONNECT_GO))
 	@touch $(PROTOC_GEN_CONNECT_GO)

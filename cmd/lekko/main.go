@@ -21,8 +21,8 @@ import (
 	"os"
 	"strconv"
 
+	"connectrpc.com/connect"
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/bufbuild/connect-go"
 	"github.com/lainio/err2"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
