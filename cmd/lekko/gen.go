@@ -77,6 +77,7 @@ func genNative(ctx context.Context, project *native.Project, lekkoPath, repoPath
 	return gen.GenNative(ctx, project, lekkoPath, repoPath, opts)
 }
 
+// TODO: Add option to read encoded repo contents like gen ts
 func genGoCmd() *cobra.Command {
 	var lekkoPath, repoPath, ns string
 	var initMode bool
@@ -99,22 +100,41 @@ func genGoCmd() *cobra.Command {
 }
 
 func genTSCmd() *cobra.Command {
-	var ns string
-	var repoPath string
-	var lekkoPath string
+	var lekkoPath, repoPath, encodedRepoContents, ns string
 	cmd := &cobra.Command{
 		Use:   "ts",
 		Short: "generate TypeScript library code from lekkos",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			// For now, output generated code instead of writing to repo if using encoded contents
+			// TODO: make this optional even for local-based
+			if len(encodedRepoContents) > 0 {
+				repoContents, err := repo.DecodeRepositoryContents([]byte(encodedRepoContents))
+				if err != nil {
+					return errors.Wrap(err, "decode")
+				}
+				generated, err := gen.GenTS(repoContents, ns)
+				if err != nil {
+					return errors.Wrap(err, "gen")
+				}
+				formatted, err := gen.FormatTS(generated)
+				if err != nil {
+					return errors.Wrap(err, "format")
+				}
+				fmt.Println(formatted)
+				return nil
+			}
+
 			nlProject := try.To1(native.DetectNativeLang(""))
 			if nlProject.Language != native.LangTypeScript {
 				return errors.Errorf("not a TypeScript project, detected %v instead", nlProject.Language)
 			}
-			return genNative(cmd.Context(), nlProject, lekkoPath, repoPath, ns, false)
+			return genNative(ctx, nlProject, lekkoPath, repoPath, ns, false)
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "path to Lekko native config files, will use autodetect if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
+	cmd.Flags().StringVarP(&encodedRepoContents, "repo-contents", "R", "", "base64-encoded serialized repository contents, will use repo-path if not set")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")
 	return cmd
 }

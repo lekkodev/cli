@@ -76,7 +76,7 @@ func NewGoGenerator(moduleRoot, outputPath, lekkoPath string, repoContents *feat
 func NewGoGeneratorFromLocal(ctx context.Context, moduleRoot, outputPath, lekkoPath string, repoPath string) (*goGenerator, error) {
 	repoContents, err := ReadRepoContents(ctx, repoPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "read contents from %s", repoContents)
+		return nil, errors.Wrapf(err, "read contents from %s", repoPath)
 	}
 	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(repoContents.FileDescriptorSet)
 	if err != nil {
@@ -326,6 +326,7 @@ func renderGoTemplate(templateBody string, fileName string, data any) (string, e
 // Generates public and private function files for the namespace as well as the overall client file.
 // Writes outputs to the output paths specified in the construction args.
 // TODO: since generator takes in whole repo contents now, could generate for all/filtered namespaces
+// TODO: split away write out functionality and/or return contents
 func (g *goGenerator) Gen(ctx context.Context, namespaceName string) (err error) {
 	defer err2.Handle(&err)
 	// Validate namespace

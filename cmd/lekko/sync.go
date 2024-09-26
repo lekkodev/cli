@@ -296,12 +296,11 @@ func isSame(ctx context.Context, existing map[string]map[string]*featurev1beta1.
 			} else {
 				// These might still be equal, because the typescript path combines logical things in ways that the go path does not
 				// Using ts since it has fewer args..
-				gen.TypeRegistry = registry
-				o, err := gen.GenTSForFeature(f, namespace.Name, "")
+				o, err := gen.GenTSForFeature(f, namespace.Name, "", registry)
 				if err != nil {
 					return false, err
 				}
-				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "")
+				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "", registry)
 				if err != nil {
 					return false, err
 				}
@@ -378,13 +377,12 @@ func isSameTS(ctx context.Context, existing map[string]map[string]*featurev1beta
 			} else {
 				// These might still be equal, because the typescript path combines logical things in ways that the go path does not
 				// Using ts since it has fewer args..
-				gen.TypeRegistry = registry
 				//fmt.Printf("%+v\n\n", f)
-				o, err := gen.GenTSForFeature(f, namespace.Name, "")
+				o, err := gen.GenTSForFeature(f, namespace.Name, "", registry)
 				if err != nil {
 					return false, err
 				}
-				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "")
+				e, err := gen.GenTSForFeature(existingConfig, namespace.Name, "", registry)
 				if err != nil {
 					return false, err
 				}
@@ -583,7 +581,6 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	gen.TypeRegistry = registry.Types
 	var featureStrings []string
 	for _, namespace := range namespaces.Namespaces {
 		for _, c := range namespace.Configs {
@@ -598,7 +595,7 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 			}
 
 			var ourParameters string
-			sigType, err := gen.TypeRegistry.FindMessageByName(protoreflect.FullName(namespace.Name + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
+			sigType, err := registry.Types.FindMessageByName(protoreflect.FullName(namespace.Name + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
 			if err == nil {
 				d := sigType.Descriptor()
 				var varNames []string
@@ -613,7 +610,7 @@ func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {
 				ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, " "))
 			}
 
-			fs, err := gen.GenTSForFeature(f, namespace.Name, ourParameters)
+			fs, err := gen.GenTSForFeature(f, namespace.Name, ourParameters, registry.Types)
 			featureStrings = append(featureStrings, fs)
 			if err != nil {
 				return "", err
