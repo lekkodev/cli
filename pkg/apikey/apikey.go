@@ -17,10 +17,10 @@ package apikey
 import (
 	"context"
 
-	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/connectrpc/go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	"connectrpc.com/connect"
 
-	connect_go "github.com/bufbuild/connect-go"
 	"github.com/pkg/errors"
 )
 
@@ -34,7 +34,7 @@ func NewAPIKey(bff bffv1beta1connect.BFFServiceClient) *APIKeyManager {
 }
 
 func (a *APIKeyManager) Create(ctx context.Context, teamname, nickname string) (*bffv1beta1.GenerateAPIKeyResponse, error) {
-	resp, err := a.bff.GenerateAPIKey(ctx, connect_go.NewRequest(&bffv1beta1.GenerateAPIKeyRequest{
+	resp, err := a.bff.GenerateAPIKey(ctx, connect.NewRequest(&bffv1beta1.GenerateAPIKeyRequest{
 		Nickname: nickname,
 		TeamName: teamname,
 	}))
@@ -45,7 +45,7 @@ func (a *APIKeyManager) Create(ctx context.Context, teamname, nickname string) (
 }
 
 func (a *APIKeyManager) List(ctx context.Context, teamname string) ([]*bffv1beta1.APIKey, error) {
-	resp, err := a.bff.ListAPIKeys(ctx, connect_go.NewRequest(&bffv1beta1.ListAPIKeysRequest{TeamName: teamname}))
+	resp, err := a.bff.ListAPIKeys(ctx, connect.NewRequest(&bffv1beta1.ListAPIKeysRequest{TeamName: teamname}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list api keys")
 	}
@@ -53,7 +53,7 @@ func (a *APIKeyManager) List(ctx context.Context, teamname string) ([]*bffv1beta
 }
 
 func (a *APIKeyManager) Check(ctx context.Context, apikey string) (*bffv1beta1.APIKey, error) {
-	resp, err := a.bff.CheckAPIKey(ctx, connect_go.NewRequest(&bffv1beta1.CheckAPIKeyRequest{
+	resp, err := a.bff.CheckAPIKey(ctx, connect.NewRequest(&bffv1beta1.CheckAPIKeyRequest{
 		ApiKey: apikey,
 	}))
 	if err != nil {
@@ -63,7 +63,7 @@ func (a *APIKeyManager) Check(ctx context.Context, apikey string) (*bffv1beta1.A
 }
 
 func (a *APIKeyManager) Delete(ctx context.Context, nickname string) error {
-	_, err := a.bff.DeleteAPIKey(ctx, connect_go.NewRequest(&bffv1beta1.DeleteAPIKeyRequest{
+	_, err := a.bff.DeleteAPIKey(ctx, connect.NewRequest(&bffv1beta1.DeleteAPIKeyRequest{
 		Nickname: nickname,
 	}))
 	return err

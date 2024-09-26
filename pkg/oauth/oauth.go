@@ -23,10 +23,10 @@ import (
 	"sync"
 	"time"
 
-	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/connectrpc/go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	"connectrpc.com/connect"
 	"github.com/briandowns/spinner"
-	connect_go "github.com/bufbuild/connect-go"
 	ghauth "github.com/cli/oauth"
 	"github.com/lekkodev/cli/pkg/gh"
 	"github.com/lekkodev/cli/pkg/lekko"
@@ -115,7 +115,7 @@ func (a *OAuth) PreRegister(ctx context.Context, username string, ws secrets.Wri
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	s.Suffix = " Generating OAuth code..."
 	s.Start()
-	dcResp, err := a.lekkoAuthClient.GetDeviceCode(ctx, connect_go.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
+	dcResp, err := a.lekkoAuthClient.GetDeviceCode(ctx, connect.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
 		ClientId: LekkoClientID,
 	}))
 	s.Stop()
@@ -124,7 +124,7 @@ func (a *OAuth) PreRegister(ctx context.Context, username string, ws secrets.Wri
 	}
 	s.Suffix = " Connecting to Lekko..."
 	s.Start()
-	_, err = a.lekkoAuthClient.PreRegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.PreRegisterUserRequest{
+	_, err = a.lekkoAuthClient.PreRegisterUser(ctx, connect.NewRequest(&bffv1beta1.PreRegisterUserRequest{
 		Username: username,
 		// We're passing in user code just because that's what backend handles better at the moment
 		DeviceCode: dcResp.Msg.UserCode,
@@ -155,7 +155,7 @@ func (a *OAuth) PreRegister(ctx context.Context, username string, ws secrets.Wri
 }
 
 func (a *OAuth) Register(ctx context.Context, username, password, confirmPassword string) error {
-	registerResp, err := a.lekkoAuthClient.RegisterUser(ctx, connect_go.NewRequest(&bffv1beta1.RegisterUserRequest{
+	registerResp, err := a.lekkoAuthClient.RegisterUser(ctx, connect.NewRequest(&bffv1beta1.RegisterUserRequest{
 		Username:        username,
 		Password:        password,
 		ConfirmPassword: confirmPassword,
@@ -170,7 +170,7 @@ func (a *OAuth) Register(ctx context.Context, username, password, confirmPasswor
 }
 
 func (a *OAuth) ConfirmUser(ctx context.Context, username, code string) error {
-	_, err := a.lekkoAuthClient.ConfirmUser(ctx, connect_go.NewRequest(&bffv1beta1.ConfirmUserRequest{
+	_, err := a.lekkoAuthClient.ConfirmUser(ctx, connect.NewRequest(&bffv1beta1.ConfirmUserRequest{
 		Username: username,
 		Code:     code,
 	}))
@@ -188,7 +188,7 @@ func (a *OAuth) Tokens(ctx context.Context, rs secrets.ReadSecrets) []string {
 }
 
 func (a *OAuth) ForgotPassword(ctx context.Context, email string) error {
-	_, err := a.lekkoAuthClient.ForgotPassword(ctx, connect_go.NewRequest(
+	_, err := a.lekkoAuthClient.ForgotPassword(ctx, connect.NewRequest(
 		&bffv1beta1.ForgotPasswordRequest{Username: email}),
 	)
 	return err
@@ -197,7 +197,7 @@ func (a *OAuth) ForgotPassword(ctx context.Context, email string) error {
 func (a *OAuth) ConfirmForgotPassword(
 	ctx context.Context, email string, newPassword string, confirmNewPassword string, verificationCode string,
 ) error {
-	_, err := a.lekkoAuthClient.ConfirmForgotPassword(ctx, connect_go.NewRequest(
+	_, err := a.lekkoAuthClient.ConfirmForgotPassword(ctx, connect.NewRequest(
 		&bffv1beta1.ConfirmForgotPasswordRequest{
 			Username:           email,
 			NewPassword:        newPassword,
@@ -209,7 +209,7 @@ func (a *OAuth) ConfirmForgotPassword(
 }
 
 func (a *OAuth) ResendVerification(ctx context.Context, email string) error {
-	_, err := a.lekkoAuthClient.ResendVerificationCode(ctx, connect_go.NewRequest(
+	_, err := a.lekkoAuthClient.ResendVerificationCode(ctx, connect.NewRequest(
 		&bffv1beta1.ResendVerificationCodeRequest{Username: email}),
 	)
 	return err
@@ -338,7 +338,7 @@ func (a *OAuth) loginGithub(ctx context.Context, ws secrets.WriteSecrets) error 
 }
 
 func (a *OAuth) checkLekkoAuth(ctx context.Context) (username string, err error) {
-	req := connect_go.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
+	req := connect.NewRequest(&bffv1beta1.GetUserLoggedInInfoRequest{})
 	resp, err := a.lekkoBFFClient.GetUserLoggedInInfo(ctx, req)
 	if err != nil {
 		return "", errors.Wrap(err, "check lekko auth")
