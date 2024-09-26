@@ -575,6 +575,21 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 }
 
 func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
+	// TODO - move to lekkoAny
+	if val.TypeUrl == "type.googleapis.com/lekko.rules.v1beta3.ConfigCall" {
+		call := &rulesv1beta3.ConfigCall{}
+		err := proto.Unmarshal(val.Value, call)
+		if err != nil {
+			panic(err)
+		}
+		var funcNameBuilder strings.Builder
+		funcNameBuilder.WriteString("get")
+		for _, word := range regexp.MustCompile("[_-]+").Split(call.Key, -1) {
+			funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
+		}
+		funcName := funcNameBuilder.String()
+		return fmt.Sprintf("%s()", funcName)
+	}
 	//var dypb *dynamicpb.Message
 	marshalOptions := protojson.MarshalOptions{
 		UseProtoNames: true,
