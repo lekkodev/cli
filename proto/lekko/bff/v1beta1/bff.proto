@@ -74,6 +74,8 @@ service BFFService {
   rpc GetFeature(GetFeatureRequest) returns (GetFeatureResponse) {}
   rpc GetFeatureHistory(GetFeatureHistoryRequest) returns (GetFeatureHistoryResponse) {}
   rpc GetRepositoryContents(GetRepositoryContentsRequest) returns (GetRepositoryContentsResponse) {}
+  // Gets native lang code for a specific namespace.
+  rpc GetNativeLang(GetNativeLangRequest) returns (GetNativeLangResponse) {}
   rpc AddNamespace(AddNamespaceRequest) returns (AddNamespaceResponse) {}
   rpc RemoveNamespace(RemoveNamespaceRequest) returns (RemoveNamespaceResponse) {}
   rpc AddFeature(AddFeatureRequest) returns (AddFeatureResponse) {}
@@ -84,6 +86,8 @@ service BFFService {
   rpc Save(SaveRequest) returns (SaveResponse) {}
   // Saves the raw starlark of a feature to the local repo, and runs compilation.
   rpc SaveStarlark(SaveStarlarkRequest) returns (SaveStarlarkResponse) {}
+  // Saves changes to a namespace using native lang code and runs compilation.
+  rpc SaveNativeLang(SaveNativeLangRequest) returns (SaveNativeLangResponse) {}
 
   // Helper for Rules AST -> String.
   rpc ConvertRuleToString(ConvertRuleToStringRequest) returns (ConvertRuleToStringResponse) {}
@@ -450,6 +454,17 @@ message GetRepositoryContentsResponse {
   google.protobuf.FileDescriptorSet file_descriptor_set = 4;
 }
 
+message GetNativeLangRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string language = 3;
+}
+
+message GetNativeLangResponse {
+  Branch branch = 1;
+  string code = 2;
+}
+
 message GetFeatureRequest {
   // includes the branch name to fetch from. If 'main',
   // we will fetch from mysql. If not, we will fetch
@@ -793,6 +808,21 @@ message SaveStarlarkResponse {
   // This rpc will return output bytes even if compilation
   // failed. In that case, success will be false.
   bool success = 5;
+}
+
+message SaveNativeLangRequest {
+  BranchKey key = 1;
+  string namespace_name = 2;
+  string language = 3;
+  string code = 4;
+}
+
+message SaveNativeLangResponse {
+  Branch branch = 1;
+  string formatted = 2;
+  // TODO: We probably want some kind of linting/checking endpoint that surfaces diagnostic errors
+  // if parsing native lang code fails, so that the editor can show in-code errors or suggest fixes.
+  // This could be part of SaveNativeLang with a dry_run-esque option or a separate endpoint.
 }
 
 message ConvertRuleToStringRequest {

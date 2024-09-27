@@ -16,16 +16,14 @@ package sync
 
 import (
 	"context"
-	"encoding/base64"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/lekkodev/cli/pkg/gen"
 	"github.com/lekkodev/cli/pkg/native"
-	protoutils "github.com/lekkodev/cli/pkg/proto"
+	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
 )
@@ -56,7 +54,15 @@ func SyncTS(lekkoPath string) (*featurev1beta1.RepositoryContents, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "sync ts: %s", output)
 	}
+<<<<<<< HEAD
 	return SyncTSOutputToRepositoryContents(output)
+=======
+	repoContents, err := repo.DecodeRepositoryContents(output)
+	if err != nil {
+		return nil, errors.Wrap(err, "decode sync ts output")
+	}
+	return repoContents, nil
+>>>>>>> origin/main
 }
 
 func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, error) {
@@ -66,6 +72,7 @@ func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, erro
 	if err != nil {
 		return nil, errors.Wrapf(err, "sync ts: %s", output)
 	}
+<<<<<<< HEAD
 	return SyncTSOutputToRepositoryContents(output)
 }
 
@@ -75,24 +82,11 @@ func SyncTSOutputToRepositoryContents(output []byte) (*featurev1beta1.Repository
 	// The RepositoryContents message contains the FDS which we want to use as the resolver for unmarshalling
 	// the rest of the contents.
 	decoded, err := base64.StdEncoding.DecodeString(string(output))
+=======
+	repoContents, err := repo.DecodeRepositoryContents(output)
+>>>>>>> origin/main
 	if err != nil {
 		return nil, errors.Wrap(err, "decode sync ts output")
-	}
-	// First pass unmarshal to get the FDS while ignoring any unresolvable Anys
-	tempRepoContents := &featurev1beta1.RepositoryContents{}
-	err = proto.UnmarshalOptions{DiscardUnknown: true, Resolver: &protoutils.IgnoreAnyResolver{}}.Unmarshal(decoded, tempRepoContents)
-	if err != nil {
-		return nil, errors.Wrap(err, "initial unmarshal sync ts output")
-	}
-	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(tempRepoContents.FileDescriptorSet)
-	if err != nil {
-		return nil, errors.Wrap(err, "get type registry")
-	}
-	// Re-unmarshal using type registry this time - we can resolve Anys correctly
-	repoContents := &featurev1beta1.RepositoryContents{}
-	err = proto.UnmarshalOptions{Resolver: typeRegistry}.Unmarshal(decoded, repoContents)
-	if err != nil {
-		return nil, errors.Wrap(err, "final unmarshal sync ts output")
 	}
 	return repoContents, nil
 }

@@ -21,10 +21,10 @@ import (
 	"os"
 	"path/filepath"
 
-	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/connectrpc/go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
+	"connectrpc.com/connect"
 	"github.com/AlecAivazis/survey/v2"
-	connect_go "github.com/bufbuild/connect-go"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -61,7 +61,7 @@ var ErrRemoteHasChanges = errors.New("Remote repository has new changes, " +
 	fmt.Sprintf("please run %s to merge them locally and try again.", logging.Bold("lekko pull")))
 
 func (r *RepoCmd) List(ctx context.Context) ([]*Repository, error) {
-	resp, err := r.lekkoBFFClient.ListRepositories(ctx, connect_go.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
+	resp, err := r.lekkoBFFClient.ListRepositories(ctx, connect.NewRequest(&bffv1beta1.ListRepositoriesRequest{}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list repos")
 	}
@@ -85,7 +85,7 @@ func repoFromProto(repo *bffv1beta1.Repository) *Repository {
 }
 
 func (r *RepoCmd) Create(ctx context.Context, owner, repo, description string) (string, error) {
-	resp, err := r.lekkoBFFClient.CreateRepository(ctx, connect_go.NewRequest(&bffv1beta1.CreateRepositoryRequest{
+	resp, err := r.lekkoBFFClient.CreateRepository(ctx, connect.NewRequest(&bffv1beta1.CreateRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,
@@ -99,7 +99,7 @@ func (r *RepoCmd) Create(ctx context.Context, owner, repo, description string) (
 }
 
 func (r *RepoCmd) Delete(ctx context.Context, owner, repo string, deleteOnRemote bool) error {
-	_, err := r.lekkoBFFClient.DeleteRepository(ctx, connect_go.NewRequest(&bffv1beta1.DeleteRepositoryRequest{
+	_, err := r.lekkoBFFClient.DeleteRepository(ctx, connect.NewRequest(&bffv1beta1.DeleteRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repo,
@@ -342,7 +342,7 @@ func (r *RepoCmd) Import(ctx context.Context, repoPath, owner, repoName, descrip
 	}
 
 	// Import new repo into Lekko
-	_, err = r.lekkoBFFClient.ImportRepository(ctx, connect_go.NewRequest(&bffv1beta1.ImportRepositoryRequest{
+	_, err = r.lekkoBFFClient.ImportRepository(ctx, connect.NewRequest(&bffv1beta1.ImportRepositoryRequest{
 		RepoKey: &bffv1beta1.RepositoryKey{
 			OwnerName: owner,
 			RepoName:  repoName,

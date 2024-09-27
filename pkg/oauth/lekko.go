@@ -23,9 +23,9 @@ import (
 	"os"
 	"time"
 
-	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/connectrpc/go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
-	connect_go "github.com/bufbuild/connect-go"
+	"connectrpc.com/connect"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/cli/browser"
 	"github.com/pkg/errors"
@@ -56,7 +56,7 @@ type AuthCredentials struct {
 }
 
 func (f *DeviceFlow) Authorize(ctx context.Context) (*AuthCredentials, error) {
-	resp, err := f.lekkoAuthClient.GetDeviceCode(ctx, connect_go.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
+	resp, err := f.lekkoAuthClient.GetDeviceCode(ctx, connect.NewRequest(&bffv1beta1.GetDeviceCodeRequest{
 		ClientId: LekkoClientID,
 	}))
 	if err != nil {
@@ -76,7 +76,7 @@ func (f *DeviceFlow) pollToken(ctx context.Context, deviceCode string, interval 
 	var ret *AuthCredentials
 
 	operation := func() error {
-		resp, err := f.lekkoAuthClient.GetAccessToken(ctx, connect_go.NewRequest(&bffv1beta1.GetAccessTokenRequest{
+		resp, err := f.lekkoAuthClient.GetAccessToken(ctx, connect.NewRequest(&bffv1beta1.GetAccessTokenRequest{
 			DeviceCode: deviceCode,
 			ClientId:   LekkoClientID,
 		}))

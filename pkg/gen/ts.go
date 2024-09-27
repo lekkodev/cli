@@ -18,11 +18,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
-	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -34,6 +31,7 @@ import (
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
 	"github.com/iancoleman/strcase"
 	"github.com/lainio/err2/try"
+	protoutils "github.com/lekkodev/cli/pkg/proto"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
@@ -46,8 +44,6 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
-
-var TypeRegistry *protoregistry.Types
 
 func FieldDescriptorToTS(f protoreflect.FieldDescriptor) string {
 	var t string
@@ -115,7 +111,7 @@ func GetTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 		string(d.Name()),
 		fields,
 	}
-	templ, err := template.New("go func").Parse(templateBody)
+	templ, err := template.New("ts interface").Parse(templateBody)
 	if err != nil {
 		return "", err
 	}
@@ -127,7 +123,7 @@ func GetTSInterface(d protoreflect.MessageDescriptor) (string, error) {
 	return ret.String(), nil
 }
 
-func getTSParameters(d protoreflect.MessageDescriptor) string {
+func GetTSParameters(d protoreflect.MessageDescriptor) string {
 	var fields []string
 	for i := 0; i < d.Fields().Len(); i++ {
 		f := d.Fields().Get(i)
@@ -137,95 +133,63 @@ func getTSParameters(d protoreflect.MessageDescriptor) string {
 	return fmt.Sprintf("{%s}: %s", strings.Join(fields, ", "), d.Name())
 }
 
-// Pipe `GenTS` to prettier
-func GenFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error {
+// Requires `prettier` NPM package to be installed
+func FormatTS(unformatted string) (string, error) {
 	prettierCmd := exec.Command("npx", "prettier", "--parser", "typescript")
 	stdinPipe, err := prettierCmd.StdinPipe()
 	if err != nil {
-		return err
+		return "", errors.Wrap(err, "open prettier pipe")
 	}
-	err = GenTS(ctx, repoPath, ns, func() (io.Writer, error) {
-		return stdinPipe, nil
-	})
-	if err != nil {
-		return err
+	if _, err := stdinPipe.Write([]byte(unformatted)); err != nil {
+		return "", errors.Wrap(err, "pipe to prettier")
 	}
 	stdinPipe.Close()
 	out, err := prettierCmd.Output()
 	if err != nil {
-		return err
+		return "", errors.Wrap(err, "exec prettier")
 	}
-	return os.WriteFile(outFilename, out, 0600)
+	return string(out), nil
 }
 
-func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer, error)) error {
-	// TODO to avoid weird error message we should compile first.
-	var err error
-	if len(repoPath) == 0 {
-		repoPath, err = repo.PrepareGithubRepo()
-		if err != nil {
-			return err
-		}
-	}
-	// TODO: generate from contents, maybe split repo/repoless
-	r, err := repo.NewLocal(repoPath, nil)
+// Generate TS code, format it, and write to destination
+func GenFormattedTS(ctx context.Context, repoPath, ns, outFilename string) error {
+	unformatted, err := GenTSFromLocal(ctx, repoPath, ns)
 	if err != nil {
-		return errors.Wrap(err, "new repo")
+		return errors.Wrap(err, "gen ts")
 	}
-	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
-	TypeRegistry = try.To1(r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory))
-	var parameters string
-	interfaces := make(map[string]string)
-	if _, ok := nsMDs[ns]; !ok {
-		log.Fatal("unknown namespace: ", ns)
+	formatted, err := FormatTS(unformatted)
+	if err != nil {
+		return errors.Wrap(err, "format ts")
 	}
-	if len(nsMDs[ns].ContextProto) > 0 {
-		ptype, err := TypeRegistry.FindMessageByName(protoreflect.FullName(nsMDs[ns].ContextProto))
-		if err != nil {
-			log.Fatal("error finding the message in the registry", err)
-		}
-		parameters = getTSParameters(ptype.Descriptor())
-		face, err := GetTSInterface(ptype.Descriptor())
-		if err != nil {
-			return err
-		}
-		interfaces[nsMDs[ns].ContextProto] = face
-	}
-	var codeStrings []string
-	/*
-	         typeRegistry.RangeMessages(func(mt protoreflect.MessageType) bool {
-	   				splitName := strings.Split(string(mt.Descriptor().FullName()), ".")
-	   				if splitName[0] == "google" {
-	   					return true
-	   				}
-	   				face, err := getTSInterface(mt.Descriptor())
-	   				if err != nil {
-	   					panic(err)
-	   				}
-	   				codeStrings = append(codeStrings, face)
-	   				return true
-	   			})
-	*/
+	return os.WriteFile(outFilename, []byte(formatted), 0600)
+}
 
-	ffs, err := r.GetFeatureFiles(ctx, ns)
-	if err != nil {
-		return err
+// Generates TypeScript code for a namespace.
+// Outputs the contents of a single file.
+func GenTS(repoContents *featurev1beta1.RepositoryContents, namespaceName string) (string, error) {
+	var namespace *featurev1beta1.Namespace
+	for _, n := range repoContents.Namespaces {
+		if n.Name == namespaceName {
+			namespace = n
+		}
 	}
-	sort.SliceStable(ffs, func(i, j int) bool {
-		return ffs[i].CompiledProtoBinFileName < ffs[j].CompiledProtoBinFileName
-	})
+	if namespace == nil {
+		return "", errors.Errorf("namespace %s not found", namespaceName)
+	}
+	if repoContents.FileDescriptorSet == nil {
+		return "", errors.New("missing fds")
+	}
+	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(repoContents.FileDescriptorSet)
+	if err != nil {
+		return "", errors.Wrap(err, "parse type registry")
+	}
 
 	protoImports := make(map[string]struct{})
-	for _, ff := range ffs {
-		ourParameters := parameters
-		fff, err := os.ReadFile(filepath.Join(repoPath, ns, ff.CompiledProtoBinFileName))
-		if err != nil {
-			return err
-		}
-		f := &featurev1beta1.Feature{}
-		if err := proto.Unmarshal(fff, f); err != nil {
-			return err
-		}
+	interfaces := make(map[string]string)
+	var codeStrings []string
+
+	for _, f := range namespace.Features {
+		ourParameters := ""
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			// TODO: refactor this shared function?
 			pImport := UnpackProtoType("", "internal/lekko", f.Tree.Default.TypeUrl)
@@ -234,20 +198,20 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			} else {
 				name := strings.Split(f.Tree.Default.TypeUrl, "/")[1]
 				if _, ok := interfaces[name]; !ok {
-					ptype, err := TypeRegistry.FindMessageByName(protoreflect.FullName(name))
+					ptype, err := typeRegistry.FindMessageByName(protoreflect.FullName(name))
 					if err != nil {
-						return errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
+						return "", errors.Wrapf(err, "could not find message: %s", protoreflect.FullName(name))
 					}
 					face, err := GetTSInterface(ptype.Descriptor())
 					if err != nil {
-						return err
+						return "", err
 					}
 					interfaces[name] = face
 				}
 			}
 		}
 		// Check if there is a per-config signature proto
-		sigType, err := TypeRegistry.FindMessageByName(protoreflect.FullName(ns + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
+		sigType, err := typeRegistry.FindMessageByName(protoreflect.FullName(namespaceName + ".config.v1beta1." + strcase.ToCamel(f.Key) + "Args"))
 		if err == nil {
 			d := sigType.Descriptor()
 			var varNames []string
@@ -262,12 +226,13 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 			ourParameters = fmt.Sprintf("{%s}: {%s}", strings.Join(varNames, ", "), strings.Join(fields, " "))
 		}
 
-		codeString, err := GenTSForFeature(f, ns, ourParameters)
+		codeString, err := GenTSForFeature(f, namespaceName, ourParameters, typeRegistry)
 		if err != nil {
-			return err
+			return "", err
 		}
 		codeStrings = append(codeStrings, codeString)
 	}
+
 	const templateBody = `{{range  $.CodeStrings}}
 {{ . }}
 {{end}}`
@@ -283,18 +248,37 @@ func GenTS(ctx context.Context, repoPath, ns string, getWriter func() (io.Writer
 		Namespace   string
 		CodeStrings []string
 	}{
-		ns,
+		namespaceName,
 		append(maps.Keys(protoImports), append(interfaceStrings, codeStrings...)...),
 	}
-	wr, err := getWriter()
-	if err != nil {
-		return err
-	}
+	var contents bytes.Buffer
 	templ := template.Must(template.New("").Parse(templateBody))
-	return templ.Execute(wr, data)
+	if err := templ.Execute(&contents, data); err != nil {
+		return "", errors.Wrap(err, "contents template")
+	}
+	return contents.String(), nil
 }
 
-func GenTSForFeature(f *featurev1beta1.Feature, ns string, parameters string) (string, error) {
+// Generates TypeScript code for a namespace from a local config repository.
+// Outputs the contents of a single file.
+func GenTSFromLocal(ctx context.Context, repoPath, namespaceName string) (string, error) {
+	var err error
+	// TODO to avoid weird error message we should compile first.
+	if len(repoPath) == 0 {
+		repoPath, err = repo.PrepareGithubRepo()
+		if err != nil {
+			return "", err
+		}
+	}
+	repoContents, err := ReadRepoContents(ctx, repoPath)
+	if err != nil {
+		return "", errors.Wrapf(err, "read contents from %s", repoPath)
+	}
+
+	return GenTS(repoContents, namespaceName)
+}
+
+func GenTSForFeature(f *featurev1beta1.Feature, ns string, parameters string, typeRegistry *protoregistry.Types) (string, error) {
 	// TODO: support multiline descriptions
 	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
@@ -331,7 +315,7 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	}
 
 	usedVariables := make(map[string]string)
-	code := translateFeatureTS(f, usedVariables)
+	code := translateFeatureTS(f, usedVariables, typeRegistry)
 	if len(parameters) == 0 && len(usedVariables) > 0 {
 		var keys []string
 		var keyAndTypes []string
@@ -378,7 +362,7 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 	return ret.String(), nil
 }
 
-func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string) []string {
+func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]string, typeRegistry *protoregistry.Types) []string {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
@@ -389,12 +373,12 @@ func translateFeatureTS(f *featurev1beta1.Feature, usedVariables map[string]stri
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, f.Type)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s;", translateRetValueTS(constraint.Value, f.Type, typeRegistry)))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s;", translateRetValueTS(f.GetTree().GetDefault(), f.Type)))
+	buffer = append(buffer, fmt.Sprintf("\treturn %s;", translateRetValueTS(f.GetTree().GetDefault(), f.Type, typeRegistry)))
 	return buffer
 }
 
@@ -487,14 +471,14 @@ func translateRuleTS(rule *rulesv1beta3.Rule, usedVariables map[string]string) s
 }
 
 // returns only the formatted value
-func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) string {
+func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value, typeRegistry *protoregistry.Types) string {
 	if msg, ok := val.Interface().(protoreflect.Message); ok {
-		if _, err := TypeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
+		if _, err := typeRegistry.FindMessageByName((msg.Descriptor().FullName())); err != nil {
 			// THIS SUCKS but is probably a bug we should file with anypb if someone / konrad is bored.
-			try.To(TypeRegistry.RegisterMessage(msg.Type()))
+			try.To(typeRegistry.RegisterMessage(msg.Type()))
 		}
 		kind := featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
-		return translateRetValueTS(try.To1(anypb.New(msg.Interface())), kind)
+		return translateRetValueTS(try.To1(anypb.New(msg.Interface())), kind, typeRegistry)
 	} else {
 		switch f.Kind() {
 		case protoreflect.EnumKind:
@@ -551,7 +535,7 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 				val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
 					lines = append(lines, fmt.Sprintf("\"%s\": %s",
 						mk.String(),
-						FieldValueToTS(f.MapValue(), mv)))
+						FieldValueToTS(f.MapValue(), mv, typeRegistry)))
 					return true
 				})
 				sort.Strings(lines)
@@ -563,7 +547,7 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 				list := val.List()
 				for i := 0; i < list.Len(); i++ {
 					item := list.Get(i)
-					results = append(results, FieldValueToTS(f, item))
+					results = append(results, FieldValueToTS(f, item, typeRegistry))
 				}
 				return "[" + strings.Join(results, ", ") + "]"
 			}
@@ -574,7 +558,7 @@ func FieldValueToTS(f protoreflect.FieldDescriptor, val protoreflect.Value) stri
 	panic("Unreachable code was reached")
 }
 
-func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
+func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType, typeRegistry *protoregistry.Types) string {
 	// TODO - move to lekkoAny
 	if val.TypeUrl == "type.googleapis.com/lekko.rules.v1beta3.ConfigCall" {
 		call := &rulesv1beta3.ConfigCall{}
@@ -602,7 +586,7 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 	// TODO double
 	if t != featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 		// we are guessing this is a primitive, (unless we have i64 so let's do that later)
-		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: TypeRegistry})))
+		return marshalOptions.Format(try.To1(anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})))
 	}
 
 	switch strings.Split(val.TypeUrl, "/")[1] {
@@ -612,16 +596,16 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType) string {
 		try.To(val.UnmarshalTo(&v))
 		return fmt.Sprintf("protobuf.Duration.fromJsonString(%s)", marshalOptions.Format(&v))
 	default:
-		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: TypeRegistry})
+		dynMsg, err := anypb.UnmarshalNew(val, proto.UnmarshalOptions{Resolver: typeRegistry})
 		if err != nil {
-			TypeRegistry.RangeMessages(func(m protoreflect.MessageType) bool {
+			typeRegistry.RangeMessages(func(m protoreflect.MessageType) bool {
 				return true
 			})
 			panic(fmt.Sprintf("idk what is going on: %e %+v", err, err))
 		}
 		var lines []string
 		dynMsg.ProtoReflect().Range(func(f protoreflect.FieldDescriptor, val protoreflect.Value) bool {
-			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val)))
+			lines = append(lines, fmt.Sprintf("\t\"%s\": %s", strcase.ToLowerCamel(f.TextName()), FieldValueToTS(f, val, typeRegistry)))
 			return true
 		})
 

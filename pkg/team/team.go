@@ -18,9 +18,9 @@ import (
 	"context"
 	"strings"
 
-	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/bufbuild/connect-go/lekko/bff/v1beta1/bffv1beta1connect"
+	bffv1beta1connect "buf.build/gen/go/lekkodev/cli/connectrpc/go/lekko/bff/v1beta1/bffv1beta1connect"
 	bffv1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/bff/v1beta1"
-	connect_go "github.com/bufbuild/connect-go"
+	"connectrpc.com/connect"
 	"github.com/pkg/errors"
 )
 
@@ -49,7 +49,7 @@ func (t *Team) Show(ts TeamStore) string {
 }
 
 func (t *Team) Use(ctx context.Context, team string, wts WriteTeamStore) error {
-	if _, err := t.lekkoBFFClient.UseTeam(ctx, connect_go.NewRequest(&bffv1beta1.UseTeamRequest{
+	if _, err := t.lekkoBFFClient.UseTeam(ctx, connect.NewRequest(&bffv1beta1.UseTeamRequest{
 		Name: team,
 	})); err != nil {
 		return errors.Wrap(err, "use team")
@@ -91,7 +91,7 @@ type TeamMembership struct {
 }
 
 func (t *Team) List(ctx context.Context) ([]*TeamMembership, error) {
-	resp, err := t.lekkoBFFClient.ListUserMemberships(ctx, connect_go.NewRequest(&bffv1beta1.ListUserMembershipsRequest{}))
+	resp, err := t.lekkoBFFClient.ListUserMemberships(ctx, connect.NewRequest(&bffv1beta1.ListUserMembershipsRequest{}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list team memberships")
 	}
@@ -131,7 +131,7 @@ func roleToProto(role MemberRole) bffv1beta1.MembershipRole {
 }
 
 func (t *Team) Create(ctx context.Context, name, domainName string, wts WriteTeamStore) error {
-	if _, err := t.lekkoBFFClient.CreateTeam(ctx, connect_go.NewRequest(&bffv1beta1.CreateTeamRequest{
+	if _, err := t.lekkoBFFClient.CreateTeam(ctx, connect.NewRequest(&bffv1beta1.CreateTeamRequest{
 		Name:       name,
 		DomainName: domainName,
 	})); err != nil {
@@ -142,7 +142,7 @@ func (t *Team) Create(ctx context.Context, name, domainName string, wts WriteTea
 }
 
 func (t *Team) AddMember(ctx context.Context, email string, role MemberRole) error {
-	if _, err := t.lekkoBFFClient.UpsertMembership(ctx, connect_go.NewRequest(&bffv1beta1.UpsertMembershipRequest{
+	if _, err := t.lekkoBFFClient.UpsertMembership(ctx, connect.NewRequest(&bffv1beta1.UpsertMembershipRequest{
 		Username: email,
 		Role:     roleToProto(role),
 	})); err != nil {
@@ -152,7 +152,7 @@ func (t *Team) AddMember(ctx context.Context, email string, role MemberRole) err
 }
 
 func (t *Team) ListMemberships(ctx context.Context) ([]*TeamMembership, error) {
-	resp, err := t.lekkoBFFClient.ListTeamMemberships(ctx, connect_go.NewRequest(&bffv1beta1.ListTeamMembershipsRequest{}))
+	resp, err := t.lekkoBFFClient.ListTeamMemberships(ctx, connect.NewRequest(&bffv1beta1.ListTeamMembershipsRequest{}))
 	if err != nil {
 		return nil, errors.Wrap(err, "list team memberships")
 	}
@@ -164,7 +164,7 @@ func (t *Team) ListMemberships(ctx context.Context) ([]*TeamMembership, error) {
 }
 
 func (t *Team) RemoveMember(ctx context.Context, email string) error {
-	if _, err := t.lekkoBFFClient.RemoveMembership(ctx, connect_go.NewRequest(&bffv1beta1.RemoveMembershipRequest{
+	if _, err := t.lekkoBFFClient.RemoveMembership(ctx, connect.NewRequest(&bffv1beta1.RemoveMembershipRequest{
 		Username: email,
 	})); err != nil {
 		return errors.Wrap(err, "remove membership")
@@ -173,7 +173,7 @@ func (t *Team) RemoveMember(ctx context.Context, email string) error {
 }
 
 func (t *Team) Delete(ctx context.Context, name string) error {
-	if _, err := t.lekkoBFFClient.DeleteTeam(ctx, connect_go.NewRequest(&bffv1beta1.DeleteTeamRequest{
+	if _, err := t.lekkoBFFClient.DeleteTeam(ctx, connect.NewRequest(&bffv1beta1.DeleteTeamRequest{
 		TeamName: name,
 	})); err != nil {
 		return errors.Wrap(err, "delete team")
