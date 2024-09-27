@@ -457,6 +457,7 @@ message GetRepositoryContentsResponse {
 message GetNativeLangRequest {
   BranchKey key = 1;
   string namespace_name = 2;
+  // full language name, lowercase: go, typescript, python, etc.
   string language = 3;
 }
 
