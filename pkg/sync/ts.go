@@ -54,15 +54,11 @@ func SyncTS(lekkoPath string) (*featurev1beta1.RepositoryContents, error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "sync ts: %s", output)
 	}
-<<<<<<< HEAD
-	return SyncTSOutputToRepositoryContents(output)
-=======
 	repoContents, err := repo.DecodeRepositoryContents(output)
 	if err != nil {
 		return nil, errors.Wrap(err, "decode sync ts output")
 	}
 	return repoContents, nil
->>>>>>> origin/main
 }
 
 func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, error) {
@@ -72,19 +68,7 @@ func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, erro
 	if err != nil {
 		return nil, errors.Wrapf(err, "sync ts: %s", output)
 	}
-<<<<<<< HEAD
-	return SyncTSOutputToRepositoryContents(output)
-}
-
-// Output is expected to be base64 encoded serialized RepositoryContents message
-func SyncTSOutputToRepositoryContents(output []byte) (*featurev1beta1.RepositoryContents, error) {
-	// Because Protobuf is not self-describing, we have to jump through some hoops here for deserialization.
-	// The RepositoryContents message contains the FDS which we want to use as the resolver for unmarshalling
-	// the rest of the contents.
-	decoded, err := base64.StdEncoding.DecodeString(string(output))
-=======
 	repoContents, err := repo.DecodeRepositoryContents(output)
->>>>>>> origin/main
 	if err != nil {
 		return nil, errors.Wrap(err, "decode sync ts output")
 	}
