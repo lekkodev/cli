@@ -681,9 +681,10 @@ func (r *repository) BuildDynamicTypeRegistry(ctx context.Context, protoDirPath 
 // because we need to first ensure that buf cmd line can be executed in the
 // ephemeral env.
 func (r *repository) ReBuildDynamicTypeRegistry(ctx context.Context, protoDirPath string, useExternalTypes bool) (*protoregistry.Types, error) {
-	if !r.bufEnabled {
-		return nil, errors.New("buf cmd line not enabled")
-	}
+	// TODO: We do need a way of regenerating the buf image in ephemeral repos. Disabling this check for now.
+	// if !r.bufEnabled {
+	// 	return nil, errors.New("buf cmd line not enabled")
+	// }
 	sTypes, err := prototypes.ReBuildDynamicTypeRegistry(ctx, protoDirPath, useExternalTypes, r)
 	if err != nil {
 		return nil, err

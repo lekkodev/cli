@@ -46,11 +46,17 @@ func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.Repo
 	if err != nil {
 		return errors.Wrap(err, "prepare repo")
 	}
+	return WriteContentsToRepo(ctx, contents, r)
+}
+
+func WriteContentsToRepo(ctx context.Context, contents *featurev1beta1.RepositoryContents, r repo.ConfigurationRepository) error {
 	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	r.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
+	// TODO: Allow passing in writer
+	clear := r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer:         io.Discard,
+		ColorsDisabled: true,
 	})
+	defer clear()
 	rootMD, _, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return err
@@ -159,6 +165,7 @@ func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.Repo
 	if err := WriteTypesToRepo(ctx, contents.FileDescriptorSet, r); err != nil {
 		return errors.Wrap(err, "write type files")
 	}
+	// FIXME: We need this to be runnable on ephemeral repositories
 	if _, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false); err != nil {
 		return errors.Wrap(err, "final rebuild type registry")
 	}
