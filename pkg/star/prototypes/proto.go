@@ -72,10 +72,10 @@ func ReBuildDynamicTypeRegistry(ctx context.Context, protoDir string, useExterna
 	}
 	// Lint before generating the new buf image
 	fullProtoDir := cw.GetFullPath(protoDir)
-	if err := lint(fullProtoDir); err != nil {
+	if err := BufLint(fullProtoDir); err != nil {
 		return nil, errors.Wrap(err, "buf lint")
 	}
-	_, err := newBufImage(fullProtoDir)
+	_, err := NewBufImage(fullProtoDir)
 	if err != nil {
 		return nil, errors.Wrap(err, "new buf image")
 	}
@@ -198,15 +198,15 @@ func (st *SerializableTypes) AddFileDescriptor(fd protoreflect.FileDescriptor, c
 	return nil
 }
 
-type bufImage struct {
-	filename string
+type BufImage struct {
+	Filename string
 }
 
 // Generates a buf image, which is compatible with
 // protobuf's native FileDescriptorSet type. This allows us to build a
 // registry of protobuf types, adding any user-defined types.
 // Note: expects that buf cmd line exists.
-func newBufImage(protoDir string) (*bufImage, error) {
+func NewBufImage(protoDir string) (*BufImage, error) {
 	outputFile := bufImageFilepath(protoDir)
 	args := []string{
 		"build",
@@ -220,13 +220,13 @@ func newBufImage(protoDir string) (*bufImage, error) {
 	if err := cmd.Run(); err != nil {
 		return nil, errors.Wrap(err, "buf build")
 	}
-	return &bufImage{
-		filename: outputFile,
+	return &BufImage{
+		Filename: outputFile,
 	}, nil
 }
 
 // Note: expects that buf cmd lint exists.
-func lint(protoDir string) error {
+func BufLint(protoDir string) error {
 	cmd := exec.Command("buf", "lint", protoDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
