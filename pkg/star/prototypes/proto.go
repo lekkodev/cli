@@ -225,7 +225,7 @@ func NewBufImage(protoDir string) (*BufImage, error) {
 	}, nil
 }
 
-// Note: expects that buf cmd BufLint exists.
+// Note: expects that buf cmd lint exists.
 func BufLint(protoDir string) error {
 	cmd := exec.Command("buf", "lint", protoDir)
 	cmd.Stdout = os.Stdout

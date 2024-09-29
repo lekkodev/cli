@@ -242,6 +242,8 @@ func WriteTypesToRepo(ctx context.Context, fds *descriptorpb.FileDescriptorSet, 
 	return writeErr
 }
 
+// Copies a directory in a configuration repository to a directory on the OS filesystem.
+// e.g. <dir> -> <dst>/<dir>
 func copyDirFiles(ctx context.Context, r repo.ConfigurationRepository, dir string, dst string) error {
 	pfs, err := r.GetDirContents(ctx, dir)
 	if err != nil {
