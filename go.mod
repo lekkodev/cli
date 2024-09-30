@@ -6,7 +6,7 @@ replace github.com/bazelbuild/buildtools => github.com/lekkodev/buildtools v0.0.
 
 require (
 	buf.build/gen/go/lekkodev/cli/connectrpc/go v1.17.0-20240926040046-3e1042256cdf.1
-	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.2-20240926040046-3e1042256cdf.2
+	buf.build/gen/go/lekkodev/cli/protocolbuffers/go v1.34.2-20240930183740-1d0726c35a2f.2
 	connectrpc.com/connect v1.17.0
 	github.com/AlecAivazis/survey/v2 v2.3.6
 	github.com/atotto/clipboard v0.1.4

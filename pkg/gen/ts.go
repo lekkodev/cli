@@ -572,6 +572,10 @@ func translateRetValueTS(val *anypb.Any, t featurev1beta1.FeatureType, typeRegis
 			funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
 		}
 		funcName := funcNameBuilder.String()
+		if call.FieldName != "" {
+			fieldName := strcase.ToLowerCamel(call.FieldName)
+			return fmt.Sprintf("%s().%s", funcName, fieldName)
+		}
 		return fmt.Sprintf("%s()", funcName)
 	}
 	//var dypb *dynamicpb.Message
