@@ -23,6 +23,43 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// TODO: Diffing method
+
+// Take the namespace contents of `other` into `dst`.
+// Namespaces and features in `other` that are not in `dst` are added.
+// Conflicting features are overwritten with ones from `other`.
+// Namespaces in `dst` that are not in `other` are NOT removed.
+// Returns the modified `dst`. `other` should not be used after being passed.
+func TakeNamespaceContents(dst *featurev1beta1.RepositoryContents, other *featurev1beta1.RepositoryContents) *featurev1beta1.RepositoryContents {
+	for _, otherNs := range other.Namespaces {
+		replaced := false
+		for i, dstNs := range dst.Namespaces {
+			if dstNs.Name == otherNs.Name {
+				dst.Namespaces[i] = otherNs
+				replaced = true
+			}
+		}
+		if !replaced {
+			dst.Namespaces = append(dst.Namespaces, otherNs)
+		}
+	}
+	// Need to also overwrite appropriate file descriptors
+	// Assumes that file descriptors corresponding to namespaces have deterministic names
+	for _, otherFD := range other.FileDescriptorSet.File {
+		replaced := false
+		for i, dstFD := range dst.FileDescriptorSet.File {
+			if dstFD.Name == otherFD.Name {
+				dst.FileDescriptorSet.File[i] = otherFD
+				replaced = true
+			}
+		}
+		if !replaced {
+			dst.FileDescriptorSet.File = append(dst.FileDescriptorSet.File, otherFD)
+		}
+	}
+	return dst
+}
+
 // Expects base64 encoded serialized RepositoryContents message
 func DecodeRepositoryContents(encoded []byte) (*featurev1beta1.RepositoryContents, error) {
 	// Because Protobuf is not self-describing, we have to jump through some hoops here for deserialization.

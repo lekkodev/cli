@@ -457,6 +457,7 @@ message GetRepositoryContentsResponse {
 message GetNativeLangRequest {
   BranchKey key = 1;
   string namespace_name = 2;
+  // Full language name, lowercase: go, typescript, python, etc.
   string language = 3;
 }
 
@@ -813,16 +814,21 @@ message SaveStarlarkResponse {
 message SaveNativeLangRequest {
   BranchKey key = 1;
   string namespace_name = 2;
+  // Full language name, lowercase: go, typescript, python, etc.
   string language = 3;
   string code = 4;
+  // Human-friendly description of changes. If not set, a default description will be generated.
+  string description = 5;
 }
 
+// TODO: We probably want some kind of linting/checking endpoint that surfaces diagnostic errors
+// if parsing native lang code fails, so that the editor can show in-code errors or suggest fixes.
+// This could be part of SaveNativeLang with a dry_run-esque option or a separate endpoint.
 message SaveNativeLangResponse {
+  // A new branch is automatically created if this save was based on a default branch
   Branch branch = 1;
+  // The formatted code after save
   string formatted = 2;
-  // TODO: We probably want some kind of linting/checking endpoint that surfaces diagnostic errors
-  // if parsing native lang code fails, so that the editor can show in-code errors or suggest fixes.
-  // This could be part of SaveNativeLang with a dry_run-esque option or a separate endpoint.
 }
 
 message ConvertRuleToStringRequest {

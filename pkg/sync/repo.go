@@ -17,6 +17,7 @@ package sync
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/lekkodev/cli/pkg/proto"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/lekkodev/cli/pkg/star"
+	"github.com/lekkodev/cli/pkg/star/prototypes"
 	"github.com/lekkodev/cli/pkg/star/static"
 	"github.com/lekkodev/go-sdk/pkg/eval"
 	"github.com/pkg/errors"
@@ -46,11 +48,17 @@ func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.Repo
 	if err != nil {
 		return errors.Wrap(err, "prepare repo")
 	}
+	return WriteContentsToRepo(ctx, contents, r)
+}
+
+func WriteContentsToRepo(ctx context.Context, contents *featurev1beta1.RepositoryContents, r repo.ConfigurationRepository) error {
 	// Discard logs, mainly for silencing compilation later
-	// TODO: Maybe a verbose flag
-	r.ConfigureLogger(&repo.LoggingConfiguration{
-		Writer: io.Discard,
+	// TODO: Allow passing in writer
+	clearFn := r.ConfigureLogger(&repo.LoggingConfiguration{
+		Writer:         io.Discard,
+		ColorsDisabled: true,
 	})
+	defer clearFn()
 	rootMD, _, err := r.ParseMetadata(ctx)
 	if err != nil {
 		return err
@@ -159,8 +167,35 @@ func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.Repo
 	if err := WriteTypesToRepo(ctx, contents.FileDescriptorSet, r); err != nil {
 		return errors.Wrap(err, "write type files")
 	}
-	if _, err := r.ReBuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory, false); err != nil {
-		return errors.Wrap(err, "final rebuild type registry")
+	// NOTE: This is a workaround to correctly rebuild the type registry in ephemeral repositories.
+	// Because ephemeral repos use an in-mem fs, we can't run the buf cmd line on its files.
+	// So we copy the proto dir to a temp dir in the real fs, build there, then copy the image back.
+	// Still does require the buf CLI to be available.
+	tmpProtoDir, err := os.MkdirTemp("", "proto")
+	if err != nil {
+		return errors.Wrap(err, "create tmp proto dir")
+	}
+	defer os.RemoveAll(tmpProtoDir)
+	if err := copyDirFiles(ctx, r, rootMD.ProtoDirectory, tmpProtoDir); err != nil {
+		return errors.Wrap(err, "copy proto files")
+	}
+	bufIn := filepath.Join(tmpProtoDir, rootMD.ProtoDirectory)
+	if err := prototypes.BufLint(bufIn); err != nil {
+		return errors.Wrap(err, "lint protos")
+	}
+	bufImage, err := prototypes.NewBufImage(bufIn)
+	if err != nil {
+		return errors.Wrap(err, "build protos")
+	}
+	bufContents, err := os.ReadFile(bufImage.Filename)
+	if err != nil {
+		return errors.Wrap(err, "read buf image")
+	}
+	if err := r.WriteFile(filepath.Join(rootMD.ProtoDirectory, filepath.Base(bufImage.Filename)), bufContents, 0644); err != nil {
+		return errors.Wrap(err, "copy back buf image")
+	}
+	if _, err := r.BuildDynamicTypeRegistry(ctx, rootMD.ProtoDirectory); err != nil {
+		return errors.Wrap(err, "final build type registry")
 	}
 
 	// Final compile to verify overall health
@@ -205,4 +240,41 @@ func WriteTypesToRepo(ctx context.Context, fds *descriptorpb.FileDescriptorSet, 
 		return true
 	})
 	return writeErr
+}
+
+// Copies a directory in a configuration repository to a directory on the OS filesystem.
+// e.g. <dir> -> <dst>/<dir>
+func copyDirFiles(ctx context.Context, r repo.ConfigurationRepository, dir string, dst string) error {
+	pfs, err := r.GetDirContents(ctx, dir)
+	if err != nil {
+		return errors.Wrap(err, "get dir contents")
+	}
+	dstDir := filepath.Join(dst, dir)
+	if err := os.MkdirAll(dstDir, 0777); err != nil {
+		return errors.Wrapf(err, "mkdir %s", dstDir)
+	}
+	for _, pf := range pfs {
+		dstPath := filepath.Join(dst, pf.Path)
+		if pf.IsDir {
+			if err := os.MkdirAll(dstPath, 0777); err != nil {
+				return errors.Wrapf(err, "mkdir %s", pf.Path)
+			}
+			if err := copyDirFiles(ctx, r, pf.Path, dst); err != nil {
+				return err
+			}
+			continue
+		}
+		b, err := r.Read(pf.Path)
+		if err != nil {
+			return errors.Wrapf(err, "read %s", pf.Path)
+		}
+		f, err := os.Create(dstPath)
+		if err != nil {
+			return errors.Wrapf(err, "create %s", dstPath)
+		}
+		if _, err := f.Write(b); err != nil {
+			return errors.Wrapf(err, "copy %s", dstPath)
+		}
+	}
+	return nil
 }

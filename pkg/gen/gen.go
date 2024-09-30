@@ -115,13 +115,8 @@ func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekk
 	return nil
 }
 
-// Reads repository contents from a local config repository.
-func ReadRepoContents(ctx context.Context, repoPath string) (repoContents *featurev1beta1.RepositoryContents, err error) {
-	defer err2.Handle(&err)
-	r, err := repo.NewLocal(repoPath, nil)
-	if err != nil {
-		return nil, errors.Wrap(err, "read config repository")
-	}
+// Read repository contents using ConfigurationRepository interface
+func ReadRepoContentsFromRepo(ctx context.Context, r repo.ConfigurationRepository) (repoContents *featurev1beta1.RepositoryContents, err error) {
 	rootMD, nsMDs := try.To2(r.ParseMetadata(ctx))
 	repoContents = &featurev1beta1.RepositoryContents{}
 	repoContents.FileDescriptorSet = try.To1(r.GetFileDescriptorSet(ctx, rootMD.ProtoDirectory))
@@ -149,4 +144,14 @@ func ReadRepoContents(ctx context.Context, repoPath string) (repoContents *featu
 		repoContents.Namespaces = append(repoContents.Namespaces, ns)
 	}
 	return repoContents, nil
+}
+
+// Reads repository contents from a local config repository.
+func ReadRepoContents(ctx context.Context, repoPath string) (repoContents *featurev1beta1.RepositoryContents, err error) {
+	defer err2.Handle(&err)
+	r, err := repo.NewLocal(repoPath, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "read config repository")
+	}
+	return ReadRepoContentsFromRepo(ctx, r)
 }
