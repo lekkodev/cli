@@ -129,4 +129,5 @@ message ConfigCall {
   string namespace = 2;
   string key = 3;
   uint64 field_number = 4;
+  string field_name = 5;
 }
