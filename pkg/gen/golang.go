@@ -389,7 +389,8 @@ type configCodeTemplate struct {
 // Template body for primitive config code
 func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
 	return &configCodeTemplate{
-		public: `// {{$.Description}}
+		public: `{{range $.Description}}// {{.}}
+{{end -}}
 func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) {{$.RetType}} {
 	{{- if not $.PassCtx}}
 	ctx := context.Background()
@@ -407,7 +408,8 @@ func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx
   	return result
 }
 `,
-		private: `// {{$.Description}}
+		private: `{{range $.Description}}// {{.}}
+{{end -}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
 {{end}}}
@@ -418,7 +420,8 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 // Template body for proto config code
 func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
 	return &configCodeTemplate{
-		public: `// {{$.Description}}
+		public: `{{range $.Description}}// {{.}}
+{{end -}}
 func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) *{{$.RetType}} {
 	{{- if not $.PassCtx}}
 	ctx := context.Background()
@@ -438,7 +441,8 @@ func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx
     return ret
 }
 `,
-		private: `// {{$.Description}}
+		private: `{{range $.Description}}// {{.}}
+{{end -}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
 {{end}}}
@@ -457,7 +461,8 @@ const (
 	{{end}}
 )
 
-// {{$.Description}}
+{{range $.Description}}// {{.}}
+{{end -}}
 func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) {{$.RetType}} {
 		{{- if not $.PassCtx}}
 		ctx := context.Background()
@@ -476,7 +481,8 @@ const (
 	{{end}}
 )
 
-// {{$.Description}}
+{{range $.Description}}// {{.}}
+{{end -}}
 func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 {{range  $.NativeLanguage}}{{ . }}
 {{end}}}
@@ -620,7 +626,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	}
 
 	data := struct {
-		Description        string
+		Description        []string
 		FuncName           string
 		PrivateFunc        string
 		GetFunction        string
@@ -636,7 +642,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		CtxStuff           string
 		ProtoStructFilling string
 	}{
-		f.Description,
+		strings.Split(f.Description, "\n"),
 		funcName,
 		privateFunc,
 		getFunction,
