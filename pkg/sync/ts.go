@@ -35,22 +35,23 @@ const syncTSExec = "lekko-sync"
 var NoSyncTSError = errors.New("missing npx lekko-sync")
 
 // TODO: consider consolidating bisync methods
-func BisyncTS(ctx context.Context, lekkoPath, repoPath string) error {
+func BisyncTS(ctx context.Context, lekkoPath, repoPath string) ([]string, error) {
 	repoContents, err := SyncTS(lekkoPath)
 	if err != nil {
-		return errors.Wrap(err, "sync")
+		return nil, errors.Wrap(err, "sync")
 	}
 	if err := WriteContentsToLocalRepo(ctx, repoContents, repoPath); err != nil {
-		return errors.Wrap(err, "write to repository")
+		return nil, errors.Wrap(err, "write to repository")
 	}
 	// Generate only for namespaces that were synced
-	for _, namespace := range repoContents.Namespaces {
-		outFilename := filepath.Join(lekkoPath, namespace.Name+native.LangTypeScript.Ext())
-		if err := gen.GenFormattedTS(ctx, repoPath, namespace.Name, outFilename); err != nil {
-			return errors.Wrapf(err, "generate code for %s", namespace.Name)
+	files := make([]string, len(repoContents.Namespaces))
+	for i, namespace := range repoContents.Namespaces {
+		files[i] = filepath.Join(lekkoPath, namespace.Name+native.LangTypeScript.Ext())
+		if err := gen.GenFormattedTS(ctx, repoPath, namespace.Name, files[i]); err != nil {
+			return nil, errors.Wrapf(err, "generate code for %s", namespace.Name)
 		}
 	}
-	return nil
+	return files, nil
 }
 
 func SyncTS(lekkoPath string) (*featurev1beta1.RepositoryContents, error) {

@@ -425,7 +425,7 @@ func pullCmd() *cobra.Command {
 	var force bool
 	cmd := &cobra.Command{
 		Use:   "pull",
-		Short: "Pull remote changes and merge them with local changes.",
+		Short: "Pull latest lekko definitions",
 		RunE: func(cmd *cobra.Command, args []string) (err error) {
 			defer err2.Handle(&err)
 			ctx := cmd.Context()
@@ -434,6 +434,28 @@ func pullCmd() *cobra.Command {
 			nlProject := try.To1(native.DetectNativeLang(""))
 
 			repoPath := try.To1(repo.PrepareGithubRepo())
+
+			lekkoPath := dot.LekkoPath
+			if !force {
+				hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
+				if err != nil {
+					return errors.New("Lekko requires code to be in a git repository")
+				}
+				if hasLekkoChanges {
+					confirm := false
+					if err := survey.AskOne(&survey.Confirm{
+						Message: fmt.Sprintf("Uncommitted changes detected in %s. Continue?", lekkoPath),
+						Default: false,
+					}, &confirm); err != nil {
+						return err
+					}
+					if !confirm {
+						fmt.Printf("Please commit or stash changes in %s before pulling.\n", lekkoPath)
+						return nil
+					}
+				}
+			}
+
 			gitRepo := try.To1(git.PlainOpen(repoPath))
 			// this should be safe as we generate all changes from native lang
 			// git reset --hard
@@ -453,77 +475,19 @@ func pullCmd() *cobra.Command {
 			if len(remotes) == 0 {
 				return errors.New("No remote found, please finish setup instructions")
 			}
-			fmt.Printf("Pulling from %s\n", remotes[0].Config().URLs[0])
+			fmt.Printf("Pulling from %s...\n", remotes[0].Config().URLs[0])
 			try.To1(gitcli.Pull(repoPath))
 			newHead := try.To1(gitRepo.Head())
 
-			lekkoPath := dot.LekkoPath
-			if len(dot.LockSHA) == 0 || force {
-				if len(dot.LockSHA) == 0 {
-					fmt.Println("No Lekko lock information found, syncing from remote...")
-				}
-				// no lekko lock, sync from remote
-				if !force {
-					hasLekkoChanges, err := HasLekkoChanges(lekkoPath)
-					if err != nil {
-						return errors.New("Lekko requires code to be in a git repository")
-					}
-					if hasLekkoChanges {
-						return fmt.Errorf("please commit or stash changes in '%s' before pulling", lekkoPath)
-					}
-				}
-				try.To(gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{}))
-
-				dot.LockSHA = newHead.Hash().String()
-				if err := dot.WriteBack(); err != nil {
-					return errors.Wrap(err, "write back .lekko")
-				}
-
-				return nil
+			if err := gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{}); err != nil {
+				return errors.Wrap(err, "gen")
 			}
-
-			if newHead.Hash().String() == dot.LockSHA {
-				fmt.Println("Already up to date.")
-				return nil
-			}
-			fmt.Printf("Rebasing from %s to %s\n\n", dot.LockSHA, newHead.Hash().String())
-
-			switch nlProject.Language {
-			case native.LangTypeScript:
-				// TODO: Fix pull for TS, this command no longer exists and we have repoless sync/gen now
-				tsPullCmd := exec.Command("npx", "lekko-repo-pull", "--lekko-dir", lekkoPath)
-				output, err := tsPullCmd.CombinedOutput()
-				fmt.Println(string(output))
-				if err != nil {
-					return errors.Wrap(err, "ts pull")
-				}
-			case native.LangGo:
-				files, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
-				if err != nil {
-					return errors.Wrap(err, "go bisync")
-				}
-				hasConflicts := false
-				for _, f := range files {
-					hasConflicts = hasConflicts && try.To1(mergeFile(ctx, f, dot, nlProject))
-				}
-				if !hasConflicts {
-					if _, err := sync.BisyncGo(ctx, lekkoPath, lekkoPath, repoPath); err != nil {
-						return errors.Wrap(err, "post-merge go bisync")
-					}
-				}
-			default:
-				return fmt.Errorf("unsupported language: %s", nlProject.Language)
-			}
-
-			dot.LockSHA = newHead.Hash().String()
-			if err := dot.WriteBack(); err != nil {
-				return errors.Wrap(err, "write back .lekko")
-			}
+			fmt.Printf("Generated lekkos from %s\n", newHead.Hash().String())
 
 			return nil
 		},
 	}
-	cmd.Flags().BoolVarP(&force, "force", "f", false, "allow dirty git state when pulling without valid lekko.lock")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "allow dirty git state")
 	return cmd
 }
 

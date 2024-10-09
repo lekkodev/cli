@@ -115,7 +115,7 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 	}))
 	switch nlProject.Language {
 	case native.LangTypeScript:
-		err = BisyncTS(ctx, lekkoPath, repoPath)
+		_, err = BisyncTS(ctx, lekkoPath, repoPath)
 		if err != nil {
 			return err
 		}
