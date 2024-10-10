@@ -187,8 +187,8 @@ func NewGoSyncer() *goSyncer {
 }
 
 // As a side effect, mutates the passed FileDescriptorSet to register types parsed from the AST.
-func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptorSet) (namespace *featurev1beta1.Namespace, err error) {
-	defer err2.Handle(&err, nil)
+func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptorSet) (namespace *featurev1beta1.Namespace, retErr error) {
+	defer err2.Handle(&retErr, nil)
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
 	namespace = &featurev1beta1.Namespace{}
@@ -198,12 +198,12 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 		case *ast.File:
 			// i.e. lekkodefault -> default (this requires the package name to be correct)
 			if !strings.HasPrefix(x.Name.Name, "lekko") {
-				err = g.posErr(x, "packages for lekko must start with 'lekko'")
+				retErr = g.posErr(x, "packages for lekko must start with 'lekko'")
 				return false
 			}
 			namespace.Name = x.Name.Name[5:]
 			if len(namespace.Name) == 0 {
-				err = g.posErr(x, "namespace name cannot be empty")
+				retErr = g.posErr(x, "namespace name cannot be empty")
 				return false
 			}
 			return true
@@ -215,18 +215,18 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 				}
 				typeSpec, ok := spec.(*ast.TypeSpec)
 				if !ok {
-					err = g.posErr(x, "only type declarations are supported")
+					retErr = g.posErr(x, "only type declarations are supported")
 					return false
 				}
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok {
-					err = g.posErr(typeSpec, "only struct type declarations are supported")
+					retErr = g.posErr(typeSpec, "only struct type declarations are supported")
 					return false
 				}
 				d := try.To1(g.structToDescriptor(typeSpec.Name.Name, structType))
 				err := registerMessage(fds, d, namespace.Name)
 				if err != nil {
-					err = g.posErr(typeSpec, "failed to register type for struct")
+					retErr = g.posErr(typeSpec, "failed to register type for struct")
 					return false
 				}
 			}
@@ -235,13 +235,13 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 			return false
 		}
 	})
-	if err != nil {
-		return nil, err
+	if retErr != nil {
+		return nil, retErr
 	}
 	// At this point, we should have processed all types
-	tr, err := protoutils.FileDescriptorSetToTypeRegistry(fds)
-	if err != nil {
-		return nil, errors.Wrap(err, "pre-process type registry")
+	tr, retErr := protoutils.FileDescriptorSetToTypeRegistry(fds)
+	if retErr != nil {
+		return nil, errors.Wrap(retErr, "pre-process type registry")
 	}
 	// Second pass to handle all functions
 	ast.Inspect(pf, func(n ast.Node) bool {
@@ -269,16 +269,16 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 				} else {
 					for _, param := range x.Type.Params.List {
 						if len(param.Names) < 1 {
-							err = g.posErr(param, "parameter names must be present")
+							retErr = g.posErr(param, "parameter names must be present")
 							return false
 						}
 						if param.Type == nil {
-							err = g.posErr(param, "parameter type must be present")
+							retErr = g.posErr(param, "parameter type must be present")
 							return false
 						}
 						typeIdent, ok := param.Type.(*ast.Ident)
 						if !ok {
-							err = g.posErr(param, errors.New("parameter type must be an identifier"))
+							retErr = g.posErr(param, errors.New("parameter type must be an identifier"))
 							return false
 						}
 						contextKeys[param.Names[0].Name] = typeIdent.Name
@@ -287,11 +287,11 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 
 				results := x.Type.Results.List
 				if results == nil {
-					err = g.posErr(x, "must have a return type")
+					retErr = g.posErr(x, "must have a return type")
 					return false
 				}
 				if len(results) != 1 {
-					err = g.posErr(x, "must have exactly one return type")
+					retErr = g.posErr(x, "must have exactly one return type")
 					return false
 				}
 
@@ -308,20 +308,20 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
 					default:
 						// TODO - check if it is one of our structs to allow non *
-						err = g.posErr(t, fmt.Sprintf("unsupported primitive return type %s", t.Name))
+						retErr = g.posErr(t, fmt.Sprintf("unsupported primitive return type %s", t.Name))
 						return false
 					}
 				case *ast.StarExpr:
 					feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
 				default:
-					err = g.posErr(t, fmt.Errorf("unsupported return type expression %+v", t))
+					retErr = g.posErr(t, fmt.Errorf("unsupported return type expression %+v", t))
 					return false
 				}
 				for _, stmt := range x.Body.List {
 					switch n := stmt.(type) {
 					case *ast.ReturnStmt:
 						if feature.Tree.Default != nil {
-							err = g.posErr(n, "unexpected default value already processed")
+							retErr = g.posErr(n, "unexpected default value already processed")
 							return false
 						}
 						// TODO also need to take care of the possibility that the default is in an else
@@ -330,13 +330,13 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 					case *ast.IfStmt:
 						feature.Tree.Constraints = append(feature.Tree.Constraints, try.To1(g.ifToConstraints(n, feature.Type, contextKeys, namespace.Name, tr))...)
 					default:
-						err = g.posErr(n, "only if and return statements allowed in function body")
+						retErr = g.posErr(n, "only if and return statements allowed in function body")
 						return false
 					}
 				}
 				return false
 			}
-			err = g.posErr(x.Name, "only function names like 'getConfig' are supported")
+			retErr = g.posErr(x.Name, "only function names like 'getConfig' are supported")
 			return false
 		}
 		return true
