@@ -145,7 +145,8 @@ func getExample() bool {
 
 // This is an attempt to pull out a simpler component that is more re-usable - the other one should probably be removed/changed, but that depends on
 // how far this change goes
-func (g *goGenerator) GenNamespaceFiles(ctx context.Context, namespaceName string, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (string, string, error) {
+func (g *goGenerator) GenNamespaceFiles(ctx context.Context, namespaceName string, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (public string, private string, err error) {
+	defer err2.Handle(&err)
 	// For each namespace, we want to generate under lekko/:
 	// lekko/
 	//   <namespace>/
@@ -171,7 +172,7 @@ import (
 )
 
 type LekkoClient struct {
-client.Client
+	client.Client
 }
 
 {{range $.PublicFuncStrings}}
@@ -230,12 +231,12 @@ import (
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.DefaultNew.TypeUrl)
 			if err != nil {
-				panic(err)
+				return "", "", errors.Wrapf(err, "find %s", f.Tree.DefaultNew.TypeUrl)
 			}
 			msg := mt.New().Interface()
 			err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(f.Tree.DefaultNew.Value, msg)
 			if err != nil {
-				panic(errors.Wrapf(err, "%s", f.Tree.DefaultNew.TypeUrl))
+				return "", "", errors.Wrapf(err, "unmarshal %s", f.Tree.DefaultNew.TypeUrl)
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
 				// This feels bad...
@@ -296,11 +297,11 @@ import (
 		importProtoReflect,
 	}
 
-	public, err := renderGoTemplate(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", namespaceName), data)
+	public, err = renderGoTemplate(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", namespaceName), data)
 	if err != nil {
 		return "", "", err
 	}
-	private, err := renderGoTemplate(privateFileTemplateBody, fmt.Sprintf("%s.go", namespaceName), data)
+	private, err = renderGoTemplate(privateFileTemplateBody, fmt.Sprintf("%s.go", namespaceName), data)
 	if err != nil {
 		return "", "", err
 	}
@@ -539,7 +540,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 					enumTypeName = strcase.ToCamel(f.Key)
 					retType = enumTypeName
 					templateBody = g.getStringEnumTemplateBody()
-					for _, ret := range g.getStringRetValues(f) {
+					for _, ret := range try.To1(g.getStringRetValues(f)) {
 						// Result of translating ret values is wrapped in quotes
 						ret = ret[1 : len(ret)-1]
 						name := enumTypeName
@@ -564,7 +565,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		templateBody = g.getProtoTemplateBody()
 		matched, err := regexp.MatchString(fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.[a-zA-Z0-9]", ns), f.Tree.DefaultNew.TypeUrl)
 		if err != nil {
-			panic(err)
+			return nil, errors.Wrapf(err, "regex check type url %s", f.Tree.DefaultNew.TypeUrl)
 		}
 		if matched {
 			parts := strings.Split(f.Tree.DefaultNew.TypeUrl, ".")
@@ -578,7 +579,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		}
 		mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.DefaultNew.TypeUrl)
 		if err != nil {
-			panic(err)
+			return nil, errors.Wrapf(err, "find %s", f.Tree.DefaultNew.TypeUrl)
 		}
 		// TODO: In case of type changes that result in only some of the fields being unpacked correctly, is it better to
 		// succeed partially or defer to static fallback?
@@ -660,8 +661,12 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 	}
 	generated := &generatedConfigCode{}
 	usedVariables := make(map[string]string)
+	var err error
 	if staticCtxType != nil {
-		data.NativeLanguage = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage, err = g.translateFeature(f, protoType, true, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		if err != nil {
+			return nil, errors.Wrapf(err, "translate %s", f.Key)
+		}
 		if staticCtxType.PackageAlias != "" {
 			data.ArgumentString = fmt.Sprintf("args *%s.%s", staticCtxType.PackageAlias, staticCtxType.Type)
 		} else {
@@ -670,7 +675,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		data.CallString = "args"
 		mt, err := g.TypeRegistry.FindMessageByURL(staticCtxType.TypeUrl)
 		if err != nil {
-			panic(err)
+			return nil, errors.Wrapf(err, "find %s", staticCtxType.TypeUrl)
 		}
 		for i := 0; i < mt.Descriptor().Fields().Len(); i++ {
 			fd := mt.Descriptor().Fields().Get(i)
@@ -678,7 +683,10 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 			data.CtxStuff = data.CtxStuff + fmt.Sprintf("ctx = client.Add(ctx, \"%s\", args.%s)\n", fieldName, strcase.ToCamel(fieldName))
 		}
 	} else {
-		data.NativeLanguage = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		data.NativeLanguage, err = g.translateFeature(f, protoType, false, usedVariables, &generated.usedStrings, &generated.usedSlices)
+		if err != nil {
+			return nil, errors.Wrapf(err, "translate %s", f.Key)
+		}
 		var arguments []string
 		var ctxAddLines []string
 		for f, t := range usedVariables {
@@ -732,27 +740,30 @@ func anyToLekkoAny(a *anypb.Any) *featurev1beta1.Any {
 	}
 }
 
-func (g *goGenerator) translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) []string {
+func (g *goGenerator) translateFeature(f *featurev1beta1.Feature, protoType *ProtoImport, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) ([]string, error) {
 	var buffer []string
 	for i, constraint := range f.Tree.Constraints {
 		ifToken := "} else if"
 		if i == 0 {
 			ifToken = "if"
 		}
-		rule := g.translateRule(constraint.GetRuleAstNew(), staticContext, usedVariables, usedStrings, usedSlices)
+		rule, err := g.translateRule(constraint.GetRuleAstNew(), staticContext, usedVariables, usedStrings, usedSlices)
+		if err != nil {
+			return nil, errors.Wrap(err, "rule")
+		}
 		buffer = append(buffer, fmt.Sprintf("\t%s %s {", ifToken, rule))
 
 		// TODO this doesn't work for proto, but let's try
 		if constraint.ValueNew == nil {
 			constraint.ValueNew = anyToLekkoAny(constraint.Value)
 		}
-		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", g.translateAnyValue(constraint.ValueNew, protoType)))
+		buffer = append(buffer, fmt.Sprintf("\t\treturn %s", try.To1(g.translateAnyValue(constraint.ValueNew, protoType))))
 	}
 	if len(f.Tree.Constraints) > 0 {
 		buffer = append(buffer, "\t}")
 	}
-	buffer = append(buffer, fmt.Sprintf("\treturn %s", g.translateAnyValue(f.GetTree().GetDefaultNew(), protoType)))
-	return buffer
+	buffer = append(buffer, fmt.Sprintf("\treturn %s", try.To1(g.translateAnyValue(f.GetTree().GetDefaultNew(), protoType))))
+	return buffer, nil
 }
 
 // If one key is used in the context of more than one type, we should fail
@@ -766,9 +777,9 @@ func (g *goGenerator) tryStoreUsedVariable(usedVariables map[string]string, k st
 }
 
 // Recursively translate a rule, which is an n-ary tree. See lekko.rules.v1beta3.Rule.
-func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) string {
+func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool, usedVariables map[string]string, usedStrings, usedSlices *bool) (string, error) {
 	if rule == nil {
-		return ""
+		return "", nil
 	}
 	switch v := rule.GetRule().(type) {
 	case *rulesv1beta3.Rule_Atom:
@@ -784,40 +795,40 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 			if b, ok := v.Atom.ComparisonValue.GetKind().(*structpb.Value_BoolValue); ok {
 				g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, "bool")
 				if b.BoolValue {
-					return contextKeyName
+					return contextKeyName, nil
 				} else {
-					return fmt.Sprintf("!%s", contextKeyName)
+					return fmt.Sprintf("!%s", contextKeyName), nil
 				}
 			}
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s == %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s == %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s != %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s != %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s < %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s < %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s <= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s <= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s > %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s > %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
-			return fmt.Sprintf("%s >= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("%s >= %s", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			return fmt.Sprintf("strings.Contains(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("strings.Contains(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			return fmt.Sprintf("strings.HasPrefix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("strings.HasPrefix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH:
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, structpbValueToKindStringGo(v.Atom.ComparisonValue))
 			*usedStrings = true
-			return fmt.Sprintf("strings.HasSuffix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue))))
+			return fmt.Sprintf("strings.HasSuffix(%s,  %s)", contextKeyName, string(try.To1(protojson.Marshal(v.Atom.ComparisonValue)))), nil
 		case rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN:
 			sliceType := "string"
 			switch v.Atom.ComparisonValue.GetListValue().GetValues()[0].GetKind().(type) {
@@ -836,10 +847,10 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 			}
 			g.tryStoreUsedVariable(usedVariables, v.Atom.ContextKey, sliceType)
 			*usedSlices = true
-			return fmt.Sprintf("slices.Contains([]%s{%s}, %s)", sliceType, strings.Join(elements, ", "), contextKeyName)
+			return fmt.Sprintf("slices.Contains([]%s{%s}, %s)", sliceType, strings.Join(elements, ", "), contextKeyName), nil
 			// TODO, probably logical to have this here but we need slice syntax, use slices as of golang 1.21
 		default:
-			panic(fmt.Errorf("unsupported operator %+v", v.Atom.ComparisonOperator))
+			return "", fmt.Errorf("unsupported operator %+v", v.Atom.ComparisonOperator)
 		}
 	case *rulesv1beta3.Rule_Not:
 		ruleStrFmt := "!%s"
@@ -855,7 +866,7 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 				ruleStrFmt = "!(%s)"
 			}
 		}
-		return fmt.Sprintf(ruleStrFmt, g.translateRule(v.Not, staticContext, usedVariables, usedStrings, usedSlices))
+		return fmt.Sprintf(ruleStrFmt, try.To1(g.translateRule(v.Not, staticContext, usedVariables, usedStrings, usedSlices))), nil
 	case *rulesv1beta3.Rule_LogicalExpression:
 		operator := " && "
 		switch v.LogicalExpression.GetLogicalOperator() {
@@ -873,15 +884,15 @@ func (g *goGenerator) translateRule(rule *rulesv1beta3.Rule, staticContext bool,
 					ruleStrFmt = "(%s)"
 				}
 			}
-			result = append(result, fmt.Sprintf(ruleStrFmt, g.translateRule(rule, staticContext, usedVariables, usedStrings, usedSlices)))
+			result = append(result, fmt.Sprintf(ruleStrFmt, try.To1(g.translateRule(rule, staticContext, usedVariables, usedStrings, usedSlices))))
 		}
-		return strings.Join(result, operator)
+		return strings.Join(result, operator), nil
 	default:
-		panic(fmt.Errorf("unsupported type of rule %+v", v))
+		return "", fmt.Errorf("unsupported type of rule %+v", v)
 	}
 }
 
-func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f protoreflect.FieldDescriptor, val protoreflect.Value) string {
+func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f protoreflect.FieldDescriptor, val protoreflect.Value) (string, error) {
 	if f.IsMap() {
 		// For map fields, f.Kind() is MessageKind but we need to handle key and value descriptors separately
 		// TODO: Add support for protobuf type values
@@ -891,7 +902,8 @@ func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f pr
 		val.Map().Range(func(mk protoreflect.MapKey, mv protoreflect.Value) bool {
 			lines = append(lines, fmt.Sprintf("\"%s\": %s",
 				mk.String(),
-				g.translateProtoFieldValue(parent, f.MapValue(), mv)))
+				try.To1(g.translateProtoFieldValue(parent, f.MapValue(), mv)),
+			))
 			return true
 		})
 		if len(lines) > 1 {
@@ -903,7 +915,7 @@ func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f pr
 			res += lines[0]
 			res += "}"
 		}
-		return res
+		return res, nil
 	} else if f.IsList() {
 		// For list fields, f.Kind() is the type of each item (not necessarily MessageKind)
 		lVal := val.List()
@@ -911,11 +923,14 @@ func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f pr
 		res := fmt.Sprintf("[]%s{", f.Kind().String())
 		// For repeated messages, literal type can't just be stringified
 		if f.Kind() == protoreflect.MessageKind {
-			protoType := g.getProtoImportFromValue(parent, lVal.NewElement().Message()) // Not sure if this is the best way to get message type for list
+			protoType, err := g.getProtoImportFromValue(parent, lVal.NewElement().Message()) // Not sure if this is the best way to get message type for list
+			if err != nil {
+				return "", err
+			}
 			res = fmt.Sprintf("[]*%s.%s{", protoType.PackageAlias, protoType.Type)
 		}
 		for i := range lVal.Len() {
-			lines = append(lines, g.translateProtoNonRepeatedValue(parent, f.Kind(), lVal.Get(i), true))
+			lines = append(lines, try.To1(g.translateProtoNonRepeatedValue(parent, f.Kind(), lVal.Get(i), true)))
 		}
 		// Multiline formatting
 		if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
@@ -926,23 +941,21 @@ func (g *goGenerator) translateProtoFieldValue(parent protoreflect.Message, f pr
 			res += strings.Join(lines, "")
 			res += "}"
 		}
-		return res
+		return res, nil
 	} else {
 		return g.translateProtoNonRepeatedValue(parent, f.Kind(), val, false)
 	}
 }
 
-func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message, kind protoreflect.Kind, val protoreflect.Value, omitLiteralType bool) string {
+func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message, kind protoreflect.Kind, val protoreflect.Value, omitLiteralType bool) (string, error) {
 	switch kind {
 	case protoreflect.EnumKind:
 		// TODO: Actually handle enums, right now they're just numbers
-		return val.String()
+		return val.String(), nil
 	case protoreflect.StringKind:
-		return g.toQuoted(val.String())
+		return g.toQuoted(val.String()), nil
 	case protoreflect.BoolKind:
-		return val.String()
-	case protoreflect.BytesKind:
-		panic("Don't know how to take bytes, try nibbles")
+		return val.String(), nil
 	case protoreflect.FloatKind:
 		fallthrough
 	case protoreflect.DoubleKind:
@@ -955,21 +968,21 @@ func (g *goGenerator) translateProtoNonRepeatedValue(parent protoreflect.Message
 		fallthrough
 	case protoreflect.Uint32Kind:
 		// Don't need to do anything special for numerics
-		return val.String()
+		return val.String(), nil
 	case protoreflect.MessageKind:
 		// TODO - Maps are a special thing - do they work here?
 		return g.translateProtoValue(parent, val.Message(), omitLiteralType, make([]*featurev1beta1.ValueOveride, 0)) // TODO - nesting sucks.. need to redo all this shit
 	default:
-		panic(fmt.Errorf("unsupported proto value type: %v", kind))
+		return "", fmt.Errorf("unsupported proto value type: %v", kind)
 	}
 }
 
-func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *ProtoImport) string {
+func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *ProtoImport) (string, error) {
 	if val.TypeUrl == "type.googleapis.com/lekko.feature.v1beta1.ConfigCall" {
 		call := &featurev1beta1.ConfigCall{}
 		err := proto.Unmarshal(val.Value, call)
 		if err != nil {
-			panic(err)
+			return "", errors.Wrap(err, "unmarshal")
 		}
 		var funcNameBuilder strings.Builder
 		funcNameBuilder.WriteString("Get")
@@ -978,16 +991,16 @@ func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *Prot
 		}
 		funcName := funcNameBuilder.String()
 		privateFunc := strcase.ToLowerCamel(funcName)
-		return privateFunc + "()"
+		return privateFunc + "()", nil
 	}
 	mt, err := g.TypeRegistry.FindMessageByURL(val.TypeUrl)
 	if err != nil {
-		panic(err)
+		return "", errors.Wrapf(err, "find %s", val.TypeUrl)
 	}
 	msg := mt.New().Interface()
 	err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(val.Value, msg)
 	if err != nil {
-		panic(errors.Wrapf(err, "%s", val.TypeUrl))
+		return "", errors.Wrapf(err, "unmarshal %s", val.TypeUrl)
 	}
 
 	if protoType == nil { // This is a jank way of handling google WKT
@@ -1024,19 +1037,22 @@ func (g *goGenerator) translateAnyValue(val *featurev1beta1.Any, protoType *Prot
 			// limit this to just wrappers.. wtf proto libraries
 			return true
 		})
-		return ret
+		return ret, nil
 	}
 	return g.translateProtoValue(nil, msg.ProtoReflect(), false, val.Overrides)
 }
 
-func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val protoreflect.Message, omitLiteralType bool, overrides []*featurev1beta1.ValueOveride) string {
-	protoType := g.getProtoImportFromValue(parent, val)
+func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val protoreflect.Message, omitLiteralType bool, overrides []*featurev1beta1.ValueOveride) (string, error) {
+	protoType, err := g.getProtoImportFromValue(parent, val)
+	if err != nil {
+		return "", err
+	}
 	fields := make(map[int]string)
 	for _, override := range overrides {
 		fieldNumber := override.FieldPath[0]
 		fd := val.Type().Descriptor().Fields().ByNumber(protoreflect.FieldNumber(fieldNumber))
 		if fd == nil {
-			panic(fmt.Errorf("field number %d not found in message", fieldNumber))
+			return "", fmt.Errorf("field number %d not found in message", fieldNumber)
 		}
 		var funcNameBuilder strings.Builder
 		funcNameBuilder.WriteString("Get")
@@ -1050,7 +1066,7 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 
 	var lines []string
 	val.Range(func(fd protoreflect.FieldDescriptor, fv protoreflect.Value) bool {
-		fields[int(fd.Number())] = fmt.Sprintf("%s: %s", strcase.ToCamel(fd.TextName()), g.translateProtoFieldValue(val, fd, fv))
+		fields[int(fd.Number())] = fmt.Sprintf("%s: %s", strcase.ToCamel(fd.TextName()), try.To1(g.translateProtoFieldValue(val, fd, fv)))
 		return true
 	})
 	literalType := ""
@@ -1075,9 +1091,9 @@ func (g *goGenerator) translateProtoValue(parent protoreflect.Message, val proto
 	if len(lines) > 1 || (len(lines) == 1 && strings.Contains(lines[0], "\n")) {
 		slices.Sort(lines)
 		// Replace this with interface pointing stuff
-		return fmt.Sprintf("%s{\n%s,\n}", literalType, strings.Join(lines, ",\n"))
+		return fmt.Sprintf("%s{\n%s,\n}", literalType, strings.Join(lines, ",\n")), nil
 	} else {
-		return fmt.Sprintf("%s{%s}", literalType, strings.Join(lines, ""))
+		return fmt.Sprintf("%s{%s}", literalType, strings.Join(lines, "")), nil
 	}
 }
 
@@ -1095,7 +1111,7 @@ func (g *goGenerator) toQuoted(s string) string {
 // Handles getting import & type literal information for both top-level and nested messages.
 // TODO: Consider moving logic into UnpackProtoType directly which is shared with TS codegen as well
 // TODO: This can definitely be cached, and doesn't need values, just descriptors
-func (g *goGenerator) getProtoImportFromValue(parent protoreflect.Message, val protoreflect.Message) *ProtoImport {
+func (g *goGenerator) getProtoImportFromValue(parent protoreflect.Message, val protoreflect.Message) (*ProtoImport, error) {
 	// Try finding in type registry
 	_, err := g.TypeRegistry.FindMessageByName((val.Descriptor().FullName()))
 	if errors.Is(err, protoregistry.NotFound) {
@@ -1104,44 +1120,50 @@ func (g *goGenerator) getProtoImportFromValue(parent protoreflect.Message, val p
 		// Try finding in parent's nested message definitions
 		nestedMsgDesc := parent.Descriptor().Messages().ByName(val.Descriptor().Name())
 		if nestedMsgDesc == nil {
-			panic(fmt.Sprintf("unable to find message type %s", val.Descriptor().FullName()))
+			return nil, fmt.Errorf("find %s", val.Descriptor().FullName())
 		}
-		parentProtoType := g.getProtoImportFromValue(nil, parent)
+		parentProtoType := try.To1(g.getProtoImportFromValue(nil, parent))
 		return &ProtoImport{
 			ImportPath:   parentProtoType.ImportPath,
 			PackageAlias: parentProtoType.PackageAlias,
 			Type:         fmt.Sprintf("%s_%s", parentProtoType.Type, string(nestedMsgDesc.Name())),
-		}
+		}, nil
 	} else if err != nil {
-		panic(errors.Wrap(err, "unknown error while checking type registry"))
+		return nil, errors.Wrap(err, "unknown error while checking type registry")
 	} else {
 		// Found in type registry (i.e. top-level message)
-		return UnpackProtoType(g.moduleRoot, g.lekkoPath, string(val.Descriptor().FullName()))
+		return UnpackProtoType(g.moduleRoot, g.lekkoPath, string(val.Descriptor().FullName())), nil
 	}
 }
 
 // TODO: Generify
 // Get all unique possible return values of a config
-func (g *goGenerator) getStringRetValues(f *featurev1beta1.Feature) []string {
+func (g *goGenerator) getStringRetValues(f *featurev1beta1.Feature) ([]string, error) {
 	if f.Type != featurev1beta1.FeatureType_FEATURE_TYPE_STRING {
-		return []string{}
+		return []string{}, nil
 	}
 	valSet := make(map[string]bool)
-	valSet[g.translateAnyValue(f.Tree.DefaultNew, nil)] = true
+	defaultVal, err := g.translateAnyValue(f.Tree.DefaultNew, nil)
+	if err != nil {
+		return nil, err
+	}
+	valSet[defaultVal] = true
 	for _, constraint := range f.Tree.Constraints {
-		ret := g.translateAnyValue(constraint.ValueNew, nil)
-		valSet[ret] = true
+		val, err := g.translateAnyValue(constraint.ValueNew, nil)
+		if err != nil {
+			return nil, err
+		}
+		valSet[val] = true
 	}
 	var rets []string
 	for val := range valSet {
 		rets = append(rets, val)
 	}
 	sort.Strings(rets)
-	return rets
+	return rets, nil
 }
 
 func (g *goGenerator) genClientFile(moduleRoot string) (err error) {
-	defer err2.Handle(&err)
 	// Template for generated client initialization code.
 	const clientTemplateBody = `// Generated by Lekko. DO NOT EDIT.
 package lekko
