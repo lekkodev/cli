@@ -258,7 +258,7 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 				}
 				privateName := x.Name.Name // TODO - not sure how we use this, but does it work right with letting people just declare GetFoo and letting them be happy?
 				configName := strcase.ToKebab(privateName[3:])
-				feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, " "), Tree: &featurev1beta1.Tree{}}
+				feature := &featurev1beta1.Feature{Key: configName, Description: strings.Join(commentLines, "\n"), Tree: &featurev1beta1.Tree{}}
 				namespace.Features = append(namespace.Features, feature)
 				contextKeys := make(map[string]string)
 

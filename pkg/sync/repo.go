@@ -40,6 +40,7 @@ import (
 // Conflicting namespaces are essentially completely overwritten.
 // Namespaces in the local repository but not in the passed contents are untouched.
 // New namespaces are created.
+// TL;DR: Mutates existing repository with incoming contents.
 func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.RepositoryContents, repoPath string) error {
 	// NOTE: For now, this function still needs a proper Lekko repository as a prereq,
 	// because it's uncertain if we'll ever need functionality to create a local repository
@@ -51,6 +52,11 @@ func WriteContentsToLocalRepo(ctx context.Context, contents *featurev1beta1.Repo
 	return WriteContentsToRepo(ctx, contents, r)
 }
 
+// Writes contents to a configuration repository.
+// Conflicting namespaces are essentially completely overwritten.
+// Namespaces in the local repository but not in the passed contents are untouched.
+// New namespaces are created.
+// TL;DR: Mutates existing repository with incoming contents.
 func WriteContentsToRepo(ctx context.Context, contents *featurev1beta1.RepositoryContents, r repo.ConfigurationRepository) error {
 	// Discard logs, mainly for silencing compilation later
 	// TODO: Allow passing in writer
