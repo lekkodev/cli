@@ -36,7 +36,8 @@ import (
 	"strconv"
 
 	rulesv1beta3 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/rules/v1beta3"
-	"github.com/lainio/err2/assert"
+	"github.com/lainio/err2"
+	"github.com/lainio/err2/try"
 	protoutils "github.com/lekkodev/cli/pkg/proto"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -186,21 +187,24 @@ func NewGoSyncer() *goSyncer {
 }
 
 // As a side effect, mutates the passed FileDescriptorSet to register types parsed from the AST.
-func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptorSet) (*featurev1beta1.Namespace, error) {
+func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptorSet) (namespace *featurev1beta1.Namespace, retErr error) {
+	defer err2.Handle(&retErr, nil)
 	// TODO: instead of panicking everywhere, collect errors (maybe using go/analysis somehow)
 	// so we can report them properly (and not look sketchy)
-	namespace := &featurev1beta1.Namespace{}
+	namespace = &featurev1beta1.Namespace{}
 	// First pass to get general metadata and register all types
 	ast.Inspect(pf, func(n ast.Node) bool {
 		switch x := n.(type) {
 		case *ast.File:
 			// i.e. lekkodefault -> default (this requires the package name to be correct)
 			if !strings.HasPrefix(x.Name.Name, "lekko") {
-				panic("packages for lekko must start with 'lekko'")
+				retErr = g.posErr(x, "packages for lekko must start with 'lekko'")
+				return false
 			}
 			namespace.Name = x.Name.Name[5:]
 			if len(namespace.Name) == 0 {
-				panic("namespace name cannot be empty")
+				retErr = g.posErr(x, "namespace name cannot be empty")
+				return false
 			}
 			return true
 		case *ast.GenDecl:
@@ -211,16 +215,19 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 				}
 				typeSpec, ok := spec.(*ast.TypeSpec)
 				if !ok {
-					panic(g.posErr(x, "only type declarations are supported"))
+					retErr = g.posErr(x, "only type declarations are supported")
+					return false
 				}
 				structType, ok := typeSpec.Type.(*ast.StructType)
 				if !ok {
-					panic(g.posErr(typeSpec, "only struct type declarations are supported"))
+					retErr = g.posErr(typeSpec, "only struct type declarations are supported")
+					return false
 				}
-				d := g.structToDescriptor(typeSpec.Name.Name, structType)
+				d := try.To1(g.structToDescriptor(typeSpec.Name.Name, structType))
 				err := registerMessage(fds, d, namespace.Name)
 				if err != nil {
-					panic(g.posErr(typeSpec, "failed to register type for struct"))
+					retErr = g.posErr(typeSpec, "failed to register type for struct")
+					return false
 				}
 			}
 			return true
@@ -228,10 +235,13 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 			return false
 		}
 	})
+	if retErr != nil {
+		return nil, retErr
+	}
 	// At this point, we should have processed all types
-	tr, err := protoutils.FileDescriptorSetToTypeRegistry(fds)
-	if err != nil {
-		return nil, errors.Wrap(err, "pre-process type registry")
+	tr, retErr := protoutils.FileDescriptorSetToTypeRegistry(fds)
+	if retErr != nil {
+		return nil, errors.Wrap(retErr, "pre-process type registry")
 	}
 	// Second pass to handle all functions
 	ast.Inspect(pf, func(n ast.Node) bool {
@@ -255,14 +265,21 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 				structName, structType := FindArgStruct(x, pf)
 				if structType != nil {
 					feature.SignatureTypeUrl = fmt.Sprintf("type.googleapis.com/%s.config.v1beta1.%s", namespace.Name, structName)
-					contextKeys = StructToMap(structType)
+					contextKeys = try.To1(g.structToMap(structType))
 				} else {
 					for _, param := range x.Type.Params.List {
-						assert.SNotEmpty(param.Names, "must have a parameter name")
-						assert.INotNil(param.Type, "must have a parameter type")
+						if len(param.Names) < 1 {
+							retErr = g.posErr(param, "parameter names must be present")
+							return false
+						}
+						if param.Type == nil {
+							retErr = g.posErr(param, "parameter type must be present")
+							return false
+						}
 						typeIdent, ok := param.Type.(*ast.Ident)
 						if !ok {
-							panic(g.posErr(param, errors.New("parameter type must be an identifier")))
+							retErr = g.posErr(param, errors.New("parameter type must be an identifier"))
+							return false
 						}
 						contextKeys[param.Names[0].Name] = typeIdent.Name
 					}
@@ -270,10 +287,12 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 
 				results := x.Type.Results.List
 				if results == nil {
-					panic(g.posErr(x, "must have a return type"))
+					retErr = g.posErr(x, "must have a return type")
+					return false
 				}
 				if len(results) != 1 {
-					panic(g.posErr(x, "must have exactly one return type"))
+					retErr = g.posErr(x, "must have exactly one return type")
+					return false
 				}
 
 				switch t := results[0].Type.(type) {
@@ -289,30 +308,36 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 						feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_STRING
 					default:
 						// TODO - check if it is one of our structs to allow non *
-						panic(g.posErr(t, fmt.Sprintf("unsupported primitive return type %s", t.Name)))
+						retErr = g.posErr(t, fmt.Sprintf("unsupported primitive return type %s", t.Name))
+						return false
 					}
 				case *ast.StarExpr:
 					feature.Type = featurev1beta1.FeatureType_FEATURE_TYPE_PROTO
 				default:
-					panic(g.posErr(t, fmt.Errorf("unsupported return type expression %+v", t)))
+					retErr = g.posErr(t, fmt.Errorf("unsupported return type expression %+v", t))
+					return false
 				}
 				for _, stmt := range x.Body.List {
 					switch n := stmt.(type) {
 					case *ast.ReturnStmt:
 						if feature.Tree.Default != nil {
-							panic(g.posErr(n, "unexpected default value already processed"))
+							retErr = g.posErr(n, "unexpected default value already processed")
+							return false
 						}
 						// TODO also need to take care of the possibility that the default is in an else
-						feature.Tree.DefaultNew = g.exprToAny(n.Results[0], feature.Type, namespace.Name, tr) // can this be multiple things?
+						// TODO: Maybe a bug -  exprToAny should check that type matches intended
+						feature.Tree.DefaultNew = try.To1(g.exprToAny(n.Results[0], feature.Type, namespace.Name, tr)) // can this be multiple things?
 					case *ast.IfStmt:
-						feature.Tree.Constraints = append(feature.Tree.Constraints, g.ifToConstraints(n, feature.Type, contextKeys, namespace.Name, tr)...)
+						feature.Tree.Constraints = append(feature.Tree.Constraints, try.To1(g.ifToConstraints(n, feature.Type, contextKeys, namespace.Name, tr))...)
 					default:
-						panic(g.posErr(n, "only if and return statements allowed in function body"))
+						retErr = g.posErr(n, "only if and return statements allowed in function body")
+						return false
 					}
 				}
 				return false
 			}
-			panic(g.posErr(x.Name, "only function names like 'getConfig' are supported"))
+			retErr = g.posErr(x.Name, "only function names like 'getConfig' are supported")
+			return false
 		}
 		return true
 	})
@@ -357,20 +382,19 @@ func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.R
 }
 
 // TODO - is this only used for context keys, or other things?
-func (g *goSyncer) exprToValue(expr ast.Expr) string {
-	//fmt.Printf("%+v\n", expr)
+func (g *goSyncer) exprToValue(expr ast.Expr) (string, error) {
 	switch v := expr.(type) {
 	case *ast.Ident:
-		return strcase.ToSnake(v.Name)
+		return strcase.ToSnake(v.Name), nil
 	case *ast.SelectorExpr:
-		return strcase.ToSnake(v.Sel.Name)
+		return strcase.ToSnake(v.Sel.Name), nil
 	default:
-		panic("Invalid syntax")
+		return "", g.posErr(expr, "unsupported syntax")
 	}
 }
 
 // TODO -- We know the return type..
-func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType, namespace string, typeRegistry *protoregistry.Types) *featurev1beta1.Any {
+func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType, namespace string, typeRegistry *protoregistry.Types) (a *featurev1beta1.Any, err error) {
 	switch node := expr.(type) {
 	case *ast.UnaryExpr:
 		switch node.Op {
@@ -378,25 +402,21 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType, nam
 			switch x := node.X.(type) {
 			case *ast.CompositeLit:
 				// TODO - this is the one place we set the values for return types
-				message, overrides := g.compositeLitToProto(x, namespace, typeRegistry)
-				protoMsg, ok := message.(protoreflect.ProtoMessage)
-				if !ok {
-					panic("This should never happen")
-				}
-				value, err := proto.MarshalOptions{Deterministic: true}.Marshal(protoMsg)
+				message, overrides := try.To2(g.compositeLitToProto(x, namespace, typeRegistry))
+				value, err := proto.MarshalOptions{Deterministic: true}.Marshal(message.Interface())
 				if err != nil {
-					panic(err)
+					return nil, errors.Wrap(err, "marshal composite lit proto")
 				}
 				return &featurev1beta1.Any{
-					TypeUrl:   "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
+					TypeUrl:   "type.googleapis.com/" + string(message.Interface().ProtoReflect().Descriptor().FullName()),
 					Value:     value,
 					Overrides: overrides,
-				}
+				}, nil
 			default:
-				panic(fmt.Errorf("unsupported unary & target %+v", x))
+				return nil, g.posErr(x, "unsupported unary & target")
 			}
 		default:
-			panic(fmt.Errorf("unsupported unary operator %v", node.Op))
+			return nil, g.posErr(node, "unsupported unary operator")
 		}
 	case *ast.CallExpr:
 		if fun, ok := node.Fun.(*ast.Ident); ok {
@@ -410,110 +430,110 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType, nam
 			}
 			value, err := proto.MarshalOptions{Deterministic: true}.Marshal(protoMsg)
 			if err != nil {
-				panic(err)
+				return nil, errors.Wrap(err, "marshal ConfigCall")
 			}
 			return &featurev1beta1.Any{
 				TypeUrl: "type.googleapis.com/" + string(protoMsg.ProtoReflect().Descriptor().FullName()),
 				Value:   value,
-			}
+			}, nil
 		} else {
-			panic(fmt.Errorf("unsupported function call expression %+v", node))
+			return nil, g.posErr(node.Fun, "unsupported function call expression")
 		}
 	default:
 		// TODO
-		value := g.primitiveToProtoValue(expr, namespace)
+		value := try.To1(g.primitiveToProtoValue(expr, namespace))
 		switch typedValue := value.(type) {
 		case string:
 			value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.StringValue{Value: typedValue})
 			if err != nil {
-				panic(err)
+				return nil, errors.Wrap(err, "marshal StringValue")
 			}
 			return &featurev1beta1.Any{
 				TypeUrl: "type.googleapis.com/google.protobuf.StringValue",
 				Value:   value,
-			}
+			}, nil
 		case int64:
 			// A value parsed as an integer might actually be for a float config
 			switch want {
 			case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
 				value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.Int64Value{Value: typedValue})
 				if err != nil {
-					panic(err)
+					return nil, errors.Wrap(err, "marshal Int64Value")
 				}
 				return &featurev1beta1.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.Int64Value",
 					Value:   value,
-				}
+				}, nil
 			case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
 				// TODO: handle precision boundaries properly
 				value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.DoubleValue{Value: float64(typedValue)})
 				if err != nil {
-					panic(err)
+					return nil, errors.Wrap(err, "marshal DoubleValue")
 				}
 				return &featurev1beta1.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
 					Value:   value,
-				}
+				}, nil
 			default:
-				panic(fmt.Errorf("unexpected primitive %v for target return type %v", typedValue, want))
+				return nil, g.posErr(node, fmt.Errorf("unexpected primitive for return type %v", want))
 			}
 		case float64:
 			value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.DoubleValue{Value: typedValue})
 			if err != nil {
-				panic(err)
+				return nil, errors.Wrap(err, "marshal DoubleValue")
 			}
 			return &featurev1beta1.Any{
 				TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
 				Value:   value,
-			}
+			}, nil
 		case bool:
 			value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.BoolValue{Value: typedValue})
 			if err != nil {
-				panic(err)
+				return nil, errors.Wrap(err, "marshal BoolValue")
 			}
 			return &featurev1beta1.Any{
 				TypeUrl: "type.googleapis.com/google.protobuf.BoolValue",
 				Value:   value,
-			}
+			}, nil
 		default:
-			panic(fmt.Errorf("unsupported value expression %+v", node))
+			return nil, g.posErr(node, "unsupported value expression")
 		}
 	}
 }
 
 // TODO: Handling for duration and nested types in general are really complex, buggy and not well tested.
 // We should probably start with spec'ing out the type constructs we're willing to support in all native languages.
-func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit, namespace string, typeRegistry *protoregistry.Types) protoreflect.MessageType {
+func (g *goSyncer) compositeLitToMessageType(x *ast.CompositeLit, namespace string, typeRegistry *protoregistry.Types) (protoreflect.MessageType, error) {
 	var fullName protoreflect.FullName
 	innerExpr, ok := x.Type.(*ast.SelectorExpr)
 	if ok {
 		innerIdent, ok := innerExpr.X.(*ast.Ident)
 		if ok && innerIdent.Name == "durationpb" {
-			mt, err := typeRegistry.FindMessageByName(protoreflect.FullName("google.protobuf").Append(protoreflect.Name(innerExpr.Sel.Name)))
-			if err == nil {
-				return mt
+			fullName := protoreflect.FullName("google.protobuf").Append(protoreflect.Name(innerExpr.Sel.Name))
+			mt, err := typeRegistry.FindMessageByName(fullName)
+			if err != nil {
+				return nil, errors.Wrapf(err, "find message %s", fullName)
 			}
-			panic(err)
+			return mt, nil
 		}
-		panic(errors.New("unsupported selector expression for composite literal type"))
+		return nil, g.posErr(innerExpr, "unsupported selector expression for composite literal type")
 	} else {
 		// it should be an ident for a bare raw struct
 		ident, ok := x.Type.(*ast.Ident)
 		if !ok {
-			panic("Unknown syntax")
+			return nil, g.posErr(x, "unsupported syntax")
 		}
 		// TODO - fix this - this is gross af
 		fullName = protoreflect.FullName(fmt.Sprintf("%s.config.v1beta1", namespace)).Append(protoreflect.Name(ident.Name))
 		mt, err := typeRegistry.FindMessageByName(fullName)
 		if err != nil {
-			panic(errors.Wrapf(err, "find %s in type registry", fullName))
-		} else {
-			return mt
+			return nil, errors.Wrapf(err, "find %s in type registry", fullName)
 		}
+		return mt, nil
 	}
 }
 
-func (g *goSyncer) primitiveToProtoValue(expr ast.Expr, namespace string) any {
+func (g *goSyncer) primitiveToProtoValue(expr ast.Expr, namespace string) (any, error) {
 	switch x := expr.(type) {
 	case *ast.BasicLit:
 		switch x.Kind {
@@ -521,36 +541,36 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr, namespace string) any {
 			// Need to unescape escaped - Unquote also handles escaped chars in middle
 			// and is fine with alternate quotes like ' or `
 			if unescaped, err := strconv.Unquote(x.Value); err == nil {
-				return unescaped
+				return unescaped, nil
 			} else {
-				panic(errors.Wrapf(err, "unescape string literal %s", x.Value))
+				return nil, g.posErr(x, "invalid string literal")
 			}
 		case token.INT:
 			// TODO - parse/validate based on field Kind, because this breaks for
 			// int32, etc. fields
 			if intValue, err := strconv.ParseInt(x.Value, 10, 64); err == nil {
-				return intValue
+				return intValue, nil
 			} else {
-				panic(errors.Wrapf(err, "64-bit int parse token %s", x.Value))
+				return nil, g.posErr(x, "invalid int literal")
 			}
 		case token.FLOAT:
 			if floatValue, err := strconv.ParseFloat(x.Value, 64); err == nil {
-				return floatValue
+				return floatValue, nil
 			} else {
-				panic(errors.Wrapf(err, "float parse token %s", x.Value))
+				return nil, g.posErr(x, "invalid float literal")
 			}
 		default:
 			// Booleans are handled separately as literal identifiers below
-			panic(fmt.Errorf("unsupported basic literal token type %v", x.Kind))
+			return nil, g.posErr(x, "unsupported basic literal type")
 		}
 	case *ast.Ident:
 		switch x.Name {
 		case "true":
-			return true
+			return true, nil
 		case "false":
-			return false
+			return false, nil
 		default:
-			panic(fmt.Errorf("unsupported identifier %v", x.Name))
+			return nil, g.posErr(x, "unsupported identifier")
 		}
 	case *ast.CallExpr:
 		if fun, ok := x.Fun.(*ast.Ident); ok {
@@ -561,28 +581,32 @@ func (g *goSyncer) primitiveToProtoValue(expr ast.Expr, namespace string) any {
 				Namespace: namespace,
 				Key:       configKey,
 				// TODO do we know the location of this?
-			}
+			}, nil
 		} else {
-			panic(fmt.Errorf("unsupported function call expression %+v", x))
+			return nil, g.posErr(x, "unsupported function call expression")
 		}
 	default:
-		panic(fmt.Errorf("expected primitive expression, got %+v", x))
+		return nil, g.posErr(x, "expected primitive expression")
 	}
 }
 
-func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, typeRegistry *protoregistry.Types) (protoreflect.Message, []*featurev1beta1.ValueOveride) {
+func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, typeRegistry *protoregistry.Types) (msg protoreflect.Message, vos []*featurev1beta1.ValueOveride, err error) {
 	var overrides []*featurev1beta1.ValueOveride
-	mt := g.compositeLitToMessageType(x, namespace, typeRegistry)
-	msg := mt.New()
+	mt := try.To1(g.compositeLitToMessageType(x, namespace, typeRegistry))
+	msg = mt.New()
 	for _, v := range x.Elts {
 		kv, ok := v.(*ast.KeyValueExpr)
-		assert.Equal(ok, true)
+		if !ok {
+			return nil, nil, g.posErr(v, "expected key value expression")
+		}
 		keyIdent, ok := kv.Key.(*ast.Ident)
-		assert.Equal(ok, true)
+		if !ok {
+			return nil, nil, g.posErr(kv.Key, "expected identifier")
+		}
 		name := strcase.ToSnake(keyIdent.Name)
 		field := mt.Descriptor().Fields().ByName(protoreflect.Name(name))
 		if field == nil {
-			panic(fmt.Errorf("missing field descriptor for %v", name))
+			return nil, nil, g.posErr(keyIdent, fmt.Errorf("unexpected field, missing field descriptor %s", name))
 		}
 		switch node := kv.Value.(type) {
 		case *ast.UnaryExpr:
@@ -590,16 +614,16 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, ty
 			case token.AND:
 				switch ix := node.X.(type) {
 				case *ast.CompositeLit:
-					innerMessage, calls := g.compositeLitToProto(ix, namespace, typeRegistry)
+					innerMessage, calls := try.To2(g.compositeLitToProto(ix, namespace, typeRegistry))
 					if len(calls) > 0 {
 						fmt.Printf("%+v\n", calls)
 					}
 					msg.Set(field, protoreflect.ValueOf(innerMessage))
 				default:
-					panic(fmt.Errorf("unsupported X type for unary & %T", ix))
+					return nil, nil, g.posErr(ix, "unsupported target type for unary & expression")
 				}
 			default:
-				panic(fmt.Errorf("unsupported unary operator %v", node.Op))
+				return nil, nil, g.posErr(node, "unsupported unary operator")
 			}
 		case *ast.CompositeLit:
 			switch clTypeNode := node.Type.(type) {
@@ -609,14 +633,16 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, ty
 				case *ast.Ident:
 					// Primitive type array
 					for _, elt := range node.Elts {
-						eltVal := g.primitiveToProtoValue(elt, namespace)
+						eltVal := try.To1(g.primitiveToProtoValue(elt, namespace))
 						lVal.Append(protoreflect.ValueOf(eltVal))
 					}
 				case *ast.StarExpr:
 					// Proto type array
 					// For type, need to process e.g. *configv1beta1.SomeMessage
 					selectorExpr, ok := eltTypeNode.X.(*ast.SelectorExpr)
-					assert.Equal(ok, true, "expected slice type like *package.Message, got %+v", eltTypeNode.X)
+					if !ok {
+						return nil, nil, g.posErr(eltTypeNode.X, "expected slice type like *package.Message")
+					}
 					for _, e := range node.Elts {
 						var cl *ast.CompositeLit
 						switch elt := e.(type) {
@@ -634,20 +660,20 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, ty
 								case *ast.CompositeLit:
 									cl = ux
 								default:
-									panic(fmt.Errorf("unsupported X type for unary & %T", ux))
+									return nil, nil, g.posErr(ux, "unsupported target type for unary & expression")
 								}
 							default:
-								panic(fmt.Errorf("unsupported unary operator %v", elt.Op))
+								return nil, nil, g.posErr(elt, "unsupported unary operator")
 							}
 						default:
-							panic(fmt.Errorf("unsupported slice element type %+v", elt))
+							return nil, nil, g.posErr(elt, "unsupported slice element type")
 						}
-						innerMessage, innerOverrides := g.compositeLitToProto(cl, namespace, typeRegistry)
+						innerMessage, innerOverrides := try.To2(g.compositeLitToProto(cl, namespace, typeRegistry))
 						overrides = append(overrides, innerOverrides...)
 						lVal.Append(protoreflect.ValueOf(innerMessage))
 					}
 				default:
-					panic(fmt.Errorf("unsupported slice element type %+v", eltTypeNode))
+					return nil, nil, g.posErr(eltTypeNode, "unsupported slice element type")
 				}
 			case *ast.MapType:
 				mapTypeNode := clTypeNode
@@ -656,34 +682,40 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, ty
 				case *ast.Ident:
 					// Do something
 				default:
-					panic(fmt.Errorf("unsupported map key type %+v", mapTypeNode))
+					return nil, nil, g.posErr(mapTypeNode.Key, "unsupported map key type")
 				}
 				switch mapTypeNode.Value.(type) {
 				case *ast.Ident:
 					// Do something
 				default:
-					panic(fmt.Errorf("unsupported map value type %+v", mapTypeNode))
+					return nil, nil, g.posErr(mapTypeNode.Value, "unsupported map value type")
 				}
 				for _, elt := range node.Elts {
 					pair, ok := elt.(*ast.KeyValueExpr)
-					assert.Equal(ok, true, "expected key value expression for map element")
+					if !ok {
+						return nil, nil, g.posErr(elt, "expected key value expression for map element")
+					}
 					basicLit, ok := pair.Key.(*ast.BasicLit)
-					assert.Equal(ok, true, "expected basic literal for map key")
+					if !ok {
+						return nil, nil, g.posErr(pair.Key, "expected basic literal for map key")
+					}
 					key := protoreflect.ValueOfString(strings.Trim(basicLit.Value, "\"")).MapKey()
 					// For now, assume all map values are primitives
-					value := g.primitiveToProtoValue(pair.Value, namespace)
+					value := try.To1(g.primitiveToProtoValue(pair.Value, namespace))
 					msg.Mutable(field).Map().Set(key, protoreflect.ValueOf(value))
 				}
 			default:
-				panic(fmt.Errorf("unsupported composite literal type %T", clTypeNode))
+				return nil, nil, g.posErr(clTypeNode, fmt.Errorf("unsupported composite literal type %T", clTypeNode))
 			}
 		default:
 			// Value is not a composite literal - try handling as a primitive
-			value := g.primitiveToProtoValue(node, namespace)
+			value := try.To1(g.primitiveToProtoValue(node, namespace))
 			if field.Kind() == protoreflect.EnumKind {
 				// Special handling for enums
 				intValue, ok := value.(int64)
-				assert.Equal(ok, true, "expected int value")
+				if !ok {
+					return nil, nil, g.posErr(node, "expected int value")
+				}
 				msg.Set(field, protoreflect.ValueOf(protoreflect.EnumNumber(intValue)))
 				continue
 			}
@@ -703,17 +735,19 @@ func (g *goSyncer) compositeLitToProto(x *ast.CompositeLit, namespace string, ty
 			}
 		}
 	}
-	return msg, overrides
+	return msg, overrides, nil
 }
 
-func (g *goSyncer) exprToComparisonValue(expr ast.Expr, namespace string) *structpb.Value {
+func (g *goSyncer) exprToComparisonValue(expr ast.Expr, namespace string) (v *structpb.Value, err error) {
 	switch node := expr.(type) {
 	case *ast.CompositeLit:
 		_, ok := node.Type.(*ast.ArrayType)
-		assert.Equal(ok, true, "only slices are allowed for composite literals in comparisons")
+		if !ok {
+			return nil, g.posErr(node.Type, "only slices are allowed for composite literals in comparisons")
+		}
 		var list []*structpb.Value
 		for _, elt := range node.Elts {
-			list = append(list, g.exprToComparisonValue(elt, namespace))
+			list = append(list, try.To1(g.exprToComparisonValue(elt, namespace)))
 		}
 		return &structpb.Value{
 			Kind: &structpb.Value_ListValue{
@@ -721,10 +755,10 @@ func (g *goSyncer) exprToComparisonValue(expr ast.Expr, namespace string) *struc
 					Values: list,
 				},
 			},
-		}
+		}, nil
 	default:
 		// If not composite lit, must(/should) be primitive
-		value := g.primitiveToProtoValue(expr, namespace)
+		value := try.To1(g.primitiveToProtoValue(expr, namespace))
 		ret := &structpb.Value{}
 		switch typedValue := value.(type) {
 		case string:
@@ -744,113 +778,120 @@ func (g *goSyncer) exprToComparisonValue(expr ast.Expr, namespace string) *struc
 				BoolValue: typedValue,
 			}
 		default:
-			panic(fmt.Errorf("unexpected type for primitive value %v", typedValue))
+			return nil, g.posErr(node, "unexpected type for primitive value")
 		}
-		return ret
+		return ret, nil
 	}
 }
 
-func (g *goSyncer) binaryExprToRule(expr *ast.BinaryExpr, contextKeys map[string]string, namespace string) *rulesv1beta3.Rule {
+func (g *goSyncer) binaryExprToRule(expr *ast.BinaryExpr, contextKeys map[string]string, namespace string) (rule *rulesv1beta3.Rule, err error) {
 	switch expr.Op {
 	case token.LAND:
 		var rules []*rulesv1beta3.Rule
-		left := g.exprToRule(expr.X, contextKeys, namespace)
+		left := try.To1(g.exprToRule(expr.X, contextKeys, namespace))
 		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
 		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
 			rules = append(rules, l.LogicalExpression.Rules...)
 		} else {
 			rules = append(rules, left)
 		}
-		right := g.exprToRule(expr.Y, contextKeys, namespace)
+		right := try.To1(g.exprToRule(expr.Y, contextKeys, namespace))
 		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
 		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND {
 			rules = append(rules, r.LogicalExpression.Rules...)
 		} else {
 			rules = append(rules, right)
 		}
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: rules}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_AND, Rules: rules}}}, nil
 	case token.LOR:
 		var rules []*rulesv1beta3.Rule
-		left := g.exprToRule(expr.X, contextKeys, namespace)
+		left := try.To1(g.exprToRule(expr.X, contextKeys, namespace))
 		l, ok := left.Rule.(*rulesv1beta3.Rule_LogicalExpression)
 		if ok && l.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
 			rules = append(rules, l.LogicalExpression.Rules...)
 		} else {
 			rules = append(rules, left)
 		}
-		right := g.exprToRule(expr.Y, contextKeys, namespace)
+		right := try.To1(g.exprToRule(expr.Y, contextKeys, namespace))
 		r, ok := right.Rule.(*rulesv1beta3.Rule_LogicalExpression)
 		if ok && r.LogicalExpression.LogicalOperator == rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR {
 			rules = append(rules, r.LogicalExpression.Rules...)
 		} else {
 			rules = append(rules, right)
 		}
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: rules}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_LogicalExpression{LogicalExpression: &rulesv1beta3.LogicalExpression{LogicalOperator: rulesv1beta3.LogicalOperator_LOGICAL_OPERATOR_OR, Rules: rules}}}, nil
 	case token.EQL:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	case token.LSS:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	case token.GTR:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	case token.NEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_NOT_EQUALS, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	case token.LEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_LESS_THAN_OR_EQUALS, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	case token.GEQ:
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS, ContextKey: g.exprToValue(expr.X), ComparisonValue: g.exprToComparisonValue(expr.Y, namespace)}}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_GREATER_THAN_OR_EQUALS, ContextKey: try.To1(g.exprToValue(expr.X)), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Y, namespace))}}}, nil
 	default:
-		panic(fmt.Errorf("unexpected token in binary expression %v", expr.Op))
+		return nil, g.posErr(expr, "unsupported binary operator")
 	}
 }
 
-func (g *goSyncer) callExprToRule(expr *ast.CallExpr, namespace string) *rulesv1beta3.Rule {
+func (g *goSyncer) callExprToRule(expr *ast.CallExpr, namespace string) (rule *rulesv1beta3.Rule, err error) {
 	// TODO check Fun
 	selectorExpr, ok := expr.Fun.(*ast.SelectorExpr)
-	assert.Equal(ok, true)
+	if !ok {
+		return nil, g.posErr(expr.Fun, "unsupported function expression type, expected selector expression")
+	}
 	ident, ok := selectorExpr.X.(*ast.Ident)
-	assert.Equal(ok, true)
+	if !ok {
+		return nil, g.posErr(selectorExpr.X, "unsupported expression type, expected identifier")
+	}
 	switch ident.Name { // TODO: is there a way to differentiate between an expr on a package vs. a struct/interface? could give better error messages
 	case "slices":
 		switch selectorExpr.Sel.Name {
 		case "Contains":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN, ContextKey: g.exprToValue(expr.Args[1]), ComparisonValue: g.exprToComparisonValue(expr.Args[0], namespace)}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINED_WITHIN, ContextKey: try.To1(g.exprToValue(expr.Args[1])), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Args[0], namespace))}}}, nil
 		default:
-			panic(fmt.Errorf("unsupported slices operator %s", selectorExpr.Sel.Name))
+			return nil, g.posErr(selectorExpr.Sel, "unsupported slices operator")
 		}
 	case "strings":
 		switch selectorExpr.Sel.Name {
 		case "Contains":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1], namespace)}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_CONTAINS, ContextKey: try.To1(g.exprToValue(expr.Args[0])), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Args[1], namespace))}}}, nil
 		case "HasPrefix":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1], namespace)}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_STARTS_WITH, ContextKey: try.To1(g.exprToValue(expr.Args[0])), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Args[1], namespace))}}}, nil
 		case "HasSuffix":
-			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH, ContextKey: g.exprToValue(expr.Args[0]), ComparisonValue: g.exprToComparisonValue(expr.Args[1], namespace)}}}
+			return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Atom{Atom: &rulesv1beta3.Atom{ComparisonOperator: rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_ENDS_WITH, ContextKey: try.To1(g.exprToValue(expr.Args[0])), ComparisonValue: try.To1(g.exprToComparisonValue(expr.Args[1], namespace))}}}, nil
 		default:
-			panic(fmt.Errorf("unsupported strings operator %s", selectorExpr.Sel.Name))
+			return nil, g.posErr(selectorExpr, fmt.Errorf("unsupported strings operator %s", selectorExpr.Sel.Name))
 		}
 	default:
-		panic(fmt.Errorf("unexpected identifier in rule %s", ident.Name))
+		return nil, g.posErr(ident, fmt.Errorf("unexpected identifier in rule %s", ident.Name))
 	}
 }
 
-func (g *goSyncer) unaryExprToRule(expr *ast.UnaryExpr, contextKeys map[string]string, namespace string) *rulesv1beta3.Rule {
+func (g *goSyncer) unaryExprToRule(expr *ast.UnaryExpr, contextKeys map[string]string, namespace string) (*rulesv1beta3.Rule, error) {
 	switch expr.Op {
 	case token.NOT:
-		rule := g.exprToRule(expr.X, contextKeys, namespace)
+		rule, err := g.exprToRule(expr.X, contextKeys, namespace)
+		if err != nil {
+			return nil, err
+		}
 		if atom := rule.GetAtom(); atom != nil {
 			boolValue, isBool := atom.ComparisonValue.GetKind().(*structpb.Value_BoolValue)
 			if isBool && atom.ComparisonOperator == rulesv1beta3.ComparisonOperator_COMPARISON_OPERATOR_EQUALS {
 				atom.ComparisonValue = structpb.NewBoolValue(!boolValue.BoolValue)
 			}
-			return rule
+			return rule, nil
 		}
-		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Not{Not: rule}}
+		return &rulesv1beta3.Rule{Rule: &rulesv1beta3.Rule_Not{Not: rule}}, nil
 	default:
-		panic(fmt.Errorf("unsupported unary expression %+v", expr))
+		return nil, g.posErr(expr, "unsupported unary expression type")
 	}
 }
 
-func (g *goSyncer) identToRule(ident *ast.Ident, contextKeys map[string]string) *rulesv1beta3.Rule {
+func (g *goSyncer) identToRule(ident *ast.Ident, contextKeys map[string]string) (*rulesv1beta3.Rule, error) {
 	if contextKeyType, ok := contextKeys[ident.Name]; ok && contextKeyType == "bool" {
 		return &rulesv1beta3.Rule{
 			Rule: &rulesv1beta3.Rule_Atom{
@@ -860,12 +901,12 @@ func (g *goSyncer) identToRule(ident *ast.Ident, contextKeys map[string]string) 
 					ComparisonValue:    structpb.NewBoolValue(true),
 				},
 			},
-		}
+		}, nil
 	}
-	panic(fmt.Errorf("not a boolean expression: %+v", ident))
+	return nil, g.posErr(ident, "not a boolean expression")
 }
 
-func (g *goSyncer) exprToRule(expr ast.Expr, contextKeys map[string]string, namespace string) *rulesv1beta3.Rule {
+func (g *goSyncer) exprToRule(expr ast.Expr, contextKeys map[string]string, namespace string) (*rulesv1beta3.Rule, error) {
 	switch node := expr.(type) {
 	case *ast.Ident:
 		return g.identToRule(node, contextKeys)
@@ -880,31 +921,37 @@ func (g *goSyncer) exprToRule(expr ast.Expr, contextKeys map[string]string, name
 	case *ast.SelectorExpr: // TODO - make sure this is args
 		return g.identToRule(node.Sel, contextKeys)
 	default:
-		panic(fmt.Errorf("unsupported expression type for rule: %T", node))
+		return nil, g.posErr(node, "unsupported expressioin type for rule")
 	}
 }
 
-func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.FeatureType, contextKeys map[string]string, namespace string, typeRegistry *protoregistry.Types) []*featurev1beta1.Constraint {
+func (g *goSyncer) ifToConstraints(ifStmt *ast.IfStmt, want featurev1beta1.FeatureType, contextKeys map[string]string, namespace string, typeRegistry *protoregistry.Types) (constraints []*featurev1beta1.Constraint, err error) {
 	constraint := &featurev1beta1.Constraint{}
-	constraint.RuleAstNew = g.exprToRule(ifStmt.Cond, contextKeys, namespace)
-	assert.Equal(len(ifStmt.Body.List), 1, "if statements can only contain one return statement")
-	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
-	assert.Equal(ok, true, "if statements can only contain return statements")
-	constraint.ValueNew = g.exprToAny(returnStmt.Results[0], want, namespace, typeRegistry) // TODO
-	if ifStmt.Else != nil {                                                                 // TODO bare else?
-		elseIfStmt, ok := ifStmt.Else.(*ast.IfStmt)
-		assert.Equal(ok, true, "bare else statements are not supported, must be else if")
-		return append([]*featurev1beta1.Constraint{constraint}, g.ifToConstraints(elseIfStmt, want, contextKeys, namespace, typeRegistry)...)
+	constraint.RuleAstNew = try.To1(g.exprToRule(ifStmt.Cond, contextKeys, namespace))
+	if len(ifStmt.Body.List) != 1 {
+		return nil, g.posErr(ifStmt.Body, "if statements can only contain one return statement")
 	}
-	return []*featurev1beta1.Constraint{constraint}
+	returnStmt, ok := ifStmt.Body.List[0].(*ast.ReturnStmt) // TODO
+	if !ok {
+		return nil, g.posErr(ifStmt.Body.List[0], "if statements can only contain return statements")
+	}
+	constraint.ValueNew = try.To1(g.exprToAny(returnStmt.Results[0], want, namespace, typeRegistry)) // TODO
+	if ifStmt.Else != nil {                                                                          // TODO bare else?
+		elseIfStmt, ok := ifStmt.Else.(*ast.IfStmt)
+		if !ok {
+			return nil, g.posErr(ifStmt.Else, "bare else statements are not supported, must be else if")
+		}
+		return append([]*featurev1beta1.Constraint{constraint}, try.To1(g.ifToConstraints(elseIfStmt, want, contextKeys, namespace, typeRegistry))...), nil
+	}
+	return []*featurev1beta1.Constraint{constraint}, nil
 }
 
-func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructType) *descriptorpb.DescriptorProto {
+func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructType) (*descriptorpb.DescriptorProto, error) {
 	descriptor := &descriptorpb.DescriptorProto{}
 	descriptor.Name = proto.String(structName)
 	for i, field := range structType.Fields.List {
 		if len(field.Names) != 1 {
-			panic(fmt.Sprintf("struct %s: field must only have one name", structName))
+			return nil, g.posErr(field, "field must only have one name")
 		}
 		fieldName := field.Names[0].Name
 		fieldDescriptor := &descriptorpb.FieldDescriptorProto{
@@ -924,7 +971,7 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 			case "bool":
 				fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 			default:
-				panic(fmt.Sprintf("unsupported field type %s for %s.%s", fieldType.Name, structName, fieldName))
+				return nil, g.posErr(field.Type, "unsupported field type")
 			}
 		case *ast.SelectorExpr:
 			// Special handling for durationpb.Duration
@@ -932,7 +979,7 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 				fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
 				fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
 			} else {
-				panic(fmt.Sprintf("unsupported selector field type for %s.%s", structName, fieldName))
+				return nil, g.posErr(fieldType, "unsupported selector field type")
 			}
 		case *ast.StarExpr:
 			// Handle durationpb.Duration type
@@ -941,20 +988,20 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
 					fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
 				} else {
-					panic(fmt.Sprintf("unsupported star expression type for %s.%s", structName, fieldName))
+					return nil, g.posErr(selectorExpr, "unsupported star expression type")
 				}
 			} else {
-				panic(fmt.Sprintf("sunsupported star expression type for %s.%s", structName, fieldName))
+				return nil, g.posErr(fieldType, "unsupported star expression type")
 			}
 		case *ast.MapType:
 			keyIdent, ok := fieldType.Key.(*ast.Ident)
 			if !ok {
-				panic("fieldType.Key is not of type *ast.Ident")
+				return nil, g.posErr(fieldType.Key, "expected identifier for map key")
 			}
 			keyType := keyIdent.Name
 			valueIdent, ok := fieldType.Value.(*ast.Ident)
 			if !ok {
-				panic("fieldType.Value is not of type *ast.Ident")
+				return nil, g.posErr(fieldType.Value, "expected identifier for map value")
 			}
 			valueType := valueIdent.Name
 			mapEntryDescriptor := &descriptorpb.DescriptorProto{
@@ -982,7 +1029,7 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 			case "bool":
 				keyField.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 			default:
-				panic("unknown map key type in struct")
+				return nil, g.posErr(keyIdent, "unsupported map key type in struct")
 			}
 
 			switch valueType {
@@ -995,7 +1042,7 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 			case "bool":
 				valueField.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 			default:
-				panic("unknown map value type in struct")
+				return nil, g.posErr(valueIdent, "unsupported map value type in struct")
 			}
 
 			mapEntryDescriptor.Field = append(mapEntryDescriptor.Field, keyField, valueField)
@@ -1022,24 +1069,24 @@ func (g *goSyncer) structToDescriptor(structName string, structType *ast.StructT
 				case "bool":
 					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_BOOL.Enum()
 				default:
-					panic(fmt.Sprintf("unsupported array element type %s for %s.%s", elemType.Name, structName, fieldName))
+					return nil, g.posErr(elemType, "unsupported array element type")
 				}
 			case *ast.SelectorExpr:
 				if pkgIdent, ok := elemType.X.(*ast.Ident); ok && pkgIdent.Name == "durationpb" && elemType.Sel.Name == "Duration" {
 					fieldDescriptor.Type = descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum()
 					fieldDescriptor.TypeName = proto.String(".google.protobuf.Duration")
 				} else {
-					panic(fmt.Sprintf("unsupported selector type array element for %s.%s", structName, fieldName))
+					return nil, g.posErr(elemType.X, "unsupported selector type array element")
 				}
 			default:
-				panic(fmt.Sprintf("unsupported array element type for %s.%s", structName, fieldName))
+				return nil, g.posErr(elemType, "unsupported array element type")
 			}
 		default:
-			panic(fmt.Sprintf("unsupported field type for %s.%s", structName, fieldName))
+			return nil, g.posErr(fieldType, "unsupported field type")
 		}
 		descriptor.Field = append(descriptor.Field, fieldDescriptor)
 	}
-	return descriptor
+	return descriptor, nil
 }
 
 // Wrap an error related to an AST node with positional information
@@ -1051,13 +1098,14 @@ func (g *goSyncer) posErr(node ast.Node, err any) error {
 	case error:
 		inner = e
 	default:
+		// This means there's an internal bug
 		panic("invalid inner error type")
 	}
 	p := g.fset.Position(node.Pos())
-	return errors.Wrapf(inner, "error at %s:%d:%d", p.Filename, p.Line, p.Column)
+	return NewSyncPosError(inner, p.Filename, p.Line, p.Column)
 }
 
-func StructToMap(structType *ast.StructType) map[string]string {
+func (g *goSyncer) structToMap(structType *ast.StructType) (map[string]string, error) {
 	ret := make(map[string]string)
 	for _, field := range structType.Fields.List {
 		for _, fieldName := range field.Names {
@@ -1065,11 +1113,11 @@ func StructToMap(structType *ast.StructType) map[string]string {
 			case *ast.Ident:
 				ret[fieldName.Name] = fieldType.Name
 			default:
-				panic("not a struct I understand")
+				return nil, g.posErr(field.Type, "unsupported field type")
 			}
 		}
 	}
-	return ret
+	return ret, nil
 }
 
 func FindArgStruct(f *ast.FuncDecl, file *ast.File) (string, *ast.StructType) {

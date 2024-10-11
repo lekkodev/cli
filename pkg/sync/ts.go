@@ -63,7 +63,7 @@ func SyncTS(lekkoPath string) (*featurev1beta1.RepositoryContents, error) {
 	}
 	repoContents, err := repo.DecodeRepositoryContents(output)
 	if err != nil {
-		return nil, NewSyncError(errors.Wrap(err, "decode"))
+		return nil, errors.Wrap(err, "decode")
 	}
 	return repoContents, nil
 }
@@ -77,7 +77,7 @@ func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, erro
 	}
 	repoContents, err := repo.DecodeRepositoryContents(output)
 	if err != nil {
-		return nil, NewSyncError(errors.Wrap(err, "decode"))
+		return nil, errors.Wrap(err, "decode")
 	}
 	return repoContents, nil
 }
@@ -85,7 +85,7 @@ func SyncTSFiles(lekkoFiles ...string) (*featurev1beta1.RepositoryContents, erro
 func checkSyncTSError(output []byte) error {
 	o := string(output)
 	if strings.Contains(o, "404") && strings.Contains(o, syncTSExec) {
-		return NewSyncError(NoSyncTSError)
+		return NoSyncTSError
 	}
 	r := regexp.MustCompile("LekkoParseError: (.*):(\\d+):(\\d+) - (.*)")
 	matches := r.FindStringSubmatch(o)
