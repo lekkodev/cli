@@ -532,15 +532,15 @@ func goToGo(ctx context.Context, filePath string) string {
 	//fmt.Printf("%+v\n", registry.Types)
 	//fmt.Print("ON TO GENERATION\n")
 	// code gen based off that namespace object
-	g, err := gen.NewGoGenerator("", "/tmp", "", repoContents)
+	g, err := gen.NewGoGenerator("", "", "", "", repoContents)
 	if err != nil {
 		panic(err)
 	}
-	_, privateFile, err := g.GenNamespaceFiles(ctx, namespace.Name, namespace.Features, nil)
+	gn, err := g.GenNamespaceFiles(ctx, namespace.Name, nil)
 	if err != nil {
 		panic(err)
 	}
-	return privateFile
+	return gn.Private
 }
 
 func ProtoJSONToTS(nsString []byte, fdString []byte) (string, error) {

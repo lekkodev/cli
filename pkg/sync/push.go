@@ -109,7 +109,8 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 	}
 	defer os.RemoveAll(remoteDir)
 	namespaces := try.To1(native.ListNamespaces(lekkoPath, nlProject.Language))
-	try.To(gen.GenNative(ctx, nlProject, lekkoPath, repoPath, gen.GenOptions{
+	repoOwner, repoName := dot.GetRepoInfo()
+	try.To(gen.GenNative(ctx, nlProject, lekkoPath, repoOwner, repoName, repoPath, gen.GenOptions{
 		CodeRepoPath: remoteDir,
 		Namespaces:   namespaces,
 	}))
@@ -120,7 +121,7 @@ func Push(ctx context.Context, commitMessage string, force bool, dot *dotlekko.D
 			return err
 		}
 	case native.LangGo:
-		_, err = BisyncGo(ctx, lekkoPath, lekkoPath, repoPath)
+		_, err = BisyncGo(ctx, lekkoPath, lekkoPath, repoOwner, repoName, repoPath)
 		if err != nil {
 			return err
 		}

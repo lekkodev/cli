@@ -43,10 +43,11 @@ func GenAuto(ctx context.Context, configRepoPath, codeRepoPath string) (err erro
 	defer err2.Handle(&err)
 	project := try.To1(native.DetectNativeLang(codeRepoPath))
 	dot := try.To1(dotlekko.ReadDotLekko(codeRepoPath))
-	return GenNative(ctx, project, dot.LekkoPath, configRepoPath, GenOptions{CodeRepoPath: codeRepoPath})
+	repoOwner, repoName := dot.GetRepoInfo()
+	return GenNative(ctx, project, dot.LekkoPath, repoOwner, repoName, configRepoPath, GenOptions{CodeRepoPath: codeRepoPath})
 }
 
-func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath string, opts GenOptions) (err error) {
+func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoOwner, repoName, repoPath string, opts GenOptions) (err error) {
 	defer err2.Handle(&err)
 
 	absLekkoPath := filepath.Join(opts.CodeRepoPath, lekkoPath)
@@ -85,14 +86,14 @@ func GenNative(ctx context.Context, project *native.Project, lekkoPath, repoPath
 		}
 		return nil
 	case native.LangGo:
-		return genFormattedGo(ctx, project, repoPath, lekkoPath, opts)
+		return genFormattedGo(ctx, project, repoPath, lekkoPath, repoOwner, repoName, opts)
 	default:
 		return errors.New("Unsupported language")
 	}
 }
 
 // TODO: move to golang and split repo/repoless
-func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekkoPath string, opts GenOptions) (err error) {
+func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekkoPath, repoOwner, repoName string, opts GenOptions) (err error) {
 	defer err2.Handle(&err)
 	var moduleRoot string
 	switch m := project.Metadata.(type) {
@@ -104,14 +105,9 @@ func genFormattedGo(ctx context.Context, project *native.Project, repoPath, lekk
 		moduleRoot = mf.Module.Mod.Path
 	}
 	outputPath := filepath.Join(opts.CodeRepoPath, lekkoPath)
-	generator := try.To1(NewGoGeneratorFromLocal(ctx, moduleRoot, outputPath, lekkoPath, repoPath))
-	for _, namespace := range opts.Namespaces {
-		if opts.InitMode {
-			try.To(generator.Init(ctx, namespace))
-		} else {
-			try.To(generator.Gen(ctx, namespace))
-		}
-	}
+	generator := try.To1(NewGoGeneratorFromLocal(ctx, moduleRoot, lekkoPath, repoOwner, repoName, repoPath))
+	generated := try.To1(generator.Gen(ctx, opts.Namespaces...))
+	try.To(generated.WriteFiles(outputPath))
 	return nil
 }
 
