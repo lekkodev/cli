@@ -5,17 +5,17 @@ type Widget struct {
 	Size float64
 }
 
-func getWidget() *Widget {
-	return &Widget{
-		Name: "Terry",
-		Size: getSize(),
-	}
+func getDirect() float64 {
+	return getSize()
 }
 
 func getSize() float64 {
 	return 43.1
 }
 
-func getDirect() float64 {
-	return getSize()
+func getWidget() *Widget {
+	return &Widget{
+		Name: "Terry",
+		Size: getSize(),
+	}
 }

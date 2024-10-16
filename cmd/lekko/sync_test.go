@@ -185,7 +185,7 @@ func TestGoSyncToGenToSync(t *testing.T) {
 					if err != nil {
 						t.Fatalf("diff: %v", err)
 					}
-					t.Fatalf("mismatch in generated code: %s", diff)
+					t.Fatalf("mismatch in generated code:\n%s", diff)
 				}
 
 				s2 := sync.NewGoSyncer()
