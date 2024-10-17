@@ -479,7 +479,8 @@ func pullCmd() *cobra.Command {
 			try.To1(gitcli.Pull(repoPath))
 			newHead := try.To1(gitRepo.Head())
 
-			if err := gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{}); err != nil {
+			repoOwner, repoName := dot.GetRepoInfo()
+			if err := gen.GenNative(ctx, nlProject, dot.LekkoPath, repoOwner, repoName, repoPath, gen.GenOptions{}); err != nil {
 				return errors.Wrap(err, "gen")
 			}
 			fmt.Printf("Generated lekkos from %s\n", newHead.Hash().String())
@@ -528,6 +529,8 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nlP
 		return false, errors.Wrap(err, "get worktree")
 	}
 
+	repoOwner, repoName := dot.GetRepoInfo()
+
 	// base
 	err = worktree.Checkout(&git.CheckoutOptions{
 		Hash: plumbing.NewHash(dot.LockSHA),
@@ -541,7 +544,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nlP
 		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(baseDir)
-	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{
+	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoOwner, repoName, repoPath, gen.GenOptions{
 		CodeRepoPath: baseDir,
 		Namespaces:   []string{ns},
 	})
@@ -580,7 +583,7 @@ func mergeFile(ctx context.Context, filename string, dot *dotlekko.DotLekko, nlP
 		return false, errors.Wrap(err, "create temp dir")
 	}
 	defer os.RemoveAll(remoteDir)
-	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoPath, gen.GenOptions{
+	err = gen.GenNative(ctx, nlProject, dot.LekkoPath, repoOwner, repoName, repoPath, gen.GenOptions{
 		CodeRepoPath: remoteDir,
 		Namespaces:   []string{ns},
 	})

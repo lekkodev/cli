@@ -4,18 +4,6 @@ type BlockedDomains struct {
 	Domains []string
 }
 
-type DefaultEditorModeArgs struct {
-	Username string
-}
-
-// Default editor mode
-func getDefaultEditorMode(args *DefaultEditorModeArgs) string {
-	if args.Username == "non-engineer@lekko.com" {
-		return "visual"
-	}
-	return "code"
-}
-
 // Blocked auto-join domains
 func getBlockedAutoJoinDomains() *BlockedDomains {
 	return &BlockedDomains{
@@ -29,4 +17,16 @@ func getBlockedAutoJoinDomains() *BlockedDomains {
 			"me.com",
 		},
 	}
+}
+
+type DefaultEditorModeArgs struct {
+	Username string
+}
+
+// Default editor mode
+func getDefaultEditorMode(args *DefaultEditorModeArgs) string {
+	if args.Username == "non-engineer@lekko.com" {
+		return "visual"
+	}
+	return "code"
 }

@@ -40,7 +40,7 @@ import (
 )
 
 func initCmd() *cobra.Command {
-	var lekkoPath, repoName string
+	var lekkoPath, fullRepoName string
 	cmd := &cobra.Command{
 		Use:   "init",
 		Short: "initialize Lekko in your project",
@@ -129,7 +129,7 @@ func initCmd() *cobra.Command {
 						return errors.Wrapf(err, "use Lekko team %s", teamName)
 					}
 				}
-				if repoName == "" {
+				if fullRepoName == "" {
 					repoCmd := repo.NewRepoCmd(bff, ws)
 					repos, err := repoCmd.List(ctx)
 					if err != nil {
@@ -138,7 +138,7 @@ func initCmd() *cobra.Command {
 					if len(repos) == 0 {
 						fmt.Printf("No Lekko repositories found for team %s. Please finish onboarding at https://app.lekko.com to create a Lekko repository.\n", logging.Bold(teamName))
 					}
-					repoName = fmt.Sprintf("%s/%s", repos[0].Owner, repos[0].RepoName)
+					fullRepoName = fmt.Sprintf("%s/%s", repos[0].Owner, repos[0].RepoName)
 					if len(repos) > 1 {
 						repoNames := make([]string, len(repos))
 						for i, repo := range repos {
@@ -148,7 +148,7 @@ func initCmd() *cobra.Command {
 							Message: "Choose Lekko repository:",
 							Help:    fmt.Sprintf("These are machine-managed repositories owned by your Lekko team %s.", teamName),
 							Options: repoNames,
-						}, &repoName); err != nil {
+						}, &fullRepoName); err != nil {
 							return errors.Wrap(err, "choose Lekko repository")
 						}
 					}
@@ -186,7 +186,7 @@ func initCmd() *cobra.Command {
 				})))
 			}
 
-			dot := dotlekko.NewDotLekko(lekkoPath, repoName)
+			dot := dotlekko.NewDotLekko(lekkoPath, fullRepoName)
 			try.To(dot.WriteBack())
 			fmt.Printf("%s Successfully added %s.\n", successCheck, dot.GetPath())
 
@@ -375,7 +375,8 @@ func initCmd() *cobra.Command {
 			// Codegen
 			spin.Suffix = " Running codegen..."
 			spin.Start()
-			if err := gen.GenNative(ctx, nlProject, lekkoPath, repoPath, gen.GenOptions{}); err != nil {
+			repoOwner, repoName := dot.GetRepoInfo()
+			if err := gen.GenNative(ctx, nlProject, lekkoPath, repoOwner, repoName, repoPath, gen.GenOptions{}); err != nil {
 				return errors.Wrap(err, "codegen for default namespace")
 			}
 			spin.Stop()
@@ -435,7 +436,7 @@ func initCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Location for Lekko files (relative to project root)")
-	cmd.Flags().StringVarP(&repoName, "repo-name", "r", "", "Config repository name, for example `my-org/lekko-configs`")
+	cmd.Flags().StringVarP(&fullRepoName, "repo-name", "r", "", "Config repository name, for example `my-org/lekko-configs`")
 	return cmd
 }
 

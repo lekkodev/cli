@@ -24,6 +24,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	featurev1beta1 "buf.build/gen/go/lekkodev/cli/protocolbuffers/go/lekko/feature/v1beta1"
@@ -47,7 +48,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]string, error) {
+func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoOwner, repoName, repoPath string) ([]string, error) {
 	b, err := os.ReadFile("go.mod")
 	if err != nil {
 		return nil, errors.Wrap(err, "find go.mod in working directory")
@@ -84,14 +85,16 @@ func BisyncGo(ctx context.Context, outputPath, lekkoPath, repoPath string) ([]st
 	if err := WriteContentsToLocalRepo(ctx, repoContents, repoPath); err != nil {
 		return nil, errors.Wrap(err, "write to repository")
 	}
-	generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, outputPath, lekkoPath, repoContents)
+	generator, err := gen.NewGoGenerator(mf.Module.Mod.Path, lekkoPath, repoOwner, repoName, repoContents)
 	if err != nil {
 		return nil, errors.Wrap(err, "initialize code generator")
 	}
-	for _, namespace := range repoContents.Namespaces {
-		if err := generator.Gen(ctx, namespace.Name); err != nil {
-			return nil, errors.Wrapf(err, "generate code for %s", namespace.Name)
-		}
+	generated, err := generator.Gen(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "gen")
+	}
+	if err := generated.WriteFiles(outputPath); err != nil {
+		return nil, errors.Wrap(err, "write generated files")
 	}
 	return files, nil
 }
@@ -341,8 +344,43 @@ func (g *goSyncer) AstToNamespace(pf *ast.File, fds *descriptorpb.FileDescriptor
 		}
 		return true
 	})
+
+	// Final sort features inside namespace for consistent ordering
+	slices.SortFunc(namespace.Features, func(a, b *featurev1beta1.Feature) int {
+		if a.Key < b.Key {
+			return -1
+		}
+		if a.Key > b.Key {
+			return 1
+		}
+		return 0
+	})
+
 	// TODO static context
 	return namespace, nil
+}
+
+func sortRepositoryContents(contents *featurev1beta1.RepositoryContents) {
+	slices.SortFunc(contents.Namespaces, func(a, b *featurev1beta1.Namespace) int {
+		if a.Name < b.Name {
+			return -1
+		}
+		if a.Name > b.Name {
+			return 1
+		}
+		return 0
+	})
+	for _, ns := range contents.Namespaces {
+		slices.SortFunc(ns.Features, func(a, b *featurev1beta1.Feature) int {
+			if a.Key < b.Key {
+				return -1
+			}
+			if a.Key > b.Key {
+				return 1
+			}
+			return 0
+		})
+	}
 }
 
 // Translate a collection of Go files to a representation of repository contents.
@@ -360,10 +398,15 @@ func (g *goSyncer) Sync(filePaths ...string) (*featurev1beta1.RepositoryContents
 		}
 		ret.Namespaces = append(ret.Namespaces, ns)
 	}
+	sortRepositoryContents(ret)
 
 	return ret, nil
 }
 
+// Translates Go code contents to a representation of repository contents.
+// Expects a map of namespace names to corresponding private file code.
+// Technically, the namespace is included in the package name which is in the code (unlike TypeScript)
+// but keeping this signature for now for simplicity.
 func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.RepositoryContents, error) {
 	ret := &featurev1beta1.RepositoryContents{FileDescriptorSet: protoutils.NewDefaultFileDescriptorSet()}
 	for namespace, contents := range contentMap {
@@ -377,6 +420,7 @@ func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.R
 		}
 		ret.Namespaces = append(ret.Namespaces, ns)
 	}
+	sortRepositoryContents(ret)
 
 	return ret, nil
 }

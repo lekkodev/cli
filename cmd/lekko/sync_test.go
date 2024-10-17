@@ -166,26 +166,26 @@ func TestGoSyncToGenToSync(t *testing.T) {
 				}
 				defer os.RemoveAll(tmpd)
 
-				g, err := gen.NewGoGenerator("test", tmpd, "", r1)
+				g, err := gen.NewGoGenerator("test", "", "test-owner", "test-repo", r1)
 				if err != nil {
 					t.Fatalf("initialize gen: %v", err)
 				}
 				namespace := r1.Namespaces[0]
-				_, private, err := g.GenNamespaceFiles(ctx, namespace.Name, namespace.Features, nil)
+				gn, err := g.GenNamespaceFiles(ctx, namespace.Name, nil)
 				if err != nil {
 					t.Fatalf("gen: %v", err)
 				}
 				privatePath := filepath.Join(tmpd, fmt.Sprintf("%s.go", namespace.Name))
-				if err := os.WriteFile(privatePath, []byte(private), 0600); err != nil {
+				if err := os.WriteFile(privatePath, []byte(gn.Private), 0600); err != nil {
 					t.Fatalf("write private %s: %v", privatePath, err)
 				}
 
-				if string(orig) != private {
-					diff, err := DiffStyleOutput(string(orig), private)
+				if string(orig) != gn.Private {
+					diff, err := DiffStyleOutput(string(orig), gn.Private)
 					if err != nil {
 						t.Fatalf("diff: %v", err)
 					}
-					t.Fatalf("mismatch in generated code: %s", diff)
+					t.Fatalf("mismatch in generated code:\n%s", diff)
 				}
 
 				s2 := sync.NewGoSyncer()

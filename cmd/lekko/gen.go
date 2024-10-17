@@ -39,48 +39,50 @@ import (
 )
 
 func genCmd() *cobra.Command {
-	var lekkoPath, repoPath, ns string
-	var initMode bool
+	var lekkoPath, repoOwner, repoName, repoPath, ns string
 	cmd := &cobra.Command{
 		Use:   "gen",
 		Short: "generate Lekko config functions from a local config repository",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			nlProject := try.To1(native.DetectNativeLang(""))
-			return genNative(context.Background(), nlProject, lekkoPath, repoPath, ns, initMode)
+			return genNative(context.Background(), nlProject, lekkoPath, repoOwner, repoName, repoPath, ns)
 		},
 	}
-	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "relative path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoOwner, "repo-owner", "", "GitHub owner of config repository, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoName, "repo-name", "", "GitHub name of config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
-	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	cmd.AddCommand(genGoCmd())
 	cmd.AddCommand(genTSCmd())
 	cmd.AddCommand(genStarlarkCmd())
 	return cmd
 }
 
-func genNative(ctx context.Context, project *native.Project, lekkoPath, repoPath, ns string, initMode bool) (err error) {
+// TODO: Clean up/consolidate different native gen functions and how dotlekko gets used in them
+func genNative(ctx context.Context, project *native.Project, lekkoPath, repoOwner, repoName, repoPath, ns string) (err error) {
 	defer err2.Handle(&err)
 	if len(lekkoPath) == 0 {
 		dot := try.To1(dotlekko.ReadDotLekko(""))
 		lekkoPath = dot.LekkoPath
 	}
+	if len(repoOwner) == 0 || len(repoName) == 0 {
+		dot := try.To1(dotlekko.ReadDotLekko(""))
+		repoOwner, repoName = dot.GetRepoInfo()
+	}
 	if len(repoPath) == 0 {
 		repoPath = try.To1(repo.PrepareGithubRepo())
 	}
-	opts := gen.GenOptions{
-		InitMode: initMode,
-	}
+	opts := gen.GenOptions{}
 	if len(ns) > 0 {
 		opts.Namespaces = []string{ns}
 	}
-	return gen.GenNative(ctx, project, lekkoPath, repoPath, opts)
+	return gen.GenNative(ctx, project, lekkoPath, repoOwner, repoName, repoPath, opts)
 }
 
 // TODO: Add option to read encoded repo contents like gen ts
 func genGoCmd() *cobra.Command {
-	var lekkoPath, repoPath, ns string
-	var initMode bool
+	var lekkoPath, repoOwner, repoName, repoPath, ns string
 	cmd := &cobra.Command{
 		Use:   "go",
 		Short: "generate Go library code from lekkos",
@@ -89,18 +91,19 @@ func genGoCmd() *cobra.Command {
 			if nlProject.Language != native.LangGo {
 				return errors.Errorf("not a Go project, detected %v instead", nlProject.Language)
 			}
-			return genNative(cmd.Context(), nlProject, lekkoPath, repoPath, ns, initMode)
+			return genNative(cmd.Context(), nlProject, lekkoPath, repoOwner, repoName, repoPath, ns)
 		},
 	}
-	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "Path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "relative path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoOwner, "repo-owner", "", "GitHub owner of config repository, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoName, "repo-name", "", "GitHub name of config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "", "namespace to generate code from")
-	cmd.Flags().BoolVar(&initMode, "init", false, "pass 'init' to generate boilerplate code for a Lekko namespace")
 	return cmd
 }
 
 func genTSCmd() *cobra.Command {
-	var lekkoPath, repoPath, encodedRepoContents, ns string
+	var lekkoPath, repoOwner, repoName, repoPath, encodedRepoContents, ns string
 	cmd := &cobra.Command{
 		Use:   "ts",
 		Short: "generate TypeScript library code from lekkos",
@@ -129,10 +132,12 @@ func genTSCmd() *cobra.Command {
 			if nlProject.Language != native.LangTypeScript {
 				return errors.Errorf("not a TypeScript project, detected %v instead", nlProject.Language)
 			}
-			return genNative(ctx, nlProject, lekkoPath, repoPath, ns, false)
+			return genNative(ctx, nlProject, lekkoPath, repoOwner, repoName, repoPath, ns)
 		},
 	}
-	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVarP(&lekkoPath, "lekko-path", "p", "", "relative path to Lekko native config files, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoOwner, "repo-owner", "", "GitHub owner of config repository, will use autodetect if not set")
+	cmd.Flags().StringVar(&repoName, "repo-name", "", "GitHub name of config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&repoPath, "repo-path", "r", "", "path to config repository, will use autodetect if not set")
 	cmd.Flags().StringVarP(&encodedRepoContents, "repo-contents", "R", "", "base64-encoded serialized repository contents, will use repo-path if not set")
 	cmd.Flags().StringVarP(&ns, "namespace", "n", "default", "namespace to generate code from")

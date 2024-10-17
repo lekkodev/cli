@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"go/format"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -35,7 +34,6 @@ import (
 	"github.com/lainio/err2"
 	"github.com/lainio/err2/assert"
 	"github.com/lainio/err2/try"
-	"github.com/lekkodev/cli/pkg/dotlekko"
 	protoutils "github.com/lekkodev/cli/pkg/proto"
 	"github.com/lekkodev/cli/pkg/repo"
 	"github.com/pkg/errors"
@@ -45,35 +43,78 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
-
-	"github.com/lekkodev/cli/pkg/native"
 )
+
+type GoGeneratedRepo struct {
+	Namespaces map[string]*GoGeneratedNamespace
+	Client     string
+}
+
+type GoGeneratedNamespace struct {
+	Public  string
+	Private string
+}
+
+// Writes generated files to the specified output path.
+//
+// Output shape:
+//
+//	<outputPath>
+//		|- <namespace>
+//			|- <namespace>_gen.go
+//			|- <namespace>.go
+//		|- client_gen.go
+func (r *GoGeneratedRepo) WriteFiles(outputPath string) error {
+	for namespaceName, gn := range r.Namespaces {
+		if err := os.MkdirAll(filepath.Join(outputPath, namespaceName), 0770); err != nil {
+			return errors.Wrapf(err, "create namespace %s directory", namespaceName)
+		}
+		if f, err := os.Create(filepath.Join(outputPath, namespaceName, fmt.Sprintf("%s_gen.go", namespaceName))); err != nil {
+			return errors.Wrapf(err, "create namespace %s public file", namespaceName)
+		} else if _, err := f.WriteString(gn.Public); err != nil {
+			return errors.Wrapf(err, "write namespace %s public file", namespaceName)
+		}
+		if f, err := os.Create(filepath.Join(outputPath, namespaceName, fmt.Sprintf("%s.go", namespaceName))); err != nil {
+			return errors.Wrapf(err, "create namespace %s private file", namespaceName)
+		} else if _, err := f.WriteString(gn.Private); err != nil {
+			return errors.Wrapf(err, "write namespace %s private file", namespaceName)
+		}
+	}
+	if f, err := os.Create(filepath.Join(outputPath, "client_gen.go")); err != nil {
+		return errors.Wrap(err, "create client file")
+	} else if _, err := f.WriteString(r.Client); err != nil {
+		return errors.Wrap(err, "write client_gen.go")
+	}
+	return nil
+}
 
 type goGenerator struct {
 	moduleRoot   string // e.g. github.com/lekkodev/cli
-	outputPath   string // Location for destination file, can be absolute or relative. Its suffix should be the same as lekkoPath. In most cases can be same as lekkoPath.
 	lekkoPath    string // Location relative to project root where Lekko files are stored, e.g. internal/lekko.
+	repoOwner    string // Only required if generating the client file
+	repoName     string // Only required if generating the client file
 	repoContents *featurev1beta1.RepositoryContents
 	TypeRegistry *protoregistry.Types
 }
 
 // Initializes a new generator from config repository contents.
-func NewGoGenerator(moduleRoot, outputPath, lekkoPath string, repoContents *featurev1beta1.RepositoryContents) (*goGenerator, error) {
+func NewGoGenerator(moduleRoot, lekkoPath, repoOwner, repoName string, repoContents *featurev1beta1.RepositoryContents) (*goGenerator, error) {
 	typeRegistry, err := protoutils.FileDescriptorSetToTypeRegistry(repoContents.FileDescriptorSet)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert fds to type registry")
 	}
 	return &goGenerator{
 		moduleRoot:   moduleRoot,
-		outputPath:   outputPath,
 		lekkoPath:    filepath.Clean(lekkoPath),
+		repoOwner:    repoOwner,
+		repoName:     repoName,
 		repoContents: repoContents,
 		TypeRegistry: typeRegistry,
 	}, nil
 }
 
 // Initializes a new generator, parsing config repository contents from a local repository.
-func NewGoGeneratorFromLocal(ctx context.Context, moduleRoot, outputPath, lekkoPath string, repoPath string) (*goGenerator, error) {
+func NewGoGeneratorFromLocal(ctx context.Context, moduleRoot, lekkoPath, repoOwner, repoName, repoPath string) (*goGenerator, error) {
 	repoContents, err := ReadRepoContents(ctx, repoPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read contents from %s", repoPath)
@@ -84,8 +125,9 @@ func NewGoGeneratorFromLocal(ctx context.Context, moduleRoot, outputPath, lekkoP
 	}
 	return &goGenerator{
 		moduleRoot:   moduleRoot,
-		outputPath:   outputPath,
 		lekkoPath:    lekkoPath,
+		repoOwner:    repoOwner,
+		repoName:     repoName,
 		repoContents: repoContents,
 		TypeRegistry: typeRegistry,
 	}, nil
@@ -105,47 +147,9 @@ func structpbValueToKindStringGo(v *structpb.Value) string {
 	return "unknown" // do we just want to panic?
 }
 
-// Initialize a blank Lekko config function file
-func (g *goGenerator) Init(ctx context.Context, namespaceName string) error {
-	const templateBody = `package lekko{{$.Namespace}}
-
-// This is an example description for an example config
-func getExample() bool {
-	return true
-}`
-	fullOutputPath := path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s.go", namespaceName))
-	if _, err := os.Stat(fullOutputPath); err == nil {
-		return fmt.Errorf("file %s already exists", fullOutputPath)
-	}
-
-	data := struct {
-		Namespace string
-	}{
-		Namespace: namespaceName,
-	}
-	var contents bytes.Buffer
-	templ := template.Must(template.New(fullOutputPath).Parse(templateBody))
-	if err := templ.Execute(&contents, data); err != nil {
-		return errors.Wrapf(err, "%s template", fullOutputPath)
-	}
-	formatted, err := format.Source(contents.Bytes())
-	if err != nil {
-		return errors.Wrapf(err, "format %s", fullOutputPath)
-	}
-	try.To(os.MkdirAll(path.Join(g.outputPath, namespaceName), 0770))
-	f, err := os.Create(fullOutputPath)
-	if err != nil {
-		return errors.Wrapf(err, "create %s", fullOutputPath)
-	}
-	if _, err := f.Write(formatted); err != nil {
-		return errors.Wrapf(err, "write %s", fullOutputPath)
-	}
-	return nil
-}
-
 // This is an attempt to pull out a simpler component that is more re-usable - the other one should probably be removed/changed, but that depends on
 // how far this change goes
-func (g *goGenerator) GenNamespaceFiles(ctx context.Context, namespaceName string, features []*featurev1beta1.Feature, staticCtxType *ProtoImport) (public string, private string, err error) {
+func (g *goGenerator) GenNamespaceFiles(ctx context.Context, namespaceName string, staticCtxType *ProtoImport) (out *GoGeneratedNamespace, err error) {
 	defer err2.Handle(&err)
 	// For each namespace, we want to generate under lekko/:
 	// lekko/
@@ -198,14 +202,24 @@ import (
 {{range $.PrivateFuncStrings}}
 {{ . }}{{end}}`
 
+	var namespace *featurev1beta1.Namespace
+	for _, ns := range g.repoContents.Namespaces {
+		if ns.Name == namespaceName {
+			namespace = ns
+		}
+	}
+	if namespace == nil {
+		return nil, errors.Wrapf(err, "namespace %s not found", namespaceName)
+	}
+
 	var publicFuncStrings []string
 	var privateFuncStrings []string
 	protoImportSet := make(map[string]*ProtoImport)
 	addStringsImport := false
 	addSlicesImport := false
-	StructDefMap := make(map[string]string)
+	structDefMap := make(map[string]string)
 	importProtoReflect := false
-	for _, f := range features {
+	for _, f := range namespace.Features {
 		if f.GetTree().GetDefaultNew() == nil {
 			f.GetTree().DefaultNew = anyToLekkoAny(f.GetTree().Default)
 		}
@@ -231,23 +245,22 @@ import (
 		if f.Type == featurev1beta1.FeatureType_FEATURE_TYPE_PROTO {
 			mt, err := g.TypeRegistry.FindMessageByURL(f.Tree.DefaultNew.TypeUrl)
 			if err != nil {
-				return "", "", errors.Wrapf(err, "find %s", f.Tree.DefaultNew.TypeUrl)
+				return nil, errors.Wrapf(err, "find %s", f.Tree.DefaultNew.TypeUrl)
 			}
 			msg := mt.New().Interface()
 			err = proto.UnmarshalOptions{Resolver: g.TypeRegistry}.Unmarshal(f.Tree.DefaultNew.Value, msg)
 			if err != nil {
-				return "", "", errors.Wrapf(err, "unmarshal %s", f.Tree.DefaultNew.TypeUrl)
+				return nil, errors.Wrapf(err, "unmarshal %s", f.Tree.DefaultNew.TypeUrl)
 			}
 			if msg.ProtoReflect().Descriptor().FullName() != "google.protobuf.Duration" {
 				// This feels bad...
-				StructDefMap[f.Tree.DefaultNew.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
+				structDefMap[f.Tree.DefaultNew.TypeUrl] = DescriptorToStructDeclaration(msg.ProtoReflect().Descriptor())
 			}
 			importProtoReflect = true
 		}
-
 		generated, err := g.genGoForFeature(ctx, nil, f, namespaceName, ctxType)
 		if err != nil {
-			return "", "", errors.Wrapf(err, "generate code for %s/%s", namespaceName, f.Key)
+			return nil, errors.Wrapf(err, "generate code for %s/%s", namespaceName, f.Key)
 		}
 		publicFuncStrings = append(publicFuncStrings, generated.public)
 		privateFuncStrings = append(privateFuncStrings, generated.private)
@@ -272,7 +285,7 @@ import (
 	}
 
 	var structDefs []string
-	for _, sd := range StructDefMap {
+	for _, sd := range structDefMap {
 		structDefs = append(structDefs, sd)
 	}
 	sort.Strings(structDefs)
@@ -297,81 +310,50 @@ import (
 		importProtoReflect,
 	}
 
-	public, err = renderGoTemplate(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", namespaceName), data)
+	public, err := renderGoTemplate(publicFileTemplateBody, fmt.Sprintf("%s_gen.go", namespaceName), data)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
-	private, err = renderGoTemplate(privateFileTemplateBody, fmt.Sprintf("%s.go", namespaceName), data)
+	private, err := renderGoTemplate(privateFileTemplateBody, fmt.Sprintf("%s.go", namespaceName), data)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
-
-	return public, private, nil
+	out = &GoGeneratedNamespace{
+		Public:  public,
+		Private: private,
+	}
+	return out, nil
 }
 
-func renderGoTemplate(templateBody string, fileName string, data any) (string, error) {
-	var contents bytes.Buffer
-	templ := template.Must(template.New(fileName).Parse(templateBody))
-	if err := templ.Execute(&contents, data); err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("%s template", fileName))
-	}
-
-	// Final canonical Go format
-	formatted, err := format.Source(contents.Bytes())
-	if err != nil {
-		return "", errors.Wrap(err, fmt.Sprintf("format %s\n %s\n\n", fileName, contents.String()))
-	}
-	return string(formatted), nil
-}
-
-// Generates public and private function files for the namespace as well as the overall client file.
-// Writes outputs to the output paths specified in the construction args.
-// TODO: since generator takes in whole repo contents now, could generate for all/filtered namespaces
-// TODO: split away write out functionality and/or return contents
-func (g *goGenerator) Gen(ctx context.Context, namespaceName string) (err error) {
+// Generates Go file contents for the entire repository, unless namespace names are passed, in which case
+// only code for those namespaces is generated.
+// To write the code contents to files after generation, use the WriteFiles method.
+func (g *goGenerator) Gen(ctx context.Context, namespaceNames ...string) (out *GoGeneratedRepo, err error) {
 	defer err2.Handle(&err)
-	// Validate namespace
-	if !regexp.MustCompile("[a-z]+").MatchString(namespaceName) {
-		return errors.Errorf("namespace must be a lowercase alphabetic string: %s", namespaceName)
+	out = &GoGeneratedRepo{
+		Namespaces: make(map[string]*GoGeneratedNamespace),
 	}
-	if namespaceName == "proto" {
-		return errors.Errorf("'%s' is a reserved name", namespaceName)
-	}
-	var namespace *featurev1beta1.Namespace
-	for _, ns := range g.repoContents.Namespaces {
-		if ns.Name == namespaceName {
-			namespace = ns
+	for _, namespace := range g.repoContents.Namespaces {
+		if len(namespaceNames) > 0 {
+			if !slices.Contains(namespaceNames, namespace.Name) {
+				continue
+			}
 		}
+		gn, err := g.GenNamespaceFiles(ctx, namespace.Name, nil)
+		if err != nil {
+			return nil, errors.Wrapf(err, "generate namespace %s", namespace.Name)
+		}
+		out.Namespaces[namespace.Name] = gn
 	}
-	if namespace == nil {
-		return errors.Errorf("namespace '%s' not found", namespaceName)
-	}
-	// Create intermediate directories for output
-	if err := os.MkdirAll(path.Join(g.outputPath, namespaceName), 0770); err != nil {
-		return err
-	}
-	public, private, err := g.GenNamespaceFiles(ctx, namespaceName, namespace.Features, nil)
+	client, err := g.genClientFile(namespaceNames...)
 	if err != nil {
-		return err
+		return nil, errors.Wrap(err, "generate client")
 	}
-	if f, err := os.Create(path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s_gen.go", namespaceName))); err != nil {
-		return err
-	} else {
-		if _, err := f.WriteString(public); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
-		}
-	}
-	if f, err := os.Create(path.Join(g.outputPath, namespaceName, fmt.Sprintf("%s.go", namespaceName))); err != nil {
-		return err
-	} else {
-		if _, err := f.WriteString(private); err != nil {
-			return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
-		}
-	}
-	return g.genClientFile(g.moduleRoot)
+	out.Client = client
+	return out, nil
 }
 
-type generatedConfigCode struct {
+type GoGeneratedFunc struct {
 	// "Generated" code, public interface for consumption
 	public string
 	// For user creation/editing
@@ -382,14 +364,14 @@ type generatedConfigCode struct {
 	usedSlices bool
 }
 
-type configCodeTemplate struct {
+type goFuncTemplate struct {
 	public  string
 	private string
 }
 
 // Template body for primitive config code
-func (g *goGenerator) getDefaultTemplateBody() *configCodeTemplate {
-	return &configCodeTemplate{
+func (g *goGenerator) getDefaultTemplateBody() *goFuncTemplate {
+	return &goFuncTemplate{
 		public: `{{range $.Description}}// {{.}}
 {{end -}}
 func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) {{$.RetType}} {
@@ -419,8 +401,8 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 }
 
 // Template body for proto config code
-func (g *goGenerator) getProtoTemplateBody() *configCodeTemplate {
-	return &configCodeTemplate{
+func (g *goGenerator) getProtoTemplateBody() *goFuncTemplate {
+	return &goFuncTemplate{
 		public: `{{range $.Description}}// {{.}}
 {{end -}}
 func (c *LekkoClient) {{$.FuncName}}{{ if $.PassCtx }}Ctx{{end}}({{ if $.PassCtx }}ctx context.Context, {{end}}{{$.ArgumentString}}) *{{$.RetType}} {
@@ -454,8 +436,8 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) *{{$.RetType}} {
 // Template body for configs that are top-level enums
 // TODO: This isn't actually supported, figure this out as well
 // Includes const declarations for the enums
-func (g *goGenerator) getStringEnumTemplateBody() *configCodeTemplate {
-	return &configCodeTemplate{
+func (g *goGenerator) getStringEnumTemplateBody() *goFuncTemplate {
+	return &goFuncTemplate{
 		public: `type {{$.EnumTypeName}} string
 const (
 	{{range $index, $field := $.EnumFields}}{{$field.Name}} {{$.EnumTypeName}} = "{{$field.Value}}"
@@ -491,7 +473,7 @@ func {{$.PrivateFunc}}({{$.ArgumentString}}) {{$.RetType}} {
 	}
 }
 
-func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *ProtoImport) (*generatedConfigCode, error) {
+func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationRepository, f *featurev1beta1.Feature, ns string, staticCtxType *ProtoImport) (*GoGeneratedFunc, error) {
 	var funcNameBuilder strings.Builder
 	funcNameBuilder.WriteString("Get")
 	for _, word := range regexp.MustCompile("[_-]+").Split(f.Key, -1) {
@@ -659,7 +641,7 @@ func (g *goGenerator) genGoForFeature(ctx context.Context, r repo.ConfigurationR
 		"",
 		protoStructFilling,
 	}
-	generated := &generatedConfigCode{}
+	generated := &GoGeneratedFunc{}
 	usedVariables := make(map[string]string)
 	var err error
 	if staticCtxType != nil {
@@ -1163,7 +1145,8 @@ func (g *goGenerator) getStringRetValues(f *featurev1beta1.Feature) ([]string, e
 	return rets, nil
 }
 
-func (g *goGenerator) genClientFile(moduleRoot string) (err error) {
+// Outputs generated client file content
+func (g *goGenerator) genClientFile(namespaceNames ...string) (string, error) {
 	// Template for generated client initialization code.
 	const clientTemplateBody = `// Generated by Lekko. DO NOT EDIT.
 package lekko
@@ -1197,22 +1180,18 @@ func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoCl
 }
 `
 
-	// TODO: Refactor to just pass dotlekko when constructing generator
-	dot := try.To1(dotlekko.ReadDotLekko(""))
-	repoOwner, repoName := dot.GetRepoInfo()
-
 	clientTemplateData := struct {
 		Namespaces      []string
 		RepositoryOwner string
 		RepositoryName  string
 	}{
 		[]string{},
-		repoOwner,
-		repoName,
+		g.repoOwner,
+		g.repoName,
 	}
 	clientTemplateFuncs := map[string]any{
 		"nsToImport": func(ns string) string {
-			return fmt.Sprintf("lekko%s \"%s/%s/%s\"", ns, moduleRoot, g.lekkoPath, ns)
+			return fmt.Sprintf("lekko%s \"%s/%s/%s\"", ns, g.moduleRoot, g.lekkoPath, ns)
 		},
 		"nsToClientFieldType": func(ns string) string {
 			return fmt.Sprintf("%s *lekko%s.LekkoClient", strcase.ToCamel(ns), ns)
@@ -1221,26 +1200,24 @@ func NewLekkoClient(ctx context.Context, opts ...client.ProviderOption) *LekkoCl
 			return fmt.Sprintf("%s: &lekko%s.LekkoClient{Client: cli}", strcase.ToCamel(ns), ns)
 		},
 	}
-	// Walk through lekko/ directory to find namespaces
-	// We walk through dir instead of just using the namespace from above because shared client init code should include every namespace
-	clientTemplateData.Namespaces = try.To1(native.ListNamespaces(g.outputPath, native.LangGo))
+	for _, ns := range g.repoContents.Namespaces {
+		if len(namespaceNames) > 0 {
+			if !slices.Contains(namespaceNames, ns.Name) {
+				continue
+			}
+		}
+		clientTemplateData.Namespaces = append(clientTemplateData.Namespaces, ns.Name)
+	}
 	var contents bytes.Buffer
 	templ := template.Must(template.New("client").Funcs(clientTemplateFuncs).Parse(clientTemplateBody))
 	if err := templ.Execute(&contents, clientTemplateData); err != nil {
-		return errors.Wrap(err, "generate client initialization code: template exec")
+		return "", errors.Wrap(err, "generate client initialization code: template exec")
 	}
 	formatted, err := format.Source(contents.Bytes())
 	if err != nil {
-		return errors.Wrap(err, "generation client initialization code: format")
+		return "", errors.Wrap(err, "generation client initialization code: format")
 	}
-	f, err := os.Create(path.Join(g.outputPath, "client_gen.go"))
-	if err != nil {
-		return errors.Wrap(err, "generate client initialization code: create file")
-	}
-	if _, err := f.Write(formatted); err != nil {
-		return errors.Wrap(err, fmt.Sprintf("write formatted contents to %s", f.Name()))
-	}
-	return nil
+	return string(formatted), nil
 }
 
 func DescriptorToStructDeclaration(d protoreflect.MessageDescriptor) string {
@@ -1297,4 +1274,19 @@ func FieldDescriptorToGoTypeString(field protoreflect.FieldDescriptor) string {
 		goType = "interface{}"
 	}
 	return goType
+}
+
+func renderGoTemplate(templateBody string, fileName string, data any) (string, error) {
+	var contents bytes.Buffer
+	templ := template.Must(template.New(fileName).Parse(templateBody))
+	if err := templ.Execute(&contents, data); err != nil {
+		return "", errors.Wrap(err, fmt.Sprintf("%s template", fileName))
+	}
+
+	// Final canonical Go format
+	formatted, err := format.Source(contents.Bytes())
+	if err != nil {
+		return "", errors.Wrap(err, fmt.Sprintf("format %s\n %s\n\n", fileName, contents.String()))
+	}
+	return string(formatted), nil
 }
