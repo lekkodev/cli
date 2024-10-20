@@ -459,6 +459,56 @@ func (g *goSyncer) exprToAny(expr ast.Expr, want featurev1beta1.FeatureType, nam
 			default:
 				return nil, g.posErr(x, "unsupported unary & target")
 			}
+		case token.SUB:
+			// Handle negative numbers
+			switch want {
+			case featurev1beta1.FeatureType_FEATURE_TYPE_INT:
+				val, err := g.primitiveToProtoValue(node.X, namespace)
+				if err != nil {
+					return nil, err
+				}
+				if intVal, ok := val.(int64); !ok {
+					return nil, g.posErr(node, "unsupported unary minus operator for non-integer literal")
+				} else {
+					value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.Int64Value{Value: -1 * intVal})
+					if err != nil {
+						return nil, errors.Wrap(err, "marshal Int64Value")
+					}
+					return &featurev1beta1.Any{
+						TypeUrl: "type.googleapis.com/google.protobuf.Int64Value",
+						Value:   value,
+					}, nil
+				}
+			case featurev1beta1.FeatureType_FEATURE_TYPE_FLOAT:
+				val, err := g.primitiveToProtoValue(node.X, namespace)
+				if err != nil {
+					return nil, err
+				}
+				switch typedValue := val.(type) {
+				case int64:
+					value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.DoubleValue{Value: -1 * float64(typedValue)})
+					if err != nil {
+						return nil, errors.Wrap(err, "marshal DoubleValue")
+					}
+					return &featurev1beta1.Any{
+						TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
+						Value:   value,
+					}, nil
+				case float64:
+					value, err := proto.MarshalOptions{Deterministic: true}.Marshal(&wrapperspb.DoubleValue{Value: -1 * float64(typedValue)})
+					if err != nil {
+						return nil, errors.Wrap(err, "marshal DoubleValue")
+					}
+					return &featurev1beta1.Any{
+						TypeUrl: "type.googleapis.com/google.protobuf.DoubleValue",
+						Value:   value,
+					}, nil
+				default:
+					return nil, g.posErr(node, "unsupported unary minus operator for non-numeric literal")
+				}
+			default:
+				return nil, g.posErr(node, "unsupported minus operator for non-numeric type")
+			}
 		default:
 			return nil, g.posErr(node, "unsupported unary operator")
 		}
