@@ -831,6 +831,14 @@ message SaveNativeLangResponse {
   string formatted = 2;
 }
 
+message SaveNativeLangError {
+  string message = 1;
+  uint32 start_line = 2;
+  uint32 start_col = 3;
+  uint32 end_line = 4;
+  uint32 end_col = 5;
+}
+
 message ConvertRuleToStringRequest {
   lekko.rules.v1beta3.Rule rule = 1;
 }

@@ -87,18 +87,26 @@ func checkSyncTSError(output []byte) error {
 	if strings.Contains(o, "404") && strings.Contains(o, syncTSExec) {
 		return NoSyncTSError
 	}
-	r := regexp.MustCompile("LekkoParseError: (.*):(\\d+):(\\d+) - (.*)")
+	r := regexp.MustCompile("LekkoParseError: (.*):(\\d+):(\\d+):(\\d+):(\\d+) - (.*)")
 	matches := r.FindStringSubmatch(o)
 	if matches == nil {
 		return NewSyncError(errors.New(o))
 	}
-	line, err := strconv.Atoi(matches[2])
+	startLine, err := strconv.Atoi(matches[2])
 	if err != nil {
 		return NewSyncError(errors.New(o))
 	}
-	col, err := strconv.Atoi(matches[3])
+	startCol, err := strconv.Atoi(matches[3])
 	if err != nil {
 		return NewSyncError(errors.New(o))
 	}
-	return NewSyncPosError(errors.New(matches[4]), matches[1], line, col)
+	endLine, err := strconv.Atoi(matches[4])
+	if err != nil {
+		return NewSyncError(errors.New(o))
+	}
+	endCol, err := strconv.Atoi(matches[5])
+	if err != nil {
+		return NewSyncError(errors.New(o))
+	}
+	return NewSyncPosError(errors.New(matches[4]), matches[1], startLine, startCol, endLine, endCol)
 }

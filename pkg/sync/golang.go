@@ -433,7 +433,7 @@ func (g *goSyncer) exprToValue(expr ast.Expr) (string, error) {
 	case *ast.SelectorExpr:
 		return strcase.ToSnake(v.Sel.Name), nil
 	default:
-		return "", g.posErr(expr, "unsupported syntax")
+		return "", g.posErr(expr, "unsupported context key syntax")
 	}
 }
 
@@ -1195,8 +1195,9 @@ func (g *goSyncer) posErr(node ast.Node, err any) error {
 		// This means there's an internal bug
 		panic("invalid inner error type")
 	}
-	p := g.fset.Position(node.Pos())
-	return NewSyncPosError(inner, p.Filename, p.Line, p.Column)
+	startPos := g.fset.Position(node.Pos())
+	endPos := g.fset.Position(node.End())
+	return NewSyncPosError(inner, startPos.Filename, startPos.Line, startPos.Column, endPos.Line, endPos.Column)
 }
 
 func (g *goSyncer) structToMap(structType *ast.StructType) (map[string]string, error) {
