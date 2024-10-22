@@ -279,10 +279,11 @@ func GenTSFromLocal(ctx context.Context, repoPath, namespaceName string) (string
 }
 
 func GenTSForFeature(f *featurev1beta1.Feature, ns string, parameters string, typeRegistry *protoregistry.Types) (string, error) {
-	// TODO: support multiline descriptions
-	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}
+	const templateBody = `{{if $.Description}}/** {{$.Description}} */{{end}}{{if $.MultiLineDescription}}/**
+{{range $.MultiLineDescription}} * {{ . }}
+{{end}} */{{end}}
 export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
-{{range  $.NaturalLanguage}}{{ . }}
+{{range $.Body}}{{ . }}
 {{end}}}`
 
 	var funcNameBuilder strings.Builder
@@ -291,6 +292,15 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 		funcNameBuilder.WriteString(strings.ToUpper(word[:1]) + word[1:])
 	}
 	funcName := funcNameBuilder.String()
+
+	description := f.Description
+	multiLineDescription := strings.Split(f.Description, "\n")
+	if len(multiLineDescription) > 1 {
+		description = ""
+	} else {
+		multiLineDescription = nil
+	}
+
 	var retType string
 	var protoType *ProtoImport
 	switch f.Type {
@@ -334,15 +344,17 @@ export function {{$.FuncName}}({{$.Parameters}}): {{$.RetType}} {
 		parameters = fmt.Sprintf("{%s}: {%s}", strings.Join(keys, ","), strings.Join(keyAndTypes, ","))
 	}
 	data := struct {
-		Description     string
-		FuncName        string
-		RetType         string
-		Namespace       string
-		Key             string
-		NaturalLanguage []string
-		Parameters      string
+		Description          string
+		MultiLineDescription []string
+		FuncName             string
+		RetType              string
+		Namespace            string
+		Key                  string
+		Body                 []string
+		Parameters           string
 	}{
-		f.Description,
+		description,
+		multiLineDescription,
 		funcName,
 		retType,
 		ns,
