@@ -108,5 +108,5 @@ func checkSyncTSError(output []byte) error {
 	if err != nil {
 		return NewSyncError(errors.New(o))
 	}
-	return NewSyncPosError(errors.New(matches[4]), matches[1], startLine, startCol, endLine, endCol)
+	return NewSyncPosError(errors.New(matches[6]), matches[1], startLine, startCol, endLine, endCol)
 }

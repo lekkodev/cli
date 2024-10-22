@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
+	"go/scanner"
 	"go/token"
 	"io/fs"
 	"os"
@@ -390,7 +391,7 @@ func (g *goSyncer) Sync(filePaths ...string) (*featurev1beta1.RepositoryContents
 	for _, filePath := range filePaths {
 		astf, err := parser.ParseFile(g.fset, filePath, nil, parser.ParseComments|parser.AllErrors|parser.SkipObjectResolution)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse %s", filePath)
+			return nil, errors.Wrapf(g.parseParseError(err), "parse %s", filePath)
 		}
 		ns, err := g.AstToNamespace(astf, ret.FileDescriptorSet)
 		if err != nil {
@@ -412,7 +413,7 @@ func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.R
 	for namespace, contents := range contentMap {
 		astf, err := parser.ParseFile(g.fset, namespace, contents, parser.ParseComments|parser.AllErrors|parser.SkipObjectResolution)
 		if err != nil {
-			return nil, errors.Wrapf(err, "parse %s", namespace)
+			return nil, errors.Wrapf(g.parseParseError(err), "parse %s", namespace)
 		}
 		ns, err := g.AstToNamespace(astf, ret.FileDescriptorSet)
 		if err != nil {
@@ -423,6 +424,15 @@ func (g *goSyncer) SyncContents(contentMap map[string]string) (*featurev1beta1.R
 	sortRepositoryContents(ret)
 
 	return ret, nil
+}
+
+func (g *goSyncer) parseParseError(err error) error {
+	if perr, ok := err.(scanner.ErrorList); ok && len(perr) >= 1 {
+		return NewSyncPosError(errors.New(perr[0].Msg), perr[0].Pos.Filename, perr[0].Pos.Line, perr[0].Pos.Column, perr[0].Pos.Line, perr[0].Pos.Column+1)
+	} else if err == nil {
+		return nil
+	}
+	return NewSyncError(err)
 }
 
 // TODO - is this only used for context keys, or other things?
