@@ -36,23 +36,27 @@ func (e *SyncError) Unwrap() error {
 
 // Error that can be directly attributed to incorrect/unsupported code
 type SyncPosError struct {
-	Inner    error
-	Filename string
-	Line     int
-	Col      int
+	Inner     error
+	Filename  string
+	StartLine int
+	StartCol  int
+	EndLine   int
+	EndCol    int
 }
 
-func NewSyncPosError(inner error, filename string, line, col int) *SyncPosError {
+func NewSyncPosError(inner error, filename string, startLine, startCol, endLine, endCol int) *SyncPosError {
 	return &SyncPosError{
-		Inner:    inner,
-		Filename: filename,
-		Line:     line,
-		Col:      col,
+		Inner:     inner,
+		Filename:  filename,
+		StartLine: startLine,
+		StartCol:  startCol,
+		EndLine:   endLine,
+		EndCol:    endCol,
 	}
 }
 
 func (e *SyncPosError) Error() string {
-	return fmt.Sprintf("sync %s:%d:%d: %v", e.Filename, e.Line, e.Col, e.Inner)
+	return fmt.Sprintf("sync %s:%d:%d:%d:%d: %v", e.Filename, e.StartLine, e.StartCol, e.EndLine, e.EndCol, e.Inner)
 }
 
 func (e *SyncPosError) Unwrap() error {
