@@ -452,6 +452,7 @@ message GetRepositoryContentsResponse {
   Feature feature = 3;
   // The user-defined type registry for the repository
   google.protobuf.FileDescriptorSet file_descriptor_set = 4;
+  google.protobuf.Timestamp config_last_used_at = 5;
 }
 
 message GetNativeLangRequest {
